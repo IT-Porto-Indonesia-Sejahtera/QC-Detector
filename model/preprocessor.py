@@ -6,8 +6,8 @@ def endpoints_via_pca(contour):
     if pts.shape[0] < 2:
         return None, None
     mean = pts.mean(axis=0)
-    cov = np.cov((pts-mean).T)
-    eigvals, eigvecs = np.linalg.eigh(cov)
+    cov = np.cov((pts-mean).T) # covariance matrix
+    eigvals, eigvecs = np.linalg.eigh(cov) # eigenvalues, eigenvectors
     principal = eigvecs[:, np.argmax(eigvals)]
     proj = (pts - mean) @ principal
     min_idx = np.argmin(proj)
@@ -86,17 +86,25 @@ def measure_sandals(path, mm_per_px=None, draw_output=True, save_out=None):
 
     cv2.line(out, (cut_col,0), (cut_col, out.shape[0]-1), (0,255,255), 1)
 
+    # if draw_output:
+    #     cv2.imshow('Measurement', out)
+    #     cv2.waitKey(0)
+    #     cv2.destroyAllWindows()
     if draw_output:
-        cv2.imshow('Measurement', out)
+        max_width = 500  
+        scale = max_width / out.shape[1] if out.shape[1] > max_width else 1.0
+        display_img = cv2.resize(out, None, fx=scale, fy=scale)
+        cv2.imshow('Measurement', display_img)
         cv2.waitKey(0)
         cv2.destroyAllWindows()
+
     if save_out:
         cv2.imwrite(save_out, out)
 
     return results
 
 if __name__ == "__main__":
-    path = "C:\\QC Detector\\QC-Detector\\input\\temp_assets\\WhatsApp Image 2025-11-11 at 14.54.53.jpeg"
+    path = "C:\\QC Detector\\QC-Detector\\input\\temp_assets\\WhatsApp Image 2025-11-11 at 14.54.35 (1).jpeg"
     mm_per_px = None
     res = measure_sandals(path, mm_per_px=mm_per_px, draw_output=True, save_out="output/measured.png")
     print("Hasil:", res)
