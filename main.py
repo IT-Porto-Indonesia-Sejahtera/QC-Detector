@@ -10,6 +10,6 @@ if __name__ == "__main__":
         img_path, 
         mm_per_px=mm_per_px,
         draw_output=True,
-        save_out="output/measured.png"
+        save_out="QC-Detector\\output\\log_output\\measured.png"
     )
     print("Results:", res)
