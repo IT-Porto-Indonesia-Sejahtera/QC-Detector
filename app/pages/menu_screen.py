@@ -23,8 +23,14 @@ class MenuScreen(QWidget):
         video_btn.setStyleSheet("font-size: 18px;")
         video_btn.clicked.connect(self.parent.go_to_video)
 
+        live_btn = QPushButton("🔴 Measure by live")
+        live_btn.setFixedSize(300, 80)
+        live_btn.setStyleSheet("font-size: 18px;")
+        live_btn.clicked.connect(self.parent.go_to_live)
+
         layout.addWidget(title)
         layout.addWidget(photo_btn, alignment=Qt.AlignCenter)
         layout.addWidget(video_btn, alignment=Qt.AlignCenter)
+        layout.addWidget(live_btn, alignment=Qt.AlignCenter)
 
         self.setLayout(layout)
