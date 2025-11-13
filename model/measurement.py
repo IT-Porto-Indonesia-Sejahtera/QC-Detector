@@ -7,17 +7,7 @@ def endpoints_via_minrect(contour):
     rect = cv2.minAreaRect(contour)
     box = cv2.boxPoints(rect)
     box = np.intp(box)
-    # d1 = np.linalg.norm(box[0] - box[1])
-    # d2 = np.linalg.norm(box[1] - box[2])
-    # if d1 > d2:
-    #     px_dist = d1
-    #     p1 = (box[1] + box[2]) // 2
-    #     p2 = (box[3] + box[0]) // 2
-    # else:
-    #     px_dist = d2
-    #     p1 = (box[0] + box[1]) // 2
-    #     p2 = (box[2] + box[3]) // 2
-    # return tuple(p1.astype(int)), tuple(p2.astype(int)), px_dist
+
     (center), (w, h), angle = rect
     return box, w, h, angle
 
@@ -41,14 +31,14 @@ def measure_sandals(path, mm_per_px=None, draw_output=True, save_out=None):
         if cv2.contourArea(cnt) < 1000:
             continue
         box, w, h, angle = endpoints_via_minrect(cnt)
-        # Tentukan panjang dan lebar
         px_length = max(w, h)
         px_width = min(w, h)
 
         real_length = px_length * mm_per_px if mm_per_px else None
         real_width = px_width * mm_per_px if mm_per_px else None
-
-        # Gambar bounding box
+        # contour line
+        cv2.drawContours(out, [cnt], -1, (255, 255, 0), 2)
+        # bounding box
         cv2.drawContours(out, [box], 0, (0, 255, 0), 2)
 
         results.append({
