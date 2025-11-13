@@ -1,12 +1,13 @@
 import cv2
 import os
+import project_utilities as putils
 from datetime import datetime
 from model.preprocessor import ensure_dir
 from model.measurement_video import process_video
 
-VIDEO_PATH = "QC-Detector\\input\\temp_assets\\sandal_simulasi.avi"
-OUTPUT_DIR = "QC-Detector\\output\\video_frames"
-VIDEO_OUTPUT_DIR = "QC-Detector\\output\\video"
+VIDEO_PATH = putils.normalize_path("QC-Detector\\input\\temp_assets\\sandal_simulasi.avi")
+OUTPUT_DIR = putils.normalize_path("QC-Detector\\output\\video_frames")
+VIDEO_OUTPUT_DIR = putils.normalize_path("QC-Detector\\output\\video")
 
 mm_per_px = None
 DISPLAY_MAX_HEIGHT = 700

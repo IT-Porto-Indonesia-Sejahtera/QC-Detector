@@ -1,8 +1,9 @@
 import cv2
 import os
+import project_utilities as putils
 
-image_folder = 'QC-Detector\\input\\temp_assets\\'
-video_name = 'QC-Detector\\input\\temp_assets\\sandal_simulasi.avi'
+image_folder = putils.normalize_path('QC-Detector\\input\\temp_assets\\')
+video_name = putils.normalize_path('QC-Detector\\input\\temp_assets\\sandal_simulasi.avi')
 
 images = [img for img in os.listdir(image_folder) if img.endswith((".jpeg", ".png"))]
 images.sort()  
