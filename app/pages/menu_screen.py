@@ -1,0 +1,30 @@
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QPushButton, QLabel
+from PySide6.QtCore import Qt
+
+class MenuScreen(QWidget):
+    def __init__(self, controller):
+        super().__init__(controller)
+        self.parent = controller
+
+        layout = QVBoxLayout()
+        layout.setAlignment(Qt.AlignCenter)
+
+        title = QLabel("QC Sandal Detection System")
+        title.setAlignment(Qt.AlignCenter)
+        title.setStyleSheet("font-size: 28px; font-weight: bold; margin-bottom: 40px;")
+
+        photo_btn = QPushButton("📸 Measure by Photo")
+        photo_btn.setFixedSize(300, 80)
+        photo_btn.setStyleSheet("font-size: 18px;")
+        photo_btn.clicked.connect(self.parent.go_to_photo)
+
+        video_btn = QPushButton("🎥 Measure by Video")
+        video_btn.setFixedSize(300, 80)
+        video_btn.setStyleSheet("font-size: 18px;")
+        video_btn.clicked.connect(self.parent.go_to_video)
+
+        layout.addWidget(title)
+        layout.addWidget(photo_btn, alignment=Qt.AlignCenter)
+        layout.addWidget(video_btn, alignment=Qt.AlignCenter)
+
+        self.setLayout(layout)

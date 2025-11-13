@@ -25,16 +25,12 @@ def run_cli_mode():
     )
     print("Results:", res)
 
-
 def run_ui_mode():
     """Run the GUI version of the app."""
     app.run_app()
 
-
 if __name__ == "__main__":
-    # You can switch modes here manually (later we can add CLI arguments)
-    MODE = "ui"  # change to "cli" if you want to test without GUI
-
+    MODE = "ui"
     if MODE == "ui":
         run_ui_mode()
     else:
