@@ -1,13 +1,12 @@
 import cv2
 import numpy as np
-from .preprocessor import preprocess_and_masks, ensure_dir, display_resized
+from .preprocessor import preprocess_and_masks, ensure_dir
 import os
 
 def endpoints_via_minrect(contour):
     rect = cv2.minAreaRect(contour)
     box = cv2.boxPoints(rect)
     box = np.intp(box)
-
     (center), (w, h), angle = rect
     return box, w, h, angle
 
@@ -36,22 +35,20 @@ def measure_sandals(path, mm_per_px=None, draw_output=True, save_out=None):
 
         real_length = px_length * mm_per_px if mm_per_px else None
         real_width = px_width * mm_per_px if mm_per_px else None
-        # contour line
+
+        # contour + bounding box
         cv2.drawContours(out, [cnt], -1, (255, 255, 0), 2)
-        # bounding box
         cv2.drawContours(out, [box], 0, (0, 255, 0), 2)
 
         results.append({
-            # 'side': i,
             'px_length': float(px_length),
             'px_width': float(px_width),
             'real_length_mm': float(real_length) if real_length else None,
             'real_width_mm': float(real_width) if real_width else None
         })
-
-    if draw_output:
-        display_resized(out, max_height=800)
+        
     if save_out:
         ensure_dir(os.path.dirname(save_out))
         cv2.imwrite(save_out, out)
-    return results
+
+    return results, out
