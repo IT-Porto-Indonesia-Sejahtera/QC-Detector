@@ -11,8 +11,8 @@ VIDEO_OUTPUT_DIR = "QC-Detector\\output\\video"
 mm_per_px = None 
 MIN_CONTOUR_AREA = 1000
 DISPLAY_MAX_HEIGHT = 700
-SAVE_FRAMES = True 
-SAVE_VIDEO = True 
+SAVE_FRAMES = False 
+SAVE_VIDEO = False 
 
 def draw_measure_overlay(img, box, px_length, px_width):
     out = img.copy()
@@ -25,6 +25,7 @@ def draw_measure_overlay(img, box, px_length, px_width):
 
 def main():
     ensure_dir(OUTPUT_DIR)
+    ensure_dir(VIDEO_OUTPUT_DIR)
 
     cap = cv2.VideoCapture(VIDEO_PATH)
     if not cap.isOpened():
