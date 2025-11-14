@@ -4,7 +4,7 @@ from PySide6.QtWidgets import (
     QComboBox, QFrame, QSizePolicy
 )
 from PySide6.QtCore import Qt, QTimer, QSize
-from PySide6.QtGui import QPixmap, QImage
+from PySide6.QtGui import QPixmap, QImage, QColor, QPainter
 import numpy as np
 from model.measure_live_sandals import measure_live_sandals
 
@@ -13,9 +13,9 @@ from model.measure_live_sandals import measure_live_sandals
 # Dummy Data
 # ---------------------------------------------------------------------
 MODEL_DATA = {
-    "Model A": ["36", "37", "38", "39", "40"],
-    "Model B": ["39", "40", "41", "42"],
-    "Model C": ["35", "36", "37"],
+    "E6005M": ["33", "33", "34", "35", "36", "37", "38", "39", "40"],
+    "1094M": ["39", "40", "41", "42"],
+    "3097K-4": ["35", "36", "37"],
 }
 
 PRESETS = [
@@ -30,6 +30,8 @@ class LiveCameraScreen(QWidget):
         super().__init__(parent)
         self.parent_widget = parent
         self.setWindowTitle("Live Camera QC")
+        self.last_results_text = None   # store text lines to draw
+        self.last_pass_fail = None      # PASS / FAIL color
 
         # -----------------------------------------------------------------
         # CREATE MISSING WIDGETS (Fix for AttributeError)
@@ -125,7 +127,7 @@ class LiveCameraScreen(QWidget):
 
         # Camera selector row
         cam_row = QHBoxLayout()
-        cam_lbl = QLabel("Camera:")
+        cam_lbl = QLabel("Kamera:")
         cam_lbl.setFixedWidth(60)
         cam_row.addWidget(cam_lbl)
         cam_row.addWidget(self.cam_select)
@@ -133,7 +135,7 @@ class LiveCameraScreen(QWidget):
 
         # Model row
         model_row = QHBoxLayout()
-        model_lbl = QLabel("Model:")
+        model_lbl = QLabel("SKU:")
         model_lbl.setFixedWidth(60)
         model_row.addWidget(model_lbl)
         model_row.addWidget(self.model_select)
@@ -141,7 +143,7 @@ class LiveCameraScreen(QWidget):
 
         # Size row
         size_row = QHBoxLayout()
-        size_lbl = QLabel("Size:")
+        size_lbl = QLabel("Ukuran:")
         size_lbl.setFixedWidth(60)
         size_row.addWidget(size_lbl)
         size_row.addWidget(self.size_select)
@@ -305,25 +307,82 @@ class LiveCameraScreen(QWidget):
 
         self.live_frame = frame.copy()
 
+        # Convert frame to pixmap
+        pix = None
         if self.big_frame_is_live:
             pix = self.cv2_to_pixmap(self.live_frame, self.big_label.width(), self.big_label.height())
+        else:
+            pix = self.cv2_to_pixmap(self.live_frame, self.small_label.width(), self.small_label.height())
+
+        # Draw measurement overlay ON THE BIG FRAME
+        if self.big_frame_is_live and self.last_results_text:
+            painter = QPainter(pix)
+            painter.setRenderHint(QPainter.Antialiasing)
+
+            # draw semi-transparent background
+            bg_rect_height = 90
+            painter.fillRect(10, 10, 250, bg_rect_height, QColor(0, 0, 0, 180))
+
+            # text settings
+            painter.setPen(QColor(255, 255, 255))
+            y = 35
+            for line in self.last_results_text:
+                if "Result" in line:
+                    if self.last_pass_fail == "PASS":
+                        painter.setPen(QColor(0, 255, 0))
+                    else:
+                        painter.setPen(QColor(255, 0, 0))
+                else:
+                    painter.setPen(QColor(255, 255, 255))
+
+                painter.drawText(20, y, line)
+                y += 25
+
+            painter.end()
+
+        # Show pixmap
+        if self.big_frame_is_live:
             self.big_label.setPixmap(pix)
         else:
-            small_pix = self.cv2_to_pixmap(self.live_frame, self.small_label.width(), self.small_label.height())
-            self.small_label.setPixmap(small_pix)
+            self.small_label.setPixmap(pix)
+
 
     def capture_frame(self):
         if self.live_frame is None:
             return
 
-        results, processed = measure_live_sandals(self.live_frame, mm_per_px=0.3, draw_output=True, save_out=None)
+        results, processed = measure_live_sandals(
+            self.live_frame,
+            mm_per_px=0.3,
+            draw_output=True,
+            save_out=None
+        )
+
         self.captured_frame = processed
 
+        # Update small preview
         pix = self.cv2_to_pixmap(processed, self.small_label.width(), self.small_label.height())
         self.small_label.setPixmap(pix)
 
+        # Extract the first result (only one sandal)
+        if results:
+            r = results[0]
+
+            length = r.get("real_length_cm")
+            width  = r.get("real_width_cm")
+            pf     = r.get("pass_fail")
+
+            self.last_results_text = [
+                f"Length : {length:.1f} cm" if length else "Length : -",
+                f"Width  : {width:.1f} cm" if width else "Width  : -",
+                f"Result : {pf}"
+            ]
+
+            self.last_pass_fail = pf
+
         print(f"[INFO] Capture processed | Model: {self.model_select.currentText()} | "
-              f"Size: {self.size_select.currentText()} | Results: {results}")
+            f"Size: {self.size_select.currentText()} | Results: {results}")
+
 
     def swap_frames(self, event):
         # clicking small preview toggles big/small between live and captured
