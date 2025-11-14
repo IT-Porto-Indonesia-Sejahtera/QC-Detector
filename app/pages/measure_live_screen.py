@@ -1,70 +1,230 @@
 import cv2
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QComboBox
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
+    QComboBox, QFrame, QSizePolicy
 )
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt, QTimer, QSize
 from PySide6.QtGui import QPixmap, QImage
-from datetime import datetime
-from model.measure_live_sandals import measure_live_sandals
 import numpy as np
+from model.measure_live_sandals import measure_live_sandals
+
+
+# ---------------------------------------------------------------------
+# Dummy Data
+# ---------------------------------------------------------------------
+MODEL_DATA = {
+    "Model A": ["36", "37", "38", "39", "40"],
+    "Model B": ["39", "40", "41", "42"],
+    "Model C": ["35", "36", "37"],
+}
+
+PRESETS = [
+    ("A-38", "Model A", "38"),
+    ("A-40", "Model A", "40"),
+    ("B-41", "Model B", "41"),
+    ("C-36", "Model C", "36"),
+]
 
 class LiveCameraScreen(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Live Camera QC")
         self.parent_widget = parent
+        self.setWindowTitle("Live Camera QC")
 
-        # --- Camera selection ---
-        cam_layout = QHBoxLayout()
+        # -----------------------------------------------------------------
+        # CREATE MISSING WIDGETS (Fix for AttributeError)
+        # -----------------------------------------------------------------
+
+        # Big frame (main camera)
+        self.big_label = QLabel()
+        self.big_label.setStyleSheet("background: #111; border: 1px solid #333;")
+        # self.big_label.setMinimumSize(800, 480)
+        self.big_label.setAlignment(Qt.AlignCenter)
+        self.big_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+
+        # Small frame (preview)
+        self.small_label = QLabel()
+        self.small_label.setStyleSheet("background: #222; border: 1px solid #444;")
+        self.small_label.setFixedSize(240, 160)
+        self.small_label.setAlignment(Qt.AlignCenter)
+        self.small_label.setCursor(Qt.PointingHandCursor)
+        self.small_label.setToolTip("Click to swap live / captured")
+        self.small_label.mousePressEvent = self.swap_frames
+
+        # Camera selector
         self.cam_select = QComboBox()
         self.cam_select.addItems(self.detect_cameras())
         self.cam_select.currentIndexChanged.connect(self.change_camera)
-        cam_layout.addWidget(QLabel("Select Camera:"))
-        cam_layout.addWidget(self.cam_select)
 
-        # --- Main display ---
-        self.big_label = QLabel()
-        self.big_label.setAlignment(Qt.AlignCenter)
-        self.big_label.setStyleSheet("background-color: black; border: 1px solid #444;")
-        self.big_label.setMinimumSize(640, 480)
+        # Model selector
+        self.model_select = QComboBox()
+        self.model_select.addItems(MODEL_DATA.keys())
+        self.model_select.currentIndexChanged.connect(self.update_sizes)
 
-        # --- Small frame ---
-        self.small_label = QLabel()
-        self.small_label.setAlignment(Qt.AlignCenter)
-        self.small_label.setStyleSheet("background-color: black; border: 1px solid #444;")
-        self.small_label.setFixedSize(200, 150)
-        self.small_label.mousePressEvent = self.swap_frames
+        # Size selector
+        self.size_select = QComboBox()
+        self.update_sizes()  # fill with initial model sizes
 
-        # --- Buttons ---
-        button_layout = QHBoxLayout()
-        self.capture_button = QPushButton("Capture & Measure")
-        self.capture_button.clicked.connect(self.capture_frame)
-        self.back_button = QPushButton("Back")
-        self.back_button.clicked.connect(self.go_back)
-        button_layout.addWidget(self.capture_button)
-        button_layout.addWidget(self.back_button)
-
-        # --- Layout ---
+        # -----------------------------------------------------------------
+        # UI LAYOUT
+        # -----------------------------------------------------------------
         main_layout = QVBoxLayout()
-        main_layout.addLayout(cam_layout)
+
+        # Top floating buttons
+        top_bar = QHBoxLayout()
+        top_bar.setContentsMargins(0, 0, 0, 0)
+
+        self.back_button = QPushButton("←")
+        self.back_button.setFixedSize(40, 40)
+        self.back_button.setStyleSheet("""
+            QPushButton {
+                background: #444;
+                color: white;
+                font-weight: bold;
+                border-radius: 20px;
+            }
+            QPushButton:hover { background: #666; }
+        """)
+        self.back_button.clicked.connect(self.go_back)
+        self.back_button.setToolTip("Back to previous screen")
+
+        self.capture_button = QPushButton("📸")
+        self.capture_button.setFixedSize(48, 48)
+        self.capture_button.setStyleSheet("""
+            QPushButton {
+                background: #00AEEF;
+                color: white;
+                font-size: 20px;
+                border-radius: 24px;
+            }
+            QPushButton:hover { background: #0090C8; }
+        """)
+        self.capture_button.clicked.connect(self.capture_frame)
+        self.capture_button.setToolTip("Capture & measure (shortcut available)")
+
+        top_bar.addWidget(self.back_button, alignment=Qt.AlignLeft)
+        top_bar.addStretch()
+        top_bar.addWidget(self.capture_button, alignment=Qt.AlignRight)
+
+        main_layout.addLayout(top_bar)
+        main_layout.addSpacing(5)
+
+        # Big camera area
         main_layout.addWidget(self.big_label)
-        main_layout.addWidget(self.small_label, alignment=Qt.AlignLeft)
-        main_layout.addLayout(button_layout)
+
+        # Bottom area: left preview + right controls
+        bottom = QHBoxLayout()
+        bottom.addWidget(self.small_label)
+
+        bottom_container = QFrame()
+        bottom_container.setLayout(bottom)
+        bottom_container.setFixedHeight(200)
+
+        # Right panel
+        right_panel = QVBoxLayout()
+
+        # Camera selector row
+        cam_row = QHBoxLayout()
+        cam_lbl = QLabel("Camera:")
+        cam_lbl.setFixedWidth(60)
+        cam_row.addWidget(cam_lbl)
+        cam_row.addWidget(self.cam_select)
+        right_panel.addLayout(cam_row)
+
+        # Model row
+        model_row = QHBoxLayout()
+        model_lbl = QLabel("Model:")
+        model_lbl.setFixedWidth(60)
+        model_row.addWidget(model_lbl)
+        model_row.addWidget(self.model_select)
+        right_panel.addLayout(model_row)
+
+        # Size row
+        size_row = QHBoxLayout()
+        size_lbl = QLabel("Size:")
+        size_lbl.setFixedWidth(60)
+        size_row.addWidget(size_lbl)
+        size_row.addWidget(self.size_select)
+        right_panel.addLayout(size_row)
+
+        # Presets
+        preset_lbl = QLabel("Presets:")
+        preset_lbl.setStyleSheet("font-weight: bold; margin-top: 10px;")
+        right_panel.addWidget(preset_lbl)
+
+        preset_btn_row = QHBoxLayout()
+        for label, model, size in PRESETS:
+            btn = QPushButton(label)
+            btn.setFixedHeight(28)
+            btn.setStyleSheet("""
+                QPushButton {
+                    background: #333;
+                    color: white;
+                    border-radius: 6px;
+                    padding: 3px 8px;
+                }
+                QPushButton:hover { background: #555; }
+            """)
+            btn.setToolTip(f"Set {model} / {size}")
+            btn.clicked.connect(lambda _, m=model, s=size: self.set_preset(m, s))
+            preset_btn_row.addWidget(btn)
+
+        right_panel.addLayout(preset_btn_row)
+        right_panel.addStretch()
+
+        bottom.addLayout(right_panel)
+        main_layout.addWidget(bottom_container)
         self.setLayout(main_layout)
 
-        # --- Camera setup ---
-        self.cam_index = int(self.cam_select.currentText())
-        self.cap = cv2.VideoCapture(self.cam_index)
-        self.timer = QTimer()
+        # -----------------------------------------------------------------
+        # Camera system
+        # -----------------------------------------------------------------
+        self.cap = None
+        self.timer = QTimer(self)
         self.timer.timeout.connect(self.update_frame)
-        self.timer.start(30)  # ~30 FPS
-
-        # Frame buffers
-        self.live_frame = None
-        self.captured_frame = None
         self.big_frame_is_live = True
 
-    # ---------------- Utility ----------------
+        self.live_frame = None
+        self.captured_frame = None
+
+    # ------------------------------------------------------------------
+    # Lifecycle fix — FIXES the "camera freeze after back"
+    # ------------------------------------------------------------------
+    def showEvent(self, event):
+        """Reinitialize camera whenever this screen becomes visible."""
+        # guard: ensure we have at least one camera string
+        cam_text = self.cam_select.currentText() if self.cam_select.count() > 0 else "0"
+        try:
+            cam_index = int(cam_text)
+        except Exception:
+            cam_index = 0
+        # release previous if any
+        if self.cap is not None and self.cap.isOpened():
+            try:
+                self.cap.release()
+            except Exception:
+                pass
+        self.cap = cv2.VideoCapture(cam_index)
+        self.timer.start(30)
+        super().showEvent(event)
+
+    def closeEvent(self, event):
+        """Proper cleanup."""
+        try:
+            if self.timer.isActive():
+                self.timer.stop()
+        except Exception:
+            pass
+        try:
+            if self.cap and self.cap.isOpened():
+                self.cap.release()
+        except Exception:
+            pass
+        super().closeEvent(event)
+
+    # ------------------------------------------------------------------
+    # Camera utility
+    # ------------------------------------------------------------------
     def detect_cameras(self, max_test=3):
         cams = []
         for i in range(max_test):
@@ -74,67 +234,124 @@ class LiveCameraScreen(QWidget):
                 cap.release()
         return cams or ["0"]
 
-    def change_camera(self, index):
-        self.cap.release()
-        self.cam_index = int(self.cam_select.currentText())
-        self.cap = cv2.VideoCapture(self.cam_index)
+    def change_camera(self, index=None):
+        """Called when camera selection changes. Accepts optional index arg from signal."""
+        try:
+            if self.cap and self.cap.isOpened():
+                self.cap.release()
+        except Exception:
+            pass
+        try:
+            cam_text = self.cam_select.currentText() or "0"
+            cam_idx = int(cam_text)
+        except Exception:
+            cam_idx = 0
+        self.cap = cv2.VideoCapture(cam_idx)
 
+    # ------------------------------------------------------------------
+    # Model + Size
+    # ------------------------------------------------------------------
+    def update_sizes(self):
+        model = self.model_select.currentText() or list(MODEL_DATA.keys())[0]
+        sizes = MODEL_DATA.get(model, [])
+        self.size_select.clear()
+        if sizes:
+            self.size_select.addItems(sizes)
+
+    def set_preset(self, model, size):
+        # setCurrentText may not trigger index change if already selected, so call update_sizes
+        self.model_select.setCurrentText(model)
+        self.update_sizes()
+        self.size_select.setCurrentText(size)
+
+    # ------------------------------------------------------------------
+    # Frame conversion (stable memory)
+    # ------------------------------------------------------------------
     def cv2_to_pixmap(self, img, target_width, target_height):
-        """Convert BGR image to QPixmap with aspect ratio preserved and black padding."""
-        # Convert BGR -> RGB
+        # Ensure we have a valid image
+        if img is None:
+            return QPixmap()
+
+        # Convert BGR -> RGB and resize with padding while preserving aspect ratio
         img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         h, w, _ = img_rgb.shape
-        scale = min(target_width / w, target_height / h)
+        scale = min(max(1e-6, target_width / w), max(1e-6, target_height / h))
         new_w, new_h = int(w * scale), int(h * scale)
+        if new_w == 0 or new_h == 0:
+            return QPixmap()
+
         resized = cv2.resize(img_rgb, (new_w, new_h), interpolation=cv2.INTER_AREA)
-        # Create black canvas
+
         canvas = np.zeros((target_height, target_width, 3), dtype=np.uint8)
         x_offset = (target_width - new_w) // 2
         y_offset = (target_height - new_h) // 2
         canvas[y_offset:y_offset+new_h, x_offset:x_offset+new_w] = resized
-        # Convert to QPixmap
-        qimg = QImage(canvas.data, target_width, target_height, 3*target_width, QImage.Format_RGB888)
-        return QPixmap.fromImage(qimg)
 
-    # ---------------- Core ----------------
+        # Create QImage and make a deep copy to avoid lifetime issues with numpy buffer
+        qimg = QImage(canvas.data, target_width, target_height, 3 * target_width, QImage.Format_RGB888)
+        qimg_copy = qimg.copy()  # force a deep copy so underlying memory is owned by Qt
+        return QPixmap.fromImage(qimg_copy)
+
+    # ------------------------------------------------------------------
+    # Main functions
+    # ------------------------------------------------------------------
     def update_frame(self):
-        ret, frame = self.cap.read()
-        if not ret:
+        if not self.cap or not self.cap.isOpened():
             return
+
+        ret, frame = self.cap.read()
+        if not ret or frame is None:
+            return
+
         self.live_frame = frame.copy()
+
         if self.big_frame_is_live:
             pix = self.cv2_to_pixmap(self.live_frame, self.big_label.width(), self.big_label.height())
             self.big_label.setPixmap(pix)
-        elif self.captured_frame is not None:
-            pix = self.cv2_to_pixmap(self.live_frame, self.small_label.width(), self.small_label.height())
-            self.small_label.setPixmap(pix)
+        else:
+            small_pix = self.cv2_to_pixmap(self.live_frame, self.small_label.width(), self.small_label.height())
+            self.small_label.setPixmap(small_pix)
 
     def capture_frame(self):
         if self.live_frame is None:
             return
-        results, processed = measure_live_sandals(self.live_frame, mm_per_px=None, draw_output=False, save_out=None)
+
+        results, processed = measure_live_sandals(self.live_frame, mm_per_px=0.3, draw_output=True, save_out=None)
         self.captured_frame = processed
-        pix = self.cv2_to_pixmap(self.captured_frame, self.small_label.width(), self.small_label.height())
+
+        pix = self.cv2_to_pixmap(processed, self.small_label.width(), self.small_label.height())
         self.small_label.setPixmap(pix)
-        print("[INFO] Capture processed frame, results:", results)
+
+        print(f"[INFO] Capture processed | Model: {self.model_select.currentText()} | "
+              f"Size: {self.size_select.currentText()} | Results: {results}")
 
     def swap_frames(self, event):
+        # clicking small preview toggles big/small between live and captured
         if self.captured_frame is None:
             return
+
         if self.big_frame_is_live:
-            # Show captured in big, live in small
             big_pix = self.cv2_to_pixmap(self.captured_frame, self.big_label.width(), self.big_label.height())
             small_pix = self.cv2_to_pixmap(self.live_frame, self.small_label.width(), self.small_label.height())
         else:
-            # Show live in big, captured in small
             big_pix = self.cv2_to_pixmap(self.live_frame, self.big_label.width(), self.big_label.height())
             small_pix = self.cv2_to_pixmap(self.captured_frame, self.small_label.width(), self.small_label.height())
+
         self.big_label.setPixmap(big_pix)
         self.small_label.setPixmap(small_pix)
         self.big_frame_is_live = not self.big_frame_is_live
 
     def go_back(self):
-        self.timer.stop()
-        self.cap.release()
+        try:
+            if self.timer.isActive():
+                self.timer.stop()
+        except Exception:
+            pass
+        try:
+            if self.cap and self.cap.isOpened():
+                self.cap.release()
+        except Exception:
+            pass
         if self.parent_widget:
             self.parent_widget.go_back()
+

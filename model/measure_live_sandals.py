@@ -17,8 +17,8 @@ def find_largest_contours(mask, num_contours=2):
 
 def measure_live_sandals(input_data, mm_per_px=None, draw_output=True, save_out=None):
     """
-    input_data: str (image path) OR np.ndarray (image array)
-    Returns: results list, processed image array
+    Returns:
+      results list, processed image array (with text drawn)
     """
     # Load image
     if isinstance(input_data, str):
@@ -31,28 +31,69 @@ def measure_live_sandals(input_data, mm_per_px=None, draw_output=True, save_out=
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     mask = preprocess_and_masks(gray)
     contours = find_largest_contours(mask, num_contours=1)
+
     out = img.copy()
     results = []
 
-    for i, cnt in enumerate(contours):
+    for cnt in contours:
         if cv2.contourArea(cnt) < 1000:
             continue
+
         box, w, h, angle = endpoints_via_minrect(cnt)
         px_length = max(w, h)
         px_width = min(w, h)
 
-        real_length = px_length * mm_per_px if mm_per_px else None
-        real_width = px_width * mm_per_px if mm_per_px else None
+        # Conversions
+        real_length_mm = px_length * mm_per_px if mm_per_px else None
+        real_width_mm  = px_width  * mm_per_px if mm_per_px else None
 
-        # Draw contour + bounding box
+        real_length_cm = real_length_mm / 10.0 if real_length_mm else None
+        real_width_cm  = real_width_mm / 10.0 if real_width_mm else None
+
+        # PASS/FAIL (dummy logic)
+        if real_length_cm:
+            pass_fail = "PASS" if real_length_cm > 20 else "FAIL"
+        else:
+            pass_fail = "UNKNOWN"
+
+        # Draw contour + box
         cv2.drawContours(out, [cnt], -1, (255, 255, 0), 2)
         cv2.drawContours(out, [box], 0, (0, 255, 0), 2)
 
+        # Put text near box
+        if draw_output:
+
+            # top-left corner of the box
+            x, y = box[0]
+
+            # Draw background for readability
+            cv2.rectangle(out, (x, y - 60), (x + 200, y), (0, 0, 0), -1)
+
+            # Draw measurement text
+            cv2.putText(out, f"L: {real_length_cm:.1f} cm",
+                        (x + 5, y - 40), cv2.FONT_HERSHEY_SIMPLEX,
+                        0.6, (0, 255, 255), 2)
+
+            cv2.putText(out, f"W: {real_width_cm:.1f} cm",
+                        (x + 5, y - 18), cv2.FONT_HERSHEY_SIMPLEX,
+                        0.6, (0, 200, 255), 2)
+
+            # PASS/FAIL text
+            color = (0, 255, 0) if pass_fail == "PASS" else (0, 0, 255)
+            cv2.putText(out, pass_fail,
+                        (x + 120, y - 25),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        0.8, color, 2)
+
+        # Add to results dict
         results.append({
-            'px_length': float(px_length),
-            'px_width': float(px_width),
-            'real_length_mm': float(real_length) if real_length else None,
-            'real_width_mm': float(real_width) if real_width else None
+            "px_length": float(px_length),
+            "px_width": float(px_width),
+            "real_length_mm": float(real_length_mm) if real_length_mm else None,
+            "real_width_mm": float(real_width_mm) if real_width_mm else None,
+            "real_length_cm": float(real_length_cm) if real_length_cm else None,
+            "real_width_cm": float(real_width_cm) if real_width_cm else None,
+            "pass_fail": pass_fail
         })
 
     if save_out:
@@ -60,3 +101,4 @@ def measure_live_sandals(input_data, mm_per_px=None, draw_output=True, save_out=
         cv2.imwrite(save_out, out)
 
     return results, out
+
