@@ -4,6 +4,7 @@ from app.pages.menu_screen import MenuScreen
 from app.pages.measure_photo_screen import MeasurePhotoScreen
 from app.pages.measure_video_screen import MeasureVideoScreen
 from app.pages.measure_live_screen import LiveCameraScreen
+from app.pages.capture_dataset_screen import CaptureDatasetScreen
 
 class MainWindow(QWidget):
     def __init__(self):
@@ -20,12 +21,14 @@ class MainWindow(QWidget):
         self.photo_page = MeasurePhotoScreen(controller=self)
         self.video_page = MeasureVideoScreen(controller=self)
         self.live_page = LiveCameraScreen(parent=self)
+        self.dataset_page = CaptureDatasetScreen(parent=self)
 
         # Add to stack
         self.stack.addWidget(self.menu_page)
         self.stack.addWidget(self.photo_page)
         self.stack.addWidget(self.video_page)
         self.stack.addWidget(self.live_page)
+        self.stack.addWidget(self.dataset_page)
 
         self.stack.setCurrentWidget(self.menu_page)
 
@@ -37,6 +40,9 @@ class MainWindow(QWidget):
 
     def go_to_live(self):
         self.stack.setCurrentWidget(self.live_page)
+
+    def go_to_dataset(self):
+        self.stack.setCurrentWidget(self.dataset_page)
 
     def go_back(self):
         self.stack.setCurrentWidget(self.menu_page)

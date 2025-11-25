@@ -28,9 +28,15 @@ class MenuScreen(QWidget):
         live_btn.setStyleSheet("font-size: 18px;")
         live_btn.clicked.connect(self.parent.go_to_live)
 
+        dataset_btn = QPushButton("📂 Capture Dataset")
+        dataset_btn.setFixedSize(300, 80)
+        dataset_btn.setStyleSheet("font-size: 18px;")
+        dataset_btn.clicked.connect(self.parent.go_to_dataset)
+
         layout.addWidget(title)
         layout.addWidget(photo_btn, alignment=Qt.AlignCenter)
         layout.addWidget(video_btn, alignment=Qt.AlignCenter)
         layout.addWidget(live_btn, alignment=Qt.AlignCenter)
+        layout.addWidget(dataset_btn, alignment=Qt.AlignCenter)
 
         self.setLayout(layout)

@@ -1,11 +1,11 @@
 import cv2
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QComboBox, QFrame, QSizePolicy, QGridLayout, QMenu, QWidgetAction
+    QComboBox, QFrame, QSizePolicy, QGridLayout, QMenu, QWidgetAction,
+    QLineEdit
 )
 from PySide6.QtCore import Qt, QTimer, QSize
-from PySide6.QtGui import QPixmap, QImage, QColor, QPainter, QAction
-from PySide6.QtGui import QPixmap, QImage, QColor, QPainter
+from PySide6.QtGui import QPixmap, QImage, QColor, QPainter, QAction, QDoubleValidator
 import numpy as np
 from model.measure_live_sandals import measure_live_sandals
 
@@ -34,6 +34,9 @@ class LiveCameraScreen(QWidget):
         self.last_results_text = None   # store text lines to draw
         self.last_pass_fail = None      # PASS / FAIL color
         
+        # Default calibration value
+        self.mm_per_px = 0.215984148
+
         # Mutable presets (copy from global default)
         # Structure: {"label": "A-38", "model": "Model A", "size": "38"}
         self.presets = []
@@ -73,6 +76,22 @@ class LiveCameraScreen(QWidget):
                 color: white;
             }
             QComboBox::drop-down { border: 0px; }
+        """)
+
+        # MM per Pixel Input (QLineEdit for better typing experience)
+        self.mm_input = QLineEdit()
+        self.mm_input.setFixedWidth(200)
+        self.mm_input.setText(str(self.mm_per_px))
+        self.mm_input.setValidator(QDoubleValidator(0.0001, 10.0, 9))
+        self.mm_input.textChanged.connect(self.update_mm_per_px)
+        self.mm_input.setStyleSheet("""
+            QLineEdit {
+                padding: 5px;
+                border: 1px solid #555;
+                border-radius: 5px;
+                background: #333;
+                color: white;
+            }
         """)
 
         # Model selector
@@ -192,6 +211,18 @@ class LiveCameraScreen(QWidget):
         cam_widget_action.setDefaultWidget(self.cam_select)
         self.settings_menu.addAction(cam_widget_action)
 
+        self.settings_menu.addSeparator()
+
+        # MM per Pixel Label
+        mm_label = QAction("MM per Pixel:", self)
+        mm_label.setEnabled(False)
+        self.settings_menu.addAction(mm_label)
+
+        # MM per Pixel Widget
+        mm_widget_action = QWidgetAction(self)
+        mm_widget_action.setDefaultWidget(self.mm_input)
+        self.settings_menu.addAction(mm_widget_action)
+
         # --- BIG CAMERA AREA ---
         main_layout.addWidget(self.big_label)
 
@@ -273,6 +304,12 @@ class LiveCameraScreen(QWidget):
     # ------------------------------------------------------------------
     # UI Helpers
     # ------------------------------------------------------------------
+    def update_mm_per_px(self, val):
+        try:
+            self.mm_per_px = float(val)
+        except ValueError:
+            pass # Ignore invalid input while typing
+
     def refresh_presets_ui(self):
         """Rebuilds the preset grid."""
         # Clear existing items
@@ -391,6 +428,20 @@ class LiveCameraScreen(QWidget):
         self.cap = cv2.VideoCapture(cam_index)
         self.timer.start(30)
         super().showEvent(event)
+
+    def hideEvent(self, event):
+        """Ensure camera is released when widget is hidden."""
+        try:
+            if self.timer.isActive():
+                self.timer.stop()
+        except Exception:
+            pass
+        try:
+            if self.cap and self.cap.isOpened():
+                self.cap.release()
+        except Exception:
+            pass
+        super().hideEvent(event)
 
     def closeEvent(self, event):
         """Proper cleanup."""
@@ -548,7 +599,7 @@ class LiveCameraScreen(QWidget):
 
         results, processed = measure_live_sandals(
             self.live_frame,
-            mm_per_px=0.3,
+            mm_per_px=self.mm_per_px,
             draw_output=True,
             save_out=None
         )
@@ -564,11 +615,15 @@ class LiveCameraScreen(QWidget):
             r = results[0]
 
             length = r.get("real_length_cm")
+            length_mm = r.get("real_length_mm")
+            length_px = r.get("px_length")
             width  = r.get("real_width_cm")
             pf     = r.get("pass_fail")
 
             self.last_results_text = [
                 f"Length : {length:.1f} cm" if length else "Length : -",
+                f"Length - mm : {length_mm} mm" if length else "Length mm : -",
+                f"Length - px : {length_px} px" if length else "Length px : -",
                 f"Width  : {width:.1f} cm" if width else "Width  : -",
                 f"Result : {pf}"
             ]
