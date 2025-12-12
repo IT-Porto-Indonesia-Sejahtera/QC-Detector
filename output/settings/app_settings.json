@@ -1,0 +1,13 @@
+{
+    "camera_index": 0,
+    "mm_per_px": 0.2123459,
+    "sensor_delay": 0.2123459,
+    "fetch_status": "success",
+    "last_fetched": "12/12/2025",
+    "paths": {
+        "profile": "C://User/test/asd/",
+        "settings": "C://User/test/asd/",
+        "db": "C://User/test/asd/",
+        "results": "C://User/test/asd/"
+    }
+}

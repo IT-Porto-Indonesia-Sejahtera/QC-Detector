@@ -214,13 +214,13 @@ class ProfileEditorOverlay(BaseOverlay):
         self.date_edit.setCalendarPopup(True)
         self.date_edit.setButtonSymbols(QDateEdit.NoButtons)
         
-        # Set larger calendar widget size (increased from 350x300)
+        # Set larger calendar widget size
         calendar = self.date_edit.calendarWidget()
-        calendar.setMinimumSize(450, 350)
+        calendar.setMinimumSize(350, 300)
         calendar.setStyleSheet(f"""
             QCalendarWidget {{
                 background-color: white;
-                font-size: 15px;
+                font-size: 14px;
             }}
             QCalendarWidget QWidget {{
                 background-color: white;
@@ -230,22 +230,13 @@ class ProfileEditorOverlay(BaseOverlay):
                 background-color: white;
                 selection-background-color: #2196F3;
                 selection-color: white;
-                gridline-color: #E0E0E0;
-            }}
-            QCalendarWidget QHeaderView::section {{
-                background-color: #F5F5F5;
-                color: #333333;
-                padding: 8px;
-                border: none;
-                font-weight: bold;
             }}
             QCalendarWidget QToolButton {{
                 background-color: #F5F5F5;
                 color: #333333;
                 border-radius: 4px;
-                padding: 10px;
+                padding: 8px;
                 font-size: 14px;
-                border: none;
             }}
             QCalendarWidget QToolButton:hover {{
                 background-color: #E3F2FD;

@@ -76,7 +76,18 @@ class LiveCameraScreen(QWidget):
         # UI Setup
         self.init_ui()
         
+        # Spacebar shortcut for force capture (testing)
+        from PySide6.QtGui import QShortcut, QKeySequence
+        self.capture_shortcut = QShortcut(QKeySequence(Qt.Key_Space), self)
+        self.capture_shortcut.activated.connect(self.capture_frame)
+        
     def open_profile_dialog(self):
+        # Check password first
+        from app.widgets.password_dialog import PasswordDialog
+        
+        if not PasswordDialog.authenticate(self):
+            return  # Password incorrect or cancelled
+        
         # Instantiate overlay with 'self' as parent so it covers this screen
         overlay = PresetProfileOverlay(self)
         overlay.profile_selected.connect(self.on_profile_selected)
@@ -147,7 +158,7 @@ class LiveCameraScreen(QWidget):
         
         # Presets Grid (4 rows x 6 cols)
         self.grid_layout = QGridLayout()
-        self.grid_layout.setSpacing(8) # Tighter spacing
+        self.grid_layout.setSpacing(8)
         self.grid_layout.setContentsMargins(0, 0, 0, 0)
         self.render_presets()
         
@@ -170,7 +181,7 @@ class LiveCameraScreen(QWidget):
         top_ctrl_layout = QHBoxLayout()
         
         self.back_button = QPushButton("←")
-        self.back_button.setFixedSize(35, 35) # compact
+        self.back_button.setFixedSize(35, 35)
         self.back_button.setStyleSheet("""
             QPushButton {
                 background: #F5F5F5; color: #333333; border-radius: 17px; font-size: 18px; border: 1px solid #E0E0E0;
@@ -180,7 +191,7 @@ class LiveCameraScreen(QWidget):
         self.back_button.clicked.connect(self.go_back)
         
         self.settings_btn = QPushButton("⚙️")
-        self.settings_btn.setFixedSize(35, 35) # compact
+        self.settings_btn.setFixedSize(35, 35)
         self.settings_btn.setStyleSheet("""
             QPushButton {
                 background: #F5F5F5; color: #333333; border-radius: 17px; font-size: 18px; border: 1px solid #E0E0E0;
@@ -405,9 +416,8 @@ class LiveCameraScreen(QWidget):
             bg_color = SKU_COLORS.get(color_idx, "#B0BEC5")
             
             btn = QPushButton()
-            # Removed FixedSize to allow expansion
             btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-            btn.setMinimumSize(80, 80) # Minimum reasonable size
+            btn.setMinimumSize(80, 80)
             
             # Text
             text = f"{sku}\n{size}" if sku else "Empty"
@@ -606,7 +616,22 @@ class LiveCameraScreen(QWidget):
         self.settings_menu.addAction("Capture Frame", self.capture_frame)
         
     def show_settings_menu(self):
-        self.settings_menu.exec(self.settings_btn.mapToGlobal(self.settings_btn.rect().bottomLeft()))
+        # Check settings password first
+        from app.widgets.password_dialog import PasswordDialog
+        
+        if not PasswordDialog.authenticate(self, password_type="settings"):
+            return  # Password incorrect or cancelled
+        
+        # Show settings overlay
+        from app.widgets.settings_overlay import SettingsOverlay
+        overlay = SettingsOverlay(self)
+        overlay.settings_saved.connect(self.on_settings_saved)
+    
+    def on_settings_saved(self, settings):
+        """Handle settings saved from overlay"""
+        # Update local settings
+        self.mm_per_px = settings.get("mm_per_px", self.mm_per_px)
+        # You can update other settings as needed
         
     def on_mm_changed(self, text):
         try:

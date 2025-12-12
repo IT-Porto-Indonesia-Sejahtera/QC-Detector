@@ -226,6 +226,12 @@ class PresetProfileOverlay(BaseOverlay):
         self.close_overlay()
 
     def add_profile(self):
+        # Check password first
+        from app.widgets.password_dialog import PasswordDialog
+        
+        if not PasswordDialog.authenticate(self):
+            return  # Password incorrect or cancelled
+        
         new_p = {
             "id": str(uuid.uuid4()),
             "presets": []
@@ -246,6 +252,12 @@ class PresetProfileOverlay(BaseOverlay):
         # Maybe hide "content_box" or just accept stack.
         
     def edit_profile(self, profile):
+        # Check password first
+        from app.widgets.password_dialog import PasswordDialog
+        
+        if not PasswordDialog.authenticate(self):
+            return  # Password incorrect or cancelled
+        
         from app.widgets.profile_editor_overlay import ProfileEditorOverlay
         overlay = ProfileEditorOverlay(self.parent(), profile)
         overlay.data_saved.connect(self.on_editor_saved)
@@ -266,6 +278,12 @@ class PresetProfileOverlay(BaseOverlay):
         self.render_profiles()
 
     def delete_profile(self, profile):
+        # Check password first  
+        from app.widgets.password_dialog import PasswordDialog
+        
+        if not PasswordDialog.authenticate(self):
+            return  # Password incorrect or cancelled
+        
         self.profiles = [p for p in self.profiles if p['id'] != profile['id']]
         self.save_profiles()
         self.render_profiles()
