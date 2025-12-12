@@ -1,666 +1,621 @@
+
 import cv2
+import os
+import datetime
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QComboBox, QFrame, QSizePolicy, QGridLayout, QMenu, QWidgetAction,
-    QLineEdit
+    QLineEdit, QScrollArea, QApplication
 )
-from PySide6.QtCore import Qt, QTimer, QSize
-from PySide6.QtGui import QPixmap, QImage, QColor, QPainter, QAction, QDoubleValidator
+from PySide6.QtCore import Qt, QTimer, QSize, QRect, Signal
+from PySide6.QtGui import QPixmap, QImage, QColor, QPainter, QAction, QDoubleValidator, QFont
+
 import numpy as np
 from model.measure_live_sandals import measure_live_sandals
+from project_utilities.json_utility import JsonUtility
+from app.widgets.preset_profile_overlay import PresetProfileOverlay, PROFILES_FILE
+from app.utils.theme_manager import ThemeManager
 
 
 # ---------------------------------------------------------------------
-# Dummy Data
+# Constants & Defaults
 # ---------------------------------------------------------------------
-MODEL_DATA = {
-    "E6005M": ["33", "33", "34", "35", "36", "37", "38", "39", "40"],
-    "1094M": ["39", "40", "41", "42"],
-    "3097K-4": ["35", "36", "37"],
+PRESETS_FILE = os.path.join("output", "settings", "presets.json")
+SETTINGS_FILE = os.path.join("output", "settings", "settings.json")
+
+# Default Presets (24 slots)
+DEFAULT_PRESETS = [{"label": f"Slot {i+1}", "sku": "", "size": "", "color_idx": 0} for i in range(24)]
+
+# Colors for SKUs
+# 0: Gray (Empty), 1: Blue, 2: Pink, 3: Purple, 4: Orange
+SKU_COLORS = {
+    0: "#B0BEC5", # Gray
+    1: "#2196F3", # Blue
+    2: "#E91E63", # Pink
+    3: "#9C27B0", # Purple
+    4: "#FF9800"  # Orange
 }
-
-PRESETS = [
-    ("A-38", "Model A", "38"),
-    ("A-40", "Model A", "40"),
-    ("B-41", "Model B", "41"),
-    ("C-36", "Model C", "36"),
-]
 
 class LiveCameraScreen(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.parent_widget = parent
         self.setWindowTitle("Live Camera QC")
-        self.last_results_text = None   # store text lines to draw
-        self.last_pass_fail = None      # PASS / FAIL color
         
-        # Default calibration value
-        self.mm_per_px = 0.215984148
-
-        # Mutable presets (copy from global default)
-        # Structure: {"label": "A-38", "model": "Model A", "size": "38"}
-        self.presets = []
-        for label, model, size in PRESETS:
-            self.presets.append({"label": label, "model": model, "size": size})
-
-        # -----------------------------------------------------------------
-        # CREATE WIDGETS
-        # -----------------------------------------------------------------
-
-        # Big frame (main camera)
-        self.big_label = QLabel()
-        self.big_label.setStyleSheet("background: #111; border: 1px solid #333;")
-        self.big_label.setAlignment(Qt.AlignCenter)
-        self.big_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-
-        # Small frame (preview)
-        self.small_label = QLabel()
-        self.small_label.setStyleSheet("background: #222; border: 1px solid #444;")
-        self.small_label.setFixedSize(240, 180) # Slightly taller
-        self.small_label.setAlignment(Qt.AlignCenter)
-        self.small_label.setCursor(Qt.PointingHandCursor)
-        self.small_label.setToolTip("Click to swap live / captured")
-        self.small_label.mousePressEvent = self.swap_frames
-
-        # Camera selector (Hidden, used in settings menu)
-        self.cam_select = QComboBox()
-        self.cam_select.setFixedWidth(200)
-        self.cam_select.addItems(self.detect_cameras())
-        self.cam_select.currentIndexChanged.connect(self.change_camera)
-        self.cam_select.setStyleSheet("""
-            QComboBox {
-                padding: 5px;
-                border: 1px solid #555;
-                border-radius: 5px;
-                background: #333;
-                color: white;
-            }
-            QComboBox::drop-down { border: 0px; }
-        """)
-
-        # MM per Pixel Input (QLineEdit for better typing experience)
-        self.mm_input = QLineEdit()
-        self.mm_input.setFixedWidth(200)
-        self.mm_input.setText(str(self.mm_per_px))
-        self.mm_input.setValidator(QDoubleValidator(0.0001, 10.0, 9))
-        self.mm_input.textChanged.connect(self.update_mm_per_px)
-        self.mm_input.setStyleSheet("""
-            QLineEdit {
-                padding: 5px;
-                border: 1px solid #555;
-                border-radius: 5px;
-                background: #333;
-                color: white;
-            }
-        """)
-
-        # Model selector
-        self.model_select = QComboBox()
-        self.model_select.setFixedHeight(40)
-        self.model_select.addItems(MODEL_DATA.keys())
-        self.model_select.currentIndexChanged.connect(self.update_sizes)
-        self.model_select.setStyleSheet("""
-            QComboBox {
-                padding: 5px 10px;
-                border: 1px solid #555;
-                border-radius: 8px;
-                background: #333;
-                color: white;
-                font-size: 14px;
-            }
-            QComboBox::drop-down { border: 0px; }
-        """)
-
-        # Size selector
-        self.size_select = QComboBox()
-        self.size_select.setFixedHeight(40)
-        self.update_sizes()  # fill with initial model sizes
-        self.size_select.setStyleSheet("""
-            QComboBox {
-                padding: 5px 10px;
-                border: 1px solid #555;
-                border-radius: 8px;
-                background: #333;
-                color: white;
-                font-size: 14px;
-            }
-            QComboBox::drop-down { border: 0px; }
-        """)
-
-        # -----------------------------------------------------------------
-        # UI LAYOUT
-        # -----------------------------------------------------------------
-        main_layout = QVBoxLayout()
-        main_layout.setContentsMargins(10, 10, 10, 10)
-        main_layout.setSpacing(10)
-
-        # --- TOP BAR ---
-        top_bar = QHBoxLayout()
-        top_bar.setContentsMargins(0, 0, 0, 0)
-
-        # Back Button
-        self.back_button = QPushButton("←")
-        self.back_button.setFixedSize(40, 40)
-        self.back_button.setStyleSheet("""
-            QPushButton {
-                background: #444;
-                color: white;
-                font-weight: bold;
-                border-radius: 20px;
-                font-size: 18px;
-            }
-            QPushButton:hover { background: #666; }
-        """)
-        self.back_button.clicked.connect(self.go_back)
-        self.back_button.setToolTip("Back to previous screen")
-
-        # Settings Button (Right)
-        self.settings_button = QPushButton("⚙️ Settings")
-        self.settings_button.setFixedHeight(40)
-        self.settings_button.setCursor(Qt.PointingHandCursor)
-        self.settings_button.setStyleSheet("""
-            QPushButton {
-                background: #333;
-                color: white;
-                font-weight: bold;
-                border-radius: 20px;
-                padding: 0 15px;
-                border: 1px solid #555;
-            }
-            QPushButton:hover { background: #444; }
-            QPushButton::menu-indicator { image: none; }
-        """)
-        self.settings_button.clicked.connect(self.show_settings_menu)
-
-        top_bar.addWidget(self.back_button, alignment=Qt.AlignLeft)
-        top_bar.addStretch()
-        top_bar.addWidget(self.settings_button)
-
-        main_layout.addLayout(top_bar)
-
-        # --- SETTINGS MENU (Persistent) ---
-        self.settings_menu = QMenu(self)
-        self.settings_menu.setStyleSheet("""
-            QMenu {
-                background-color: #333;
-                color: white;
-                border: 1px solid #555;
-            }
-            QMenu::item {
-                padding: 8px 20px;
-            }
-            QMenu::item:selected {
-                background-color: #444;
-            }
-        """)
-
-        # Capture Action
-        capture_action = QAction("📸 Force Capture", self)
-        capture_action.triggered.connect(self.capture_frame)
-        self.settings_menu.addAction(capture_action)
-
-        self.settings_menu.addSeparator()
-
-        # Camera Label
-        cam_label = QAction("Camera Source:", self)
-        cam_label.setEnabled(False)
-        self.settings_menu.addAction(cam_label)
-
-        # Camera Selector Widget
-        cam_widget_action = QWidgetAction(self)
-        cam_widget_action.setDefaultWidget(self.cam_select)
-        self.settings_menu.addAction(cam_widget_action)
-
-        self.settings_menu.addSeparator()
-
-        # MM per Pixel Label
-        mm_label = QAction("MM per Pixel:", self)
-        mm_label.setEnabled(False)
-        self.settings_menu.addAction(mm_label)
-
-        # MM per Pixel Widget
-        mm_widget_action = QWidgetAction(self)
-        mm_widget_action.setDefaultWidget(self.mm_input)
-        self.settings_menu.addAction(mm_widget_action)
-
-        # --- BIG CAMERA AREA ---
-        main_layout.addWidget(self.big_label)
-
-        # --- BOTTOM AREA ---
-        bottom_container = QFrame()
-        bottom_container.setFixedHeight(260) # Increased height for bigger presets
-        bottom_container.setStyleSheet("background: #1A1A1A; border-radius: 10px;")
+        self.theme = ThemeManager.get_colors() # Initialize theme here
         
-        bottom_layout = QHBoxLayout(bottom_container)
-        bottom_layout.setContentsMargins(15, 15, 15, 15)
-        bottom_layout.setSpacing(20)
-
-        # 1. Small Preview (Left)
-        bottom_layout.addWidget(self.small_label, alignment=Qt.AlignVCenter)
-
-        # 2. Controls Area (Right)
-        controls_layout = QHBoxLayout()
+        # State
+        self.good_count = 0
+        self.bs_count = 0
+        self.current_sku = "---"
+        self.current_size = "---"
+        self.last_result = None
         
-        # 2a. Selectors (SKU & Size) - Vertical Stack
-        selectors_layout = QVBoxLayout()
-        selectors_layout.setSpacing(15)
-        selectors_layout.addStretch() # Top stretch for vertical centering
+        # Profile State
+        self.active_profile_id = None
+        self.active_profile_data = {}
+        self.presets = DEFAULT_PRESETS # Added from instruction
         
-        # SKU
-        sku_group = QVBoxLayout()
-        sku_group.setSpacing(5)
-        sku_lbl = QLabel("SKU / MODEL")
-        sku_lbl.setStyleSheet("color: #888; font-size: 12px; font-weight: bold; letter-spacing: 1px;")
-        sku_group.addWidget(sku_lbl)
-        sku_group.addWidget(self.model_select)
+        # Load Data
+        self.load_settings()
+        self.load_active_profile() # Replaces direct load_presets
         
-        # Size
-        size_group = QVBoxLayout()
-        size_group.setSpacing(5)
-        size_lbl = QLabel("SIZE")
-        size_lbl.setStyleSheet("color: #888; font-size: 12px; font-weight: bold; letter-spacing: 1px;")
-        size_group.addWidget(size_lbl)
-        size_group.addWidget(self.size_select)
-
-        selectors_layout.addLayout(sku_group)
-        selectors_layout.addLayout(size_group)
-        selectors_layout.addStretch() # Bottom stretch
-
-        # 2b. Presets - Grid Layout
-        presets_layout = QVBoxLayout()
-        presets_layout.addStretch() # Top stretch for vertical centering
-        presets_lbl = QLabel("QUICK PRESETS (Right-click to Save)")
-        presets_lbl.setStyleSheet("color: #888; font-size: 12px; font-weight: bold; letter-spacing: 1px;")
-        
-        self.presets_grid = QGridLayout()
-        self.presets_grid.setSpacing(10)
-        self.refresh_presets_ui() # Helper to draw presets
-
-        presets_layout.addWidget(presets_lbl)
-        presets_layout.addLayout(self.presets_grid)
-        presets_layout.addStretch() # Bottom stretch
-
-        # Add to controls layout
-        controls_layout.addLayout(selectors_layout, stretch=1)
-        controls_layout.addSpacing(20)
-        controls_layout.addLayout(presets_layout, stretch=2)
-
-        bottom_layout.addLayout(controls_layout)
-
-        main_layout.addWidget(bottom_container)
-        self.setLayout(main_layout)
-
-        # -----------------------------------------------------------------
-        # Camera system
-        # -----------------------------------------------------------------
+        # Camera Setup
         self.cap = None
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.update_frame)
-        self.big_frame_is_live = True
-
         self.live_frame = None
         self.captured_frame = None
+        self.is_paused = False # If True, show captured_frame instead of live_frame
 
-    # ------------------------------------------------------------------
-    # UI Helpers
-    # ------------------------------------------------------------------
-    def update_mm_per_px(self, val):
-        try:
-            self.mm_per_px = float(val)
-        except ValueError:
-            pass # Ignore invalid input while typing
+        # Process State (Added from instruction)
+        self.camera_thread = None
+        self.last_frame = None
+        self.last_results = None
 
-    def refresh_presets_ui(self):
-        """Rebuilds the preset grid."""
-        # Clear existing items
-        while self.presets_grid.count():
-            child = self.presets_grid.takeAt(0)
-            if child.widget():
-                child.widget().deleteLater()
+        # UI Setup
+        self.init_ui()
+        
+    def open_profile_dialog(self):
+        # Instantiate overlay with 'self' as parent so it covers this screen
+        overlay = PresetProfileOverlay(self)
+        overlay.profile_selected.connect(self.on_profile_selected)
+        # No exec(), just let it exist. It manages its own show/close.
+    
+    def on_profile_selected(self, profile_data):
+        # Update active profile when selected from dialog
+        self.active_profile_id = profile_data.get("id")
+        self.active_profile_data = profile_data
+        self.presets = profile_data.get("presets", DEFAULT_PRESETS)
+        
+        # Save the active profile ID
+        self.save_settings()
+        
+        # Update UI
+        self.update_info_bar()
+        self.render_presets()
 
-        row, col = 0, 0
-        for i, p in enumerate(self.presets):
-            label = p["label"]
-            model = p["model"]
-            size = p["size"]
+    def init_ui(self):
+        # Use theme variables
+        self.setStyleSheet(f"background-color: {self.theme['bg_main']}; color: {self.theme['text_main']};")
+        
+        # Main Layout: Left (Presets) vs Right (Preview/Stats)
+        main_h_layout = QHBoxLayout()
+        main_h_layout.setContentsMargins(10, 10, 10, 10)
+        main_h_layout.setSpacing(10) # Changed from 20 to 10 based on instruction snippet
+        self.setLayout(main_h_layout) # Moved from end of init_ui to here
+
+        # -----------------------------------------------------
+        # LEFT PANEL: Presets
+        # -----------------------------------------------------
+        left_panel = QFrame() # Changed from QVBoxLayout to QFrame based on instruction snippet
+        left_layout = QVBoxLayout(left_panel) # Added from instruction snippet
+        left_layout.setContentsMargins(0, 0, 0, 0) # Added from instruction snippet
+        left_layout.setSpacing(10) # Added from instruction snippet
+        # Optional: set panel bg if different
+        # left_panel.setStyleSheet(f"background-color: {self.theme['bg_panel']};") # Added from instruction snippet
+        
+        # Header Row: "Presets" | Info Bar | Edit Button
+        header_layout = QHBoxLayout()
+        
+        lbl_presets = QLabel("Presets")
+        lbl_presets.setStyleSheet("font-size: 18px; font-weight: bold;")
+        
+        # Info Bar (Shift 1, Team A...)
+        self.info_bar = QLabel(" Loading... ")
+        self.info_bar.setStyleSheet("""
+            background-color: #F5F5F5; 
+            color: #333333; 
+            padding: 5px 15px; 
+            border-radius: 5px; 
+            font-weight: bold;
+        """)
+        self.info_bar.setFixedHeight(35)
+        self.update_info_bar()
+        
+        btn_edit = QPushButton("Edit")
+        btn_edit.setFixedSize(60, 35)
+        btn_edit.setStyleSheet("background-color: #F5F5F5; border-radius: 5px; color: #333333; border: 1px solid #E0E0E0;")
+        btn_edit.clicked.connect(self.open_profile_dialog)
+        
+        header_layout.addWidget(lbl_presets)
+        header_layout.addSpacing(15)
+        header_layout.addWidget(self.info_bar, stretch=1)
+        header_layout.addWidget(btn_edit)
+        
+        left_layout.addLayout(header_layout) # Fixed: use left_layout
+        
+        # Presets Grid (4 rows x 6 cols)
+        self.grid_layout = QGridLayout()
+        self.grid_layout.setSpacing(8) # Tighter spacing
+        self.grid_layout.setContentsMargins(0, 0, 0, 0)
+        self.render_presets()
+        
+        # Wrap Grid in a container that allows expansion
+        grid_container = QWidget()
+        grid_container.setLayout(self.grid_layout)
+        grid_container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        
+        left_layout.addWidget(grid_container, stretch=1) # Fixed: use left_layout
+        
+        # -------------------------------------------------------------
+        # RIGHT PANEL: Preview & Stats
+        # -------------------------------------------------------------
+        right_panel = QFrame()
+        right_layout = QVBoxLayout(right_panel)
+        right_layout.setContentsMargins(0, 0, 0, 0)
+        right_layout.setSpacing(10) # compacted
+        
+        # Top Controls: Back | Settings
+        top_ctrl_layout = QHBoxLayout()
+        
+        self.back_button = QPushButton("←")
+        self.back_button.setFixedSize(35, 35) # compact
+        self.back_button.setStyleSheet("""
+            QPushButton {
+                background: #F5F5F5; color: #333333; border-radius: 17px; font-size: 18px; border: 1px solid #E0E0E0;
+            }
+            QPushButton:hover { background: #E8E8E8; }
+        """)
+        self.back_button.clicked.connect(self.go_back)
+        
+        self.settings_btn = QPushButton("⚙️")
+        self.settings_btn.setFixedSize(35, 35) # compact
+        self.settings_btn.setStyleSheet("""
+            QPushButton {
+                background: #F5F5F5; color: #333333; border-radius: 17px; font-size: 18px; border: 1px solid #E0E0E0;
+            }
+            QPushButton:hover { background: #E8E8E8; }
+        """)
+        self.settings_btn.clicked.connect(self.show_settings_menu)
+        
+        top_ctrl_layout.addWidget(self.back_button)
+        top_ctrl_layout.addStretch()
+        top_ctrl_layout.addWidget(self.settings_btn)
+        
+        right_layout.addLayout(top_ctrl_layout)
+        
+        # Review Frameshot
+        self.preview_label = QLabel("Review\nFrameshot")
+        self.preview_label.setAlignment(Qt.AlignCenter)
+        self.preview_label.setStyleSheet("""
+            background-color: #F8F8F8; 
+            color: #AAAAAA; 
+            border-radius: 8px;
+            font-weight: bold;
+            font-size: 60px;
+            border: 3px solid #E0E0E0;
+        """)
+        # Make Preview smaller / fixed height
+        self.preview_label.setFixedHeight(325) 
+        self.preview_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        
+        right_layout.addWidget(self.preview_label)
+        
+        # Counters: Good | BS
+        counters_layout = QHBoxLayout()
+        counters_layout.setSpacing(10)
+        
+        # Good Counter
+        self.lbl_good = QLabel(f"{self.good_count}\nGood")
+        self.lbl_good.setAlignment(Qt.AlignCenter)
+        self.lbl_good.setMinimumHeight(100) # Increased height
+        self.lbl_good.setStyleSheet("""
+            background-color: #66BB6A; 
+            color: white; 
+            font-weight: bold; 
+            font-size: 40px;
+            border-radius: 5px;
+            padding: 5px;
+        """)
+        
+        # BS Counter
+        self.lbl_bs = QLabel(f"{self.bs_count}\nBS")
+        self.lbl_bs.setAlignment(Qt.AlignCenter)
+        self.lbl_bs.setMinimumHeight(100) # Increased height
+        self.lbl_bs.setStyleSheet("""
+            background-color: #D32F2F; 
+            color: white; 
+            font-weight: bold; 
+            font-size: 40px;
+            border-radius: 5px;
+            padding: 5px;
+        """)
+        
+        counters_layout.addWidget(self.lbl_good)
+        counters_layout.addWidget(self.lbl_bs)
+        
+        right_layout.addLayout(counters_layout)
+        
+        # Big Result (REJECT / ACCEPT)
+        # Logic: Show SIZE (Big) \n STATUS (Small)
+        self.lbl_big_result = QLabel("-\nIDLE")
+        self.lbl_big_result.setAlignment(Qt.AlignCenter)
+        self.lbl_big_result.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding) # Fill space
+        self.lbl_big_result.setStyleSheet("""
+            color: #999999; 
+            background-color: white; 
+            font-size: 64px; 
+            font-weight: 900; 
+            padding: 10px; 
+            border-radius: 15px; 
+            border: 4px solid #E0E0E0;
+        """)
+        right_layout.addWidget(self.lbl_big_result, stretch=1) # Give it the stretch factor
+        
+        # Details Box
+        details_layout = QGridLayout()
+        details_layout.setVerticalSpacing(2) # tighter
+        details_layout.setHorizontalSpacing(10)
+        
+        self.lbl_detail_sku = QLabel("SKU/Size :")
+        self.val_detail_sku = QLabel("---/---")
+        
+        self.lbl_detail_len = QLabel("Length :")
+        self.val_detail_len = QLabel("-")
+        
+        self.lbl_detail_wid = QLabel("Width :")
+        self.val_detail_wid = QLabel("-")
+        
+        self.lbl_detail_res = QLabel("Result :")
+        self.val_detail_res = QLabel("-")
+        
+        # Styling details - Updated for light theme
+        label_style = "font-weight: bold; color: #999999; font-size: 24px;"
+        val_style = "font-weight: bold; color: #333333; font-size: 24px;"
+
+        for w in [self.lbl_detail_sku, self.lbl_detail_len, self.lbl_detail_wid, self.lbl_detail_res]:
+            w.setStyleSheet(label_style)
             
-            btn = QPushButton(f"{label}\n{size}")
-            btn.setFixedSize(100, 100) # Bigger presets
-            btn.setContextMenuPolicy(Qt.CustomContextMenu)
-            btn.customContextMenuRequested.connect(lambda pos, idx=i: self.show_preset_menu(pos, idx))
-            btn.setCursor(Qt.PointingHandCursor)
-            btn.setStyleSheet("""
-                QPushButton {
-                    background: #333;
-                    color: white;
-                    border: 1px solid #444;
+        for w in [self.val_detail_sku, self.val_detail_len, self.val_detail_wid, self.val_detail_res]:
+            w.setAlignment(Qt.AlignRight)
+            w.setStyleSheet(val_style)
+
+        details_layout.addWidget(self.lbl_detail_sku, 0, 0)
+        details_layout.addWidget(self.val_detail_sku, 0, 1)
+        details_layout.addWidget(self.lbl_detail_len, 1, 0)
+        details_layout.addWidget(self.val_detail_len, 1, 1)
+        details_layout.addWidget(self.lbl_detail_wid, 2, 0)
+        details_layout.addWidget(self.val_detail_wid, 2, 1)
+        details_layout.addWidget(self.lbl_detail_res, 3, 0)
+        details_layout.addWidget(self.val_detail_res, 3, 1)
+        
+        right_layout.addLayout(details_layout)
+        
+        # Add layouts to main
+        # Left Panel weight 65%, Right Panel weight 35%
+        main_h_layout.addWidget(left_panel, 65)
+        main_h_layout.addWidget(right_panel, 35)
+        
+        self.setLayout(main_h_layout)
+        
+        # Create Settings Menu (Hidden)
+        self.create_settings_menu()
+
+    # ------------------------------------------------------------------
+    # Data / Logic
+    # ------------------------------------------------------------------
+    def load_active_profile(self):
+        # 1. Load profiles to ensure at least one exists (seeds file if needed)
+        # We can reuse logic from Dialog or just look at file
+        # But Dialog logic seeds it. Let's just try loading.
+        profiles = JsonUtility.load_from_json(PROFILES_FILE)
+        
+        # If no profiles file, just create defaults here too? 
+        # Or instantiate Dialog once to seed it? 
+        # Let's seed defaults here if missing to be safe
+        if not profiles:
+            profiles = [
+                {
+                    "id": "default-1",
+                    "name": "Shift 1",
+                    "sub_label": "Team A",
+                    "sku_label": "SKU E 9008 M",
+                    "last_updated": datetime.datetime.now().strftime("%d/%m/%Y, %H:%M:%S"),
+                    "presets": DEFAULT_PRESETS
+                }
+            ]
+            JsonUtility.save_to_json(PROFILES_FILE, profiles)
+            
+        # 2. Find Active Profile
+        self.active_profile_data = None
+        if self.active_profile_id:
+            for p in profiles:
+                if p.get("id") == self.active_profile_id:
+                    self.active_profile_data = p
+                    break
+        
+        # 3. Fallback if not found
+        if not self.active_profile_data and profiles:
+            self.active_profile_data = profiles[0]
+            self.active_profile_id = self.active_profile_data.get("id")
+            self.save_settings() # Save the fallback ID
+            
+        # 4. Set Presets
+        if self.active_profile_data:
+            loaded_presets = self.active_profile_data.get("presets", [])
+            # Validate length
+            if len(loaded_presets) == 24:
+                self.presets = loaded_presets
+            else:
+                self.presets = DEFAULT_PRESETS # Should we update the profile? Nah, leave it safe.
+        else:
+            self.presets = DEFAULT_PRESETS
+
+    def update_info_bar(self):
+        if self.active_profile_data:
+            name = self.active_profile_data.get("name", "")
+            sub = self.active_profile_data.get("sub_label", "")
+            date_str = self.active_profile_data.get("last_updated", "").split(",")[0]
+            self.info_bar.setText(f" {name}, {sub}            {date_str}")
+        else:
+            self.info_bar.setText(" No Profile Selected ")
+
+    def load_settings(self):
+        settings = JsonUtility.load_from_json(SETTINGS_FILE)
+        if settings:
+            self.mm_per_px = settings.get("mm_per_px", 0.215984148)
+            self.camera_index = settings.get("camera_index", 0)
+            self.active_profile_id = settings.get("active_profile_id", None)
+        else:
+            self.mm_per_px = 0.215984148
+            self.camera_index = 0
+            self.active_profile_id = None
+            
+    def save_settings(self):
+        data = {
+            "mm_per_px": self.mm_per_px,
+            "camera_index": self.camera_index,
+            "active_profile_id": self.active_profile_id
+        }
+        JsonUtility.save_to_json(SETTINGS_FILE, data)
+
+    def render_presets(self):
+        # Clear
+        for i in reversed(range(self.grid_layout.count())):
+            self.grid_layout.itemAt(i).widget().setParent(None)
+            
+        # Rebuild 6x4
+        for i, p in enumerate(self.presets):
+            row, col = divmod(i, 6) # 6 columns
+            
+            sku = p.get("sku", "")
+            size = p.get("size", "")
+            color_idx = p.get("color_idx", 0)
+            bg_color = SKU_COLORS.get(color_idx, "#B0BEC5")
+            
+            btn = QPushButton()
+            # Removed FixedSize to allow expansion
+            btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+            btn.setMinimumSize(80, 80) # Minimum reasonable size
+            
+            # Text
+            text = f"{sku}\n{size}" if sku else "Empty"
+            btn.setText(text)
+            
+            # Style
+            btn.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {bg_color};
+                    border: none;
                     border-radius: 12px;
+                    color: #333333;
                     font-weight: bold;
                     font-size: 16px;
-                }
-                QPushButton:hover {
-                    background: #444;
-                    border-color: #666;
-                }
-                QPushButton:pressed {
-                    background: #222;
-                }
+                }}
+                QPushButton:hover {{
+                    border: 3px solid #666666;
+                }}
+                QPushButton:pressed {{
+                    opacity: 0.8;
+                }}
             """)
-            btn.setToolTip(f"Set {model} / {size}\nRight-click to save current selection here")
-            btn.clicked.connect(lambda _, m=model, s=size: self.set_preset(m, s))
             
-            self.presets_grid.addWidget(btn, row, col)
-            col += 1
-            if col > 3: # 4 columns max
-                col = 0
-                row += 1
-
-    def show_settings_menu(self):
-        # Show menu under the button
-        self.settings_menu.exec(self.settings_button.mapToGlobal(self.settings_button.rect().bottomLeft()))
-
-    def show_preset_menu(self, pos, index):
-        menu = QMenu(self)
-        menu.setStyleSheet("""
-            QMenu {
-                background-color: #333;
-                color: white;
-                border: 1px solid #555;
-            }
-            QMenu::item {
-                padding: 8px 20px;
-            }
-            QMenu::item:selected {
-                background-color: #444;
-            }
-        """)
-
-        current_model = self.model_select.currentText()
-        current_size = self.size_select.currentText()
-
-        save_action = QAction(f"Save '{current_model} - {current_size}' to this preset", self)
-        save_action.triggered.connect(lambda: self.update_preset(index, current_model, current_size))
-        menu.addAction(save_action)
-
-        # Find the button that triggered this to map position
-        # But pos is passed from signal, which is relative to widget.
-        # We need to find the sender widget.
-        # Actually, we can just use QCursor.pos() or mapToGlobal if we had the widget reference easily.
-        # Since we connected lambda with idx, we don't have the widget ref directly in args unless we iterate.
-        # Simpler: use QCursor.pos()
-        from PySide6.QtGui import QCursor
-        menu.exec(QCursor.pos())
-
-    def update_preset(self, index, model, size):
-        if 0 <= index < len(self.presets):
-            # Update data
-            self.presets[index]["model"] = model
-            self.presets[index]["size"] = size
-            # Update label to match model/size or keep custom label? 
-            # User asked "customize model and size". 
-            # Let's update the label to be the Model name (truncated) + Size for clarity
-            # Or just keep the original label (e.g. "A-38")?
-            # If I change the content, the label "A-38" might be misleading if it's now "Model B - 42".
-            # So I should probably update the label too.
-            # Let's make a simple label: "{Model}-{Size}"
-            new_label = f"{model[:1]}-{size}" # First letter of model - size
-            self.presets[index]["label"] = new_label
+            # Click Handler
+            btn.clicked.connect(lambda _, idx=i: self.on_preset_clicked(idx))
             
-            self.refresh_presets_ui()
+            self.grid_layout.addWidget(btn, row, col)
 
-    # ------------------------------------------------------------------
-    # Lifecycle fix — FIXES the "camera freeze after back"
-    # ------------------------------------------------------------------
-    def showEvent(self, event):
-        """Reinitialize camera whenever this screen becomes visible."""
-        # guard: ensure we have at least one camera string
-        cam_text = self.cam_select.currentText() if self.cam_select.count() > 0 else "0"
-        try:
-            cam_index = int(cam_text)
-        except Exception:
-            cam_index = 0
-        # release previous if any
-        if self.cap is not None and self.cap.isOpened():
-            try:
-                self.cap.release()
-            except Exception:
-                pass
-        self.cap = cv2.VideoCapture(cam_index)
-        self.timer.start(30)
-        super().showEvent(event)
-
-    def hideEvent(self, event):
-        """Ensure camera is released when widget is hidden."""
-        try:
-            if self.timer.isActive():
-                self.timer.stop()
-        except Exception:
-            pass
-        try:
-            if self.cap and self.cap.isOpened():
-                self.cap.release()
-        except Exception:
-            pass
-        super().hideEvent(event)
-
-    def closeEvent(self, event):
-        """Proper cleanup."""
-        try:
-            if self.timer.isActive():
-                self.timer.stop()
-        except Exception:
-            pass
-        try:
-            if self.cap and self.cap.isOpened():
-                self.cap.release()
-        except Exception:
-            pass
-        super().closeEvent(event)
-
-    # ------------------------------------------------------------------
-    # Camera utility
-    # ------------------------------------------------------------------
-    def detect_cameras(self, max_test=3):
-        cams = []
-        for i in range(max_test):
-            cap = cv2.VideoCapture(i)
-            if cap.isOpened():
-                cams.append(str(i))
-                cap.release()
-        return cams or ["0"]
-
-    def change_camera(self, index=None):
-        """Called when camera selection changes. Accepts optional index arg from signal."""
-        try:
-            if self.cap and self.cap.isOpened():
-                self.cap.release()
-        except Exception:
-            pass
-        try:
-            cam_text = self.cam_select.currentText() or "0"
-            cam_idx = int(cam_text)
-        except Exception:
-            cam_idx = 0
-        self.cap = cv2.VideoCapture(cam_idx)
-
-    # ------------------------------------------------------------------
-    # Model + Size
-    # ------------------------------------------------------------------
-    def update_sizes(self):
-        model = self.model_select.currentText() or list(MODEL_DATA.keys())[0]
-        sizes = MODEL_DATA.get(model, [])
-        self.size_select.clear()
-        if sizes:
-            self.size_select.addItems(sizes)
-
-    def set_preset(self, model, size):
-        # setCurrentText may not trigger index change if already selected, so call update_sizes
-        self.model_select.setCurrentText(model)
-        self.update_sizes()
-        self.size_select.setCurrentText(size)
-
-    # ------------------------------------------------------------------
-    # Frame conversion (stable memory)
-    # ------------------------------------------------------------------
-    def cv2_to_pixmap(self, img, target_width, target_height):
-        # Ensure we have a valid image
-        if img is None:
-            return QPixmap()
-
-        # Convert BGR -> RGB and resize with padding while preserving aspect ratio
-        img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        h, w, _ = img_rgb.shape
-        scale = min(max(1e-6, target_width / w), max(1e-6, target_height / h))
-        new_w, new_h = int(w * scale), int(h * scale)
-        if new_w == 0 or new_h == 0:
-            return QPixmap()
-
-        resized = cv2.resize(img_rgb, (new_w, new_h), interpolation=cv2.INTER_AREA)
-
-        canvas = np.zeros((target_height, target_width, 3), dtype=np.uint8)
-        x_offset = (target_width - new_w) // 2
-        y_offset = (target_height - new_h) // 2
-        canvas[y_offset:y_offset+new_h, x_offset:x_offset+new_w] = resized
-
-        # Create QImage and make a deep copy to avoid lifetime issues with numpy buffer
-        qimg = QImage(canvas.data, target_width, target_height, 3 * target_width, QImage.Format_RGB888)
-        qimg_copy = qimg.copy()  # force a deep copy so underlying memory is owned by Qt
-        return QPixmap.fromImage(qimg_copy)
-
-    # ------------------------------------------------------------------
-    # Main functions
-    # ------------------------------------------------------------------
-    def update_frame(self):
-        if not self.cap or not self.cap.isOpened():
-            return
-
-        ret, frame = self.cap.read()
-        if not ret or frame is None:
-            return
-
-        self.live_frame = frame.copy()
-
-        # Convert frame to pixmap
-        pix = None
-        if self.big_frame_is_live:
-            pix = self.cv2_to_pixmap(self.live_frame, self.big_label.width(), self.big_label.height())
-        else:
-            pix = self.cv2_to_pixmap(self.live_frame, self.small_label.width(), self.small_label.height())
-
-        # Draw measurement overlay ON THE BIG FRAME
-        if self.big_frame_is_live and self.last_results_text:
-            painter = QPainter(pix)
-            painter.setRenderHint(QPainter.Antialiasing)
-
-            # Setup font
-            font = painter.font()
-            font.setPointSize(24)  # Bigger font
-            font.setBold(True)
-            painter.setFont(font)
-
-            # Calculate box size based on text
-            fm = painter.fontMetrics()
-            max_width = 0
-            total_height = 20  # padding
-            for line in self.last_results_text:
-                max_width = max(max_width, fm.horizontalAdvance(line))
-                total_height += fm.height() + 10
-
-            # Draw semi-transparent background
-            bg_rect_width = max_width + 40
-            painter.fillRect(20, 20, bg_rect_width, total_height, QColor(0, 0, 0, 200))
-
-            # Draw text
-            y = 20 + fm.ascent() + 10
-            for line in self.last_results_text:
-                if "Result" in line:
-                    if self.last_pass_fail == "PASS":
-                        painter.setPen(QColor(0, 255, 0))  # Bright Green
-                    else:
-                        painter.setPen(QColor(255, 50, 50))  # Bright Red
-                else:
-                    painter.setPen(QColor(255, 255, 255))
-
-                painter.drawText(40, y, line)
-                y += fm.height() + 10
-
-            painter.end()
-
-        # Show pixmap
-        if self.big_frame_is_live:
-            self.big_label.setPixmap(pix)
-        else:
-            self.small_label.setPixmap(pix)
-
+    def on_preset_clicked(self, idx):
+        p = self.presets[idx]
+        self.current_sku = p.get("sku", "---")
+        self.current_size = p.get("size", "---")
+        
+        # Update UI
+        self.val_detail_sku.setText(f"{self.current_sku}/{self.current_size}")
+        print(f"Selected Preset {idx}: {self.current_sku} / {self.current_size}")
 
     def capture_frame(self):
         if self.live_frame is None:
             return
-
+            
+        self.is_paused = True # Freeze preview
+        
+        # Process
         results, processed = measure_live_sandals(
-            self.live_frame,
+            self.live_frame.copy(),
             mm_per_px=self.mm_per_px,
             draw_output=True,
-            save_out=None
+            save_out=None # Optional: save to file
         )
-
+        
         self.captured_frame = processed
-
-        # Update small preview
-        pix = self.cv2_to_pixmap(processed, self.small_label.width(), self.small_label.height())
-        self.small_label.setPixmap(pix)
-
-        # Extract the first result (only one sandal)
+        
+        # Display Results
         if results:
             r = results[0]
-
-            length = r.get("real_length_cm")
-            length_mm = r.get("real_length_mm")
-            length_px = r.get("px_length")
-            width  = r.get("real_width_cm")
-            pf     = r.get("pass_fail")
-
-            self.last_results_text = [
-                f"Length : {length:.1f} cm" if length else "Length : -",
-                f"Length - mm : {length_mm} mm" if length else "Length mm : -",
-                f"Length - px : {length_px} px" if length else "Length px : -",
-                f"Width  : {width:.1f} cm" if width else "Width  : -",
-                f"Result : {pf}"
-            ]
-
-            self.last_pass_fail = pf
-
-        print(f"[INFO] Capture processed | Model: {self.model_select.currentText()} | "
-            f"Size: {self.size_select.currentText()} | Results: {results}")
-
-
-    def swap_frames(self, event):
-        # clicking small preview toggles big/small between live and captured
-        if self.captured_frame is None:
-            return
-
-        if self.big_frame_is_live:
-            big_pix = self.cv2_to_pixmap(self.captured_frame, self.big_label.width(), self.big_label.height())
-            small_pix = self.cv2_to_pixmap(self.live_frame, self.small_label.width(), self.small_label.height())
+            length_mm = r.get("real_length_mm", 0)
+            width_mm = r.get("real_width_mm", 0) # Assumed exist
+            # If not in dict, calc from cm
+            if not width_mm: width_mm = r.get("real_width_cm", 0) * 10
+            
+            pf = r.get("pass_fail", "FAIL")
+            
+            self.val_detail_len.setText(f"{length_mm:.2f} mm")
+            self.val_detail_wid.setText(f"{width_mm:.2f} mm")
+            self.val_detail_res.setText(pf)
+            
+            # BIG Style: White BG, Dark Text, Colored Background
+            # Content: SIZE on top (Big), STATUS on bottom (Smaller)
+            display_size = self.current_size if self.current_size != "---" else "-"
+            
+            if pf == "PASS":
+                self.good_count += 1
+                self.lbl_big_result.setText(f"{display_size}\nGOOD")
+                self.lbl_big_result.setStyleSheet("color: white; background-color: #4CAF50; padding: 20px; border-radius: 15px; border: none; font-size: 48px; font-weight: 900;")
+            else:
+                self.bs_count += 1
+                self.lbl_big_result.setText(f"{display_size}\nREJECT")
+                self.lbl_big_result.setStyleSheet("color: white; background-color: #D32F2F; padding: 20px; border-radius: 15px; border: none; font-size: 48px; font-weight: 900;")
+                
+            self.update_counters()
+            
         else:
-            big_pix = self.cv2_to_pixmap(self.live_frame, self.big_label.width(), self.big_label.height())
-            small_pix = self.cv2_to_pixmap(self.captured_frame, self.small_label.width(), self.small_label.height())
+            self.val_detail_res.setText("-")
+            self.val_detail_len.setText("-")
+            self.val_detail_wid.setText("-")
+            self.lbl_big_result.setText("-\nIDLE")
+            # Idle: Grey text on white
+            self.lbl_big_result.setStyleSheet("color: #999999; background-color: white; font-size: 48px; font-weight: 900; padding: 20px; border-radius: 15px; border: 4px solid #E0E0E0;")
 
-        self.big_label.setPixmap(big_pix)
-        self.small_label.setPixmap(small_pix)
-        self.big_frame_is_live = not self.big_frame_is_live
+            
+        # Update Preview with processed frame
+        self.show_image(self.captured_frame)
+
+    def update_counters(self):
+        self.lbl_good.setText(f"{self.good_count}\nGood")
+        self.lbl_bs.setText(f"{self.bs_count}\nBS")
+
+    # ------------------------------------------------------------------
+    # Camera & Frame Handling
+    # ------------------------------------------------------------------
+    def update_frame(self):
+        """
+        Reads frame from camera but DOES NOT display it live.
+        Only keeps self.live_frame fresh for capturing.
+        """
+        if not self.cap or not self.cap.isOpened():
+            return
+            
+        ret, frame = self.cap.read()
+        if not ret or frame is None:
+            return
+            
+        self.live_frame = frame
+        
+        # REMOVED: Live feed display
+        # if not self.is_paused:
+        #    self.show_image(self.live_frame)
+
+    def show_image(self, frame):
+        if frame is None: return
+        
+        # Convert to Pixmap
+        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        h, w, ch = frame_rgb.shape
+        bytes_per_line = ch * w
+        qimg = QImage(frame_rgb.data, w, h, bytes_per_line, QImage.Format_RGB888)
+        pix = QPixmap.fromImage(qimg)
+        
+        # Scale to label using KeepAspectRatio
+        # The label might be taller than the image aspect ratio, causing padding.
+        # We rely on AlignmentCenter to keep it in middle.
+        
+        lbl_w = self.preview_label.width()
+        lbl_h = self.preview_label.height()
+        pix = pix.scaled(lbl_w, lbl_h, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        self.preview_label.setPixmap(pix)
+    
+    def cv2_to_pixmap(self, img):
+        # ... existing utility if needed ...
+        pass
+
+    # ------------------------------------------------------------------
+    # Lifecycle
+    # ------------------------------------------------------------------
+    def showEvent(self, event):
+        self.start_camera()
+        super().showEvent(event)
+        
+    def hideEvent(self, event):
+        self.stop_camera()
+        super().hideEvent(event)
+        
+    def closeEvent(self, event):
+        self.stop_camera()
+        super().closeEvent(event)
+        
+    def start_camera(self):
+        if self.cap is None:
+            self.cap = cv2.VideoCapture(self.camera_index)
+        self.timer.start(30)
+        self.is_paused = False
+        
+    def stop_camera(self):
+        self.timer.stop()
+        if self.cap:
+            self.cap.release()
+            self.cap = None
 
     def go_back(self):
-        try:
-            if self.timer.isActive():
-                self.timer.stop()
-        except Exception:
-            pass
-        try:
-            if self.cap and self.cap.isOpened():
-                self.cap.release()
-        except Exception:
-            pass
+        self.stop_camera()
         if self.parent_widget:
             self.parent_widget.go_back()
+            
+    # ------------------------------------------------------------------
+    # Settings Menu
+    # ------------------------------------------------------------------
+    def create_settings_menu(self):
+        self.settings_menu = QMenu(self)
+        
+        # Helper to create input fields in menu
+        self.mm_input = QLineEdit()
+        self.mm_input.setText(str(self.mm_per_px))
+        self.mm_input.setPlaceholderText("MM per Pixel")
+        self.mm_input.textChanged.connect(self.on_mm_changed)
+        
+        mm_action = QWidgetAction(self)
+        mm_action.setDefaultWidget(self.mm_input)
+        
+        self.settings_menu.addAction("MM per Pixel:")
+        self.settings_menu.addAction(mm_action)
+        self.settings_menu.addSeparator()
+        
+        # Trigger Capture manually
+        self.settings_menu.addAction("Refocus / Resume Live", self.resume_live)
+        self.settings_menu.addAction("Capture Frame", self.capture_frame)
+        
+    def show_settings_menu(self):
+        self.settings_menu.exec(self.settings_btn.mapToGlobal(self.settings_btn.rect().bottomLeft()))
+        
+    def on_mm_changed(self, text):
+        try:
+            val = float(text)
+            self.mm_per_px = val
+            self.save_settings()
+        except ValueError:
+            pass
+
+    def resume_live(self):
+        self.is_paused = False
 

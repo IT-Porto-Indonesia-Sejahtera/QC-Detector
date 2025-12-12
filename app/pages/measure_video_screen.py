@@ -14,19 +14,22 @@ class MeasureVideoScreen(QWidget):
     def __init__(self, controller):
         super().__init__(controller)
         self.parent = controller
-        self.setStyleSheet("background-color: #111; color: white;")
+        self.setStyleSheet("background-color: white; color: #333333;")
 
         layout = QVBoxLayout(self)
 
         self.video_label = QLabel("No video loaded.")
         self.video_label.setAlignment(Qt.AlignCenter)
-        self.video_label.setStyleSheet("background: black; border: 2px dashed #555;")
+        self.video_label.setStyleSheet("background: #F8F8F8; border: 2px dashed #CCCCCC;")
         layout.addWidget(self.video_label)
 
         btn_layout = QHBoxLayout()
         self.load_btn = QPushButton("Load Video")
+        self.load_btn.setStyleSheet("background-color: #F5F5F5; color: #333333; border-radius: 8px; font-weight: bold; padding: 8px;")
         self.start_btn = QPushButton("Start Processing")
+        self.start_btn.setStyleSheet("background-color: #2196F3; color: white; border-radius: 8px; font-weight: bold; padding: 8px;")
         self.back_btn = QPushButton("Back")
+        self.back_btn.setStyleSheet("background-color: #F5F5F5; color: #333333; border-radius: 8px; font-weight: bold; padding: 8px;")
         self.start_btn.setEnabled(False)
 
         btn_layout.addWidget(self.load_btn)

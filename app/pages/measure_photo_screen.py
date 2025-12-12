@@ -29,9 +29,9 @@ class MeasurePhotoScreen(QWidget):
         self.image_label = QLabel()
         self.image_label.setAlignment(Qt.AlignCenter)
         self.image_label.setStyleSheet("""
-            border: 2px dashed #888;
+            border: 2px dashed #CCCCCC;
             border-radius: 10px;
-            background: black;  /* black background padding */
+            background: #F8F8F8;
         """)
         self.image_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.image_label.setMinimumSize(400, 400)
@@ -48,10 +48,13 @@ class MeasurePhotoScreen(QWidget):
         # === Buttons ===
         button_layout = QHBoxLayout()
         self.measure_button = QPushButton("Measure")
+        self.measure_button.setStyleSheet("background-color: #2196F3; color: white; border-radius: 8px; font-weight: bold; padding: 8px;")
         self.measure_button.clicked.connect(self.measure_image)
         self.quit_button = QPushButton("Quit")
+        self.quit_button.setStyleSheet("background-color: #F5F5F5; color: #333333; border-radius: 8px; font-weight: bold; padding: 8px;")
         self.quit_button.clicked.connect(self.close)
         self.back_button = QPushButton("Back to Menu")
+        self.back_button.setStyleSheet("background-color: #F5F5F5; color: #333333; border-radius: 8px; font-weight: bold; padding: 8px;")
         self.back_button.clicked.connect(self.controller.go_back)
         button_layout.addWidget(self.back_button)
         button_layout.addWidget(self.measure_button)

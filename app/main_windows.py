@@ -11,6 +11,7 @@ class MainWindow(QWidget):
         super().__init__()
         self.setWindowTitle("QC Detector System")
         self.setMinimumSize(900, 600)
+        self.setStyleSheet("background-color: white;")
 
         self.stack = QStackedWidget()
         layout = QVBoxLayout(self)

@@ -1,0 +1,18 @@
+[
+    {
+        "id": "2ddd15e6-ce5d-48e0-a68b-f706b1a70c44",
+        "name": "Shift 2",
+        "sub_label": "Team B",
+        "sku_label": "SKU E 9008 L",
+        "last_updated": "11/12/2025, 17:26:14",
+        "presets": []
+    },
+    {
+        "id": "87a8bcf6-8a71-4d64-a139-379846cd5fc5",
+        "name": "Shift 3",
+        "sub_label": "New Team",
+        "sku_label": "SKU ---",
+        "last_updated": "11/12/2025, 17:26:19",
+        "presets": []
+    }
+]

@@ -1,0 +1,32 @@
+[
+    {
+        "code": "E-9008-M",
+        "coeff": 0.2123459,
+        "image": "sku_images/e_9008_m.png"
+    },
+    {
+        "code": "E-9008-L",
+        "coeff": 0.2188888,
+        "image": "sku_images/e_9008_l.png"
+    },
+    {
+        "code": "F-1234-S",
+        "coeff": 0.1999999,
+        "image": "sku_images/f_1234_s.png"
+    },
+    {
+        "code": "G-5678-XL",
+        "coeff": 0.2300000,
+        "image": "sku_images/g_5678_xl.png"
+    },
+    {
+        "code": "A-1111-M",
+        "coeff": 0.2100000,
+        "image": "sku_images/a_1111_m.png"
+    },
+    {
+        "code": "B-2222-L",
+        "coeff": 0.2200000,
+        "image": "sku_images/b_2222_l.png"
+    }
+]
