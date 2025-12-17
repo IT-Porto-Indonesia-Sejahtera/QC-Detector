@@ -40,7 +40,7 @@ class SkuSelectorOverlay(BaseOverlay):
         # Header
         header = QHBoxLayout()
         btn_back = QPushButton("❮")
-        btn_back.setFixedSize(40, 40)
+        btn_back.setFixedSize(60, 60)
         btn_back.setStyleSheet(f"border: none; font-size: 24px; font-weight: bold; color: {self.theme['text_main']};")
         btn_back.clicked.connect(self.close_overlay)
         

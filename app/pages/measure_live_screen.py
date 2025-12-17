@@ -5,7 +5,7 @@ import datetime
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QComboBox, QFrame, QSizePolicy, QGridLayout, QMenu, QWidgetAction,
-    QLineEdit, QScrollArea, QApplication
+    QLineEdit, QScrollArea, QApplication, QScroller
 )
 from PySide6.QtCore import Qt, QTimer, QSize, QRect, Signal
 from PySide6.QtGui import QPixmap, QImage, QColor, QPainter, QAction, QDoubleValidator, QFont
@@ -23,8 +23,40 @@ from app.utils.theme_manager import ThemeManager
 PRESETS_FILE = os.path.join("output", "settings", "presets.json")
 SETTINGS_FILE = os.path.join("output", "settings", "settings.json")
 
-# Default Presets (24 slots)
-DEFAULT_PRESETS = [{"label": f"Slot {i+1}", "sku": "", "size": "", "color_idx": 0} for i in range(24)]
+# Default Presets (Testing Grouping)
+DEFAULT_PRESETS = [
+    {"sku": "E-0123M", "size": "36", "color_idx": 1},
+    {"sku": "E-0123M", "size": "37", "color_idx": 1},
+    {"sku": "E-0123M", "size": "38", "color_idx": 1},
+    {"sku": "E-0123M", "size": "39", "color_idx": 1},
+    {"sku": "E-0123M", "size": "40", "color_idx": 1},
+    {"sku": "E-0123M", "size": "41", "color_idx": 1},
+    {"sku": "E-0123M", "size": "42", "color_idx": 1},
+    {"sku": "E-0123M", "size": "43", "color_idx": 1},
+
+    {"sku": "E-9008L", "size": "38", "color_idx": 2},
+    {"sku": "E-9008L", "size": "39", "color_idx": 2},
+    {"sku": "E-9008L", "size": "40", "color_idx": 2},
+    {"sku": "E-9008L", "size": "41", "color_idx": 2},
+
+    {"sku": "X-5000-Pro", "size": "S", "color_idx": 3},
+    {"sku": "X-5000-Pro", "size": "M", "color_idx": 3},
+    {"sku": "X-5000-Pro", "size": "L", "color_idx": 3},
+
+    {"sku": "A-1001X", "size": "38", "color_idx": 2},
+    {"sku": "A-1001X", "size": "39", "color_idx": 2},
+    {"sku": "A-1001X", "size": "40", "color_idx": 2},
+
+    {"sku": "B-2020Y", "size": "S", "color_idx": 3},
+    {"sku": "B-2020Y", "size": "M", "color_idx": 3},
+    {"sku": "B-2020Y", "size": "L", "color_idx": 3},
+    {"sku": "B-2020Y", "size": "XL", "color_idx": 3},
+
+    {"sku": "C-3030Z", "size": "40", "color_idx": 4},
+    {"sku": "C-3030Z", "size": "41", "color_idx": 4},
+    {"sku": "C-3030Z", "size": "42", "color_idx": 4},
+]
+
 
 # Colors for SKUs
 # 0: Gray (Empty), 1: Blue, 2: Pink, 3: Purple, 4: Orange
@@ -123,8 +155,6 @@ class LiveCameraScreen(QWidget):
         left_layout = QVBoxLayout(left_panel) # Added from instruction snippet
         left_layout.setContentsMargins(0, 0, 0, 0) # Added from instruction snippet
         left_layout.setSpacing(10) # Added from instruction snippet
-        # Optional: set panel bg if different
-        # left_panel.setStyleSheet(f"background-color: {self.theme['bg_panel']};") # Added from instruction snippet
         
         # Header Row: "Presets" | Info Bar | Edit Button
         header_layout = QHBoxLayout()
@@ -145,7 +175,7 @@ class LiveCameraScreen(QWidget):
         self.update_info_bar()
         
         btn_edit = QPushButton("Edit")
-        btn_edit.setFixedSize(60, 35)
+        btn_edit.setFixedSize(80, 50)
         btn_edit.setStyleSheet("background-color: #F5F5F5; border-radius: 5px; color: #333333; border: 1px solid #E0E0E0;")
         btn_edit.clicked.connect(self.open_profile_dialog)
         
@@ -156,18 +186,26 @@ class LiveCameraScreen(QWidget):
         
         left_layout.addLayout(header_layout) # Fixed: use left_layout
         
-        # Presets Grid (4 rows x 6 cols)
-        self.grid_layout = QGridLayout()
-        self.grid_layout.setSpacing(8)
-        self.grid_layout.setContentsMargins(0, 0, 0, 0)
+        # --- SCROLL AREA FOR PRESETS ---
+        self.scroll_area = QScrollArea()
+        self.scroll_area.setWidgetResizable(True)
+        self.scroll_area.setStyleSheet("background-color: transparent; border: none;")
+        
+        # Container for the content inside scroll area
+        self.presets_container = QWidget()
+        self.presets_container_layout = QVBoxLayout(self.presets_container)
+        self.presets_container_layout.setSpacing(20) # Spacing between SKU groups
+        self.presets_container_layout.setContentsMargins(0, 0, 0, 0)
+        
+        self.scroll_area.setWidget(self.presets_container)
+        
+        # Enable Touch Scrolling (Kinetic)
+        QScroller.grabGesture(self.scroll_area.viewport(), QScroller.LeftMouseButtonGesture)
+        
+        # Render the presets (Grouped by SKU)
         self.render_presets()
         
-        # Wrap Grid in a container that allows expansion
-        grid_container = QWidget()
-        grid_container.setLayout(self.grid_layout)
-        grid_container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        
-        left_layout.addWidget(grid_container, stretch=1) # Fixed: use left_layout
+        left_layout.addWidget(self.scroll_area, stretch=1)
         
         # -------------------------------------------------------------
         # RIGHT PANEL: Preview & Stats
@@ -181,20 +219,20 @@ class LiveCameraScreen(QWidget):
         top_ctrl_layout = QHBoxLayout()
         
         self.back_button = QPushButton("←")
-        self.back_button.setFixedSize(35, 35)
+        self.back_button.setFixedSize(50, 50)
         self.back_button.setStyleSheet("""
             QPushButton {
-                background: #F5F5F5; color: #333333; border-radius: 17px; font-size: 18px; border: 1px solid #E0E0E0;
+                background: #F5F5F5; color: #333333; border-radius: 25px; font-size: 24px; border: 1px solid #E0E0E0;
             }
             QPushButton:hover { background: #E8E8E8; }
         """)
         self.back_button.clicked.connect(self.go_back)
         
         self.settings_btn = QPushButton("⚙️")
-        self.settings_btn.setFixedSize(35, 35)
+        self.settings_btn.setFixedSize(50, 50)
         self.settings_btn.setStyleSheet("""
             QPushButton {
-                background: #F5F5F5; color: #333333; border-radius: 17px; font-size: 18px; border: 1px solid #E0E0E0;
+                background: #F5F5F5; color: #333333; border-radius: 25px; font-size: 24px; border: 1px solid #E0E0E0;
             }
             QPushButton:hover { background: #E8E8E8; }
         """)
@@ -366,10 +404,10 @@ class LiveCameraScreen(QWidget):
         if self.active_profile_data:
             loaded_presets = self.active_profile_data.get("presets", [])
             # Validate length
-            if len(loaded_presets) == 24:
+            if loaded_presets:
                 self.presets = loaded_presets
             else:
-                self.presets = DEFAULT_PRESETS # Should we update the profile? Nah, leave it safe.
+                self.presets = DEFAULT_PRESETS 
         else:
             self.presets = DEFAULT_PRESETS
 
@@ -402,51 +440,105 @@ class LiveCameraScreen(QWidget):
         JsonUtility.save_to_json(SETTINGS_FILE, data)
 
     def render_presets(self):
-        # Clear
-        for i in reversed(range(self.grid_layout.count())):
-            self.grid_layout.itemAt(i).widget().setParent(None)
+        # 1. Clear existing layout items
+        # Recursively delete items if needed, or just clear widgets
+        while self.presets_container_layout.count():
+            item = self.presets_container_layout.takeAt(0)
+            widget = item.widget()
+            if widget:
+                widget.setParent(None)
+            else:
+                layout = item.layout()
+                if layout:
+                    # Recursively clear sub-layout if needed implementation
+                    pass
+        
+        # 2. Group Presets by SKU
+        # Use simple dict for grouping to maintain order of appearance if desired,
+        # or just sort first. Let's group by appearance order.
+        grouped = {}
+        order = []
+        
+        for p in self.presets:
+            sku = p.get("sku", "Unknown SKU")
+            if not sku: sku = "Unknown SKU"
             
-        # Rebuild 6x4
-        for i, p in enumerate(self.presets):
-            row, col = divmod(i, 6) # 6 columns
+            if sku not in grouped:
+                grouped[sku] = []
+                order.append(sku)
+            grouped[sku].append(p)
             
-            sku = p.get("sku", "")
-            size = p.get("size", "")
-            color_idx = p.get("color_idx", 0)
-            bg_color = SKU_COLORS.get(color_idx, "#B0BEC5")
+        # 3. Create Sections for each SKU
+        for sku in order:
+            items = grouped[sku]
             
-            btn = QPushButton()
-            btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-            btn.setMinimumSize(80, 80)
+            # -- SECTION HEADER --
+            lbl_header = QLabel(sku)
+            lbl_header.setStyleSheet("font-size: 24px; font-weight: bold; color: #333333; margin-top: 10px;")
+            self.presets_container_layout.addWidget(lbl_header)
             
-            # Text
-            text = f"{sku}\n{size}" if sku else "Empty"
-            btn.setText(text)
+            # -- GRID FOR ITEMS --
+            grid_widget = QWidget()
+            grid = QGridLayout(grid_widget)
+            grid.setSpacing(10)
+            grid.setContentsMargins(0, 0, 0, 0)
             
-            # Style
-            btn.setStyleSheet(f"""
-                QPushButton {{
-                    background-color: {bg_color};
-                    border: none;
-                    border-radius: 12px;
-                    color: #333333;
-                    font-weight: bold;
-                    font-size: 16px;
-                }}
-                QPushButton:hover {{
-                    border: 3px solid #666666;
-                }}
-                QPushButton:pressed {{
-                    opacity: 0.8;
-                }}
-            """)
+            # Populate Grid (5 columns max based on mockup)
+            cols = 6
+            grid.setAlignment(Qt.AlignLeft | Qt.AlignTop) # Align grid content to top-left
             
-            # Click Handler
-            btn.clicked.connect(lambda _, idx=i: self.on_preset_clicked(idx))
+            for i, p in enumerate(items):
+                row, col = divmod(i, cols)
+                
+                size = p.get("size", "??")
+                color_idx = p.get("color_idx", 0)
+                
+                # Determine color
+                bg_color = SKU_COLORS.get(color_idx, "#E0E0E0")
+                
+                btn = QPushButton(str(size))
+                btn.setFixedSize(150, 190) # Fixed Size matching mockup roughly
+                btn.setStyleSheet(f"""
+                    QPushButton {{
+                        background-color: {bg_color};
+                        border: none;
+                        border-radius: 12px;
+                        color: #000000;
+                        font-weight: bold;
+                        font-size: 32px;
+                    }}
+                    QPushButton:hover {{
+                        border: 3px solid #666666;
+                    }}
+                    QPushButton:pressed {{
+                        opacity: 0.8;
+                    }}
+                """)
+                
+                # Connect click
+                # WARNING: Loop variable capture issue. Use default arg.
+                try:
+                    global_idx = self.presets.index(p)
+                except ValueError:
+                    global_idx = -1
+                
+                btn.clicked.connect(lambda _, idx=global_idx: self.on_preset_clicked(idx))
+                
+                grid.addWidget(btn, row, col)
             
-            self.grid_layout.addWidget(btn, row, col)
+            # Align items to left/top
+            # If we have few items, they should stick to left.
+            # QGridLayout puts them in 0,0 0,1 etc so they are left by default.
+            
+            self.presets_container_layout.addWidget(grid_widget)
+            
+        # Add stretch at bottom to push everything up
+        self.presets_container_layout.addStretch()
 
     def on_preset_clicked(self, idx):
+        if idx < 0 or idx >= len(self.presets):
+            return
+            
         p = self.presets[idx]
         self.current_sku = p.get("sku", "---")
         self.current_size = p.get("size", "---")
@@ -577,7 +669,19 @@ class LiveCameraScreen(QWidget):
         
     def start_camera(self):
         if self.cap is None:
-            self.cap = cv2.VideoCapture(self.camera_index)
+            # self.camera_index can be int or string (url)
+            # cv2.VideoCapture handles both, but be sure it's correct type
+            source = self.camera_index
+            if isinstance(source, str):
+                if source.isdigit():
+                    source = int(source)
+                # else: keep as string for URL
+            
+            try:
+                self.cap = cv2.VideoCapture(source)
+            except Exception as e:
+                print(f"Error opening camera {source}: {e}")
+                
         self.timer.start(30)
         self.is_paused = False
         
@@ -631,7 +735,11 @@ class LiveCameraScreen(QWidget):
         """Handle settings saved from overlay"""
         # Update local settings
         self.mm_per_px = settings.get("mm_per_px", self.mm_per_px)
-        # You can update other settings as needed
+        self.camera_index = settings.get("camera_index", self.camera_index)
+        
+        # Restart camera with new settings?
+        self.stop_camera()
+        self.start_camera()
         
     def on_mm_changed(self, text):
         try:
@@ -643,4 +751,3 @@ class LiveCameraScreen(QWidget):
 
     def resume_live(self):
         self.is_paused = False
-

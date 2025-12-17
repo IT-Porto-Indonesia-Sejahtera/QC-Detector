@@ -4,7 +4,7 @@ import datetime
 import uuid
 from PySide6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QScrollArea, QWidget, QFrame, QSizePolicy
+    QScrollArea, QWidget, QFrame, QSizePolicy, QScroller
 )
 from PySide6.QtCore import Qt, Signal
 from project_utilities.json_utility import JsonUtility
@@ -47,7 +47,7 @@ class PresetProfileOverlay(BaseOverlay):
         # Header
         header = QHBoxLayout()
         btn_back = QPushButton("❮")
-        btn_back.setFixedSize(40, 40)
+        btn_back.setFixedSize(60, 60)
         btn_back.setStyleSheet(f"border: none; font-size: 24px; font-weight: bold; color: {self.theme['text_main']};")
         btn_back.clicked.connect(self.close_overlay)
         
@@ -77,9 +77,12 @@ class PresetProfileOverlay(BaseOverlay):
         # Render Cards
         self.render_profiles()
         
+        # Enable Touch Scrolling
+        QScroller.grabGesture(self.scroll.viewport(), QScroller.LeftMouseButtonGesture)
+        
         # Floating Add Button
         btn_add = QPushButton("+")
-        btn_add.setFixedSize(50, 50)
+        btn_add.setFixedSize(70, 70)
         # Use inverse colors for floating button? Or standard?
         # Let's keep black/white contrast or theme inverse.
         # If dark mode, maybe White button with Black text? 
@@ -191,13 +194,13 @@ class PresetProfileOverlay(BaseOverlay):
         actions_layout.addStretch()
         
         btn_edit = QPushButton("✏️")
-        btn_edit.setFixedSize(30, 30)
-        btn_edit.setStyleSheet(f"border: none; font-size: 16px; color: {self.theme['text_main']};")
+        btn_edit.setFixedSize(50, 50)
+        btn_edit.setStyleSheet(f"border: none; font-size: 24px; color: {self.theme['text_main']};")
         btn_edit.clicked.connect(lambda _, p=profile: self.edit_profile(p))
         
         btn_del = QPushButton("🗑️")
-        btn_del.setFixedSize(30, 30)
-        btn_del.setStyleSheet(f"border: none; font-size: 16px; color: {self.theme['text_main']};")
+        btn_del.setFixedSize(50, 50)
+        btn_del.setStyleSheet(f"border: none; font-size: 24px; color: {self.theme['text_main']};")
         btn_del.clicked.connect(lambda _, p=profile: self.delete_profile(p))
         
         actions_layout.addWidget(btn_edit)

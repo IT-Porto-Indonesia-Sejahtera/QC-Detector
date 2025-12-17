@@ -3,16 +3,99 @@
         "id": "2ddd15e6-ce5d-48e0-a68b-f706b1a70c44",
         "name": "Shift 2",
         "sub_label": "Team B",
-        "sku_label": "SKU E 9008 L",
-        "last_updated": "11/12/2025, 17:26:14",
-        "presets": []
-    },
-    {
-        "id": "87a8bcf6-8a71-4d64-a139-379846cd5fc5",
-        "name": "Shift 3",
-        "sub_label": "New Team",
-        "sku_label": "SKU ---",
-        "last_updated": "11/12/2025, 17:26:19",
-        "presets": []
+        "sku_label": "Testing Data",
+        "last_updated": "15/12/2025, 13:00:00",
+        "presets": [
+            {
+                "sku": "E-0123M",
+                "size": "36",
+                "color_idx": 1
+            },
+            {
+                "sku": "E-0123M",
+                "size": "37",
+                "color_idx": 1
+            },
+            {
+                "sku": "E-0123M",
+                "size": "38",
+                "color_idx": 1
+            },
+            {
+                "sku": "E-0123M",
+                "size": "39",
+                "color_idx": 1
+            },
+            {
+                "sku": "E-0123M",
+                "size": "40",
+                "color_idx": 1
+            },
+            {
+                "sku": "E-0123M",
+                "size": "41",
+                "color_idx": 1
+            },
+            {
+                "sku": "E-0123M",
+                "size": "42",
+                "color_idx": 1
+            },
+            {
+                "sku": "E-0123M",
+                "size": "43",
+                "color_idx": 1
+            },
+            {
+                "sku": "A-1001X",
+                "size": "38",
+                "color_idx": 2
+            },
+            {
+                "sku": "A-1001X",
+                "size": "39",
+                "color_idx": 2
+            },
+            {
+                "sku": "A-1001X",
+                "size": "40",
+                "color_idx": 2
+            },
+            {
+                "sku": "B-2020Y",
+                "size": "S",
+                "color_idx": 3
+            },
+            {
+                "sku": "B-2020Y",
+                "size": "M",
+                "color_idx": 3
+            },
+            {
+                "sku": "B-2020Y",
+                "size": "L",
+                "color_idx": 3
+            },
+            {
+                "sku": "B-2020Y",
+                "size": "XL",
+                "color_idx": 3
+            },
+            {
+                "sku": "C-3030Z",
+                "size": "40",
+                "color_idx": 4
+            },
+            {
+                "sku": "C-3030Z",
+                "size": "41",
+                "color_idx": 4
+            },
+            {
+                "sku": "C-3030Z",
+                "size": "42",
+                "color_idx": 4
+            }
+        ]
     }
 ]

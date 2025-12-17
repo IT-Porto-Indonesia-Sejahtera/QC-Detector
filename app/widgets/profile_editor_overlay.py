@@ -37,7 +37,7 @@ class ProfileEditorOverlay(BaseOverlay):
         # Header
         header = QHBoxLayout()
         btn_back = QPushButton("❮")
-        btn_back.setFixedSize(40, 40)
+        btn_back.setFixedSize(60, 60)
         btn_back.setStyleSheet(f"border: none; font-size: 24px; font-weight: bold; color: {self.theme['text_main']};")
         btn_back.clicked.connect(self.close_overlay)
         
@@ -46,7 +46,7 @@ class ProfileEditorOverlay(BaseOverlay):
         lbl_title.setAlignment(Qt.AlignCenter)
         
         self.btn_save = QPushButton("Save")
-        self.btn_save.setFixedSize(80, 40)
+        self.btn_save.setFixedSize(100, 50)
         self.btn_save.setStyleSheet(f"""
             background-color: {self.theme['btn_bg']};
             border-radius: 8px;
@@ -306,7 +306,7 @@ class ProfileEditorOverlay(BaseOverlay):
 
     def create_sku_row(self, index):
         container = QFrame()
-        container.setFixedHeight(120)
+        container.setFixedHeight(140)
         container.setStyleSheet("background-color: transparent;")
         
         layout = QHBoxLayout(container)
@@ -314,7 +314,7 @@ class ProfileEditorOverlay(BaseOverlay):
         layout.setSpacing(15)
         
         img_placeholder = QLabel()
-        img_placeholder.setFixedSize(80, 80)
+        img_placeholder.setFixedSize(100, 100)
         img_placeholder.setStyleSheet(f"background-color: {self.theme['bg_card']}; border-radius: 8px;")
         layout.addWidget(img_placeholder)
         
@@ -332,8 +332,8 @@ class ProfileEditorOverlay(BaseOverlay):
         txt_sku_val.setStyleSheet(f"background-color: {self.theme['bg_card']}; border: none; padding: 5px; color: {self.theme['text_main']};")
         
         btn_select = QPushButton("select")
-        btn_select.setFixedSize(60, 30)
-        btn_select.setStyleSheet(f"background-color: {self.theme['btn_bg']}; border-radius: 5px; font-weight: bold; color: {self.theme['btn_text']};")
+        btn_select.setFixedSize(100, 50)
+        btn_select.setStyleSheet(f"background-color: {self.theme['btn_bg']}; border-radius: 5px; font-weight: bold; color: {self.theme['btn_text']}; font-size: 16px;")
         btn_select.clicked.connect(lambda _, idx=index: self.select_sku(idx))
         
         sku_row.addWidget(lbl_sku)
@@ -432,10 +432,19 @@ class ProfileEditorOverlay(BaseOverlay):
     def on_save(self):
         has_sku = False
         selected_skus = []
+        generated_presets = [] # Flattened list for main screen
+        
         first_valid_team = ""
         first_valid_sku_label = ""
         
-        for row in self.sku_rows:
+        # Helper to decide sizes based on SKU code
+        def get_sizes_for_sku(code):
+            c = code.upper()
+            if "S" in c or "M" in c or "L" in c or "XL" in c:
+               return ["S", "M", "L", "XL"]
+            return ["36", "37", "38", "39", "40", "41", "42", "43", "44"]
+
+        for idx, row in enumerate(self.sku_rows):
             data = row["data"]
             team = row["team_cmb"].currentText()
             
@@ -445,8 +454,20 @@ class ProfileEditorOverlay(BaseOverlay):
                 item["team"] = team
                 selected_skus.append(item)
                 
+                sku_code = data.get("code", "UNKNOWN")
                 if not first_valid_team and team: first_valid_team = team
-                if not first_valid_sku_label: first_valid_sku_label = data.get("code", "SKU")
+                if not first_valid_sku_label: first_valid_sku_label = sku_code
+                
+                # Generate Presets for this SKU
+                color_index = (idx % 4) + 1 # 1..4 based on row
+                sizes = get_sizes_for_sku(sku_code)
+                
+                for s in sizes:
+                    generated_presets.append({
+                        "sku": sku_code,
+                        "size": s,
+                        "color_idx": color_index
+                    })
         
         if not has_sku:
             QMessageBox.warning(self, "Validation Error", "Please select at least one SKU.")
@@ -462,6 +483,7 @@ class ProfileEditorOverlay(BaseOverlay):
             "sub_label": first_valid_team or "No Team", 
             "sku_label": first_valid_sku_label,
             "selected_skus": selected_skus,
+            "presets": generated_presets # CRITICAL: Contains the button definitions
         }
         
         if self.profile_data:
