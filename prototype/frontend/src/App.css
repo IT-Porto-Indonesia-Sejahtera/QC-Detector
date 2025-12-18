@@ -1,0 +1,598 @@
+#root {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 2rem;
+  text-align: center;
+  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+}
+
+body {
+  margin: 0;
+  display: flex;
+  place-items: center;
+  min-width: 320px;
+  min-height: 100vh;
+  background-color: #f0f2f5;
+  color: #333;
+}
+
+.container {
+  width: 100%;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  background: white;
+  padding: 15px 30px;
+  border-radius: 12px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+}
+
+.status-indicator {
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-weight: bold;
+  font-size: 0.9rem;
+}
+
+.online {
+  background-color: #e6fffa;
+  color: #047857;
+  border: 1px solid #047857;
+}
+
+.offline {
+  background-color: #fff5f5;
+  color: #c53030;
+  border: 1px solid #c53030;
+}
+
+/* Live Screen Split Layout */
+.live-screen-container {
+  display: flex;
+  width: 100vw;
+  height: 100vh;
+  padding: 10px;
+  gap: 10px;
+  box-sizing: border-box;
+  background-color: #f0f2f5;
+  overflow: hidden;
+  /* Prevent body scroll */
+}
+
+/* Left Panel: Presets */
+.left-panel {
+  flex: 65;
+  /* 65% width */
+  display: flex;
+  flex-direction: column;
+  background: white;
+  border-radius: 12px;
+  padding: 15px;
+  overflow: hidden;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+}
+
+.presets-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 15px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #eee;
+  flex-shrink: 0;
+}
+
+.presets-header h2 {
+  margin: 0;
+  font-size: 1.5rem;
+  color: #333;
+}
+
+.info-bar {
+  background-color: #f5f5f5;
+  color: #555;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-weight: 600;
+  margin: 0 15px;
+  flex-grow: 1;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.presets-scroll {
+  flex-grow: 1;
+  overflow-y: auto;
+  padding-right: 5px;
+  -webkit-overflow-scrolling: touch;
+  /* Enable momentum scroll on iOS */
+  /* Hide scrollbar for cleaner touch UI but keep functionality */
+  scrollbar-width: thin;
+}
+
+.preset-group-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: #444;
+  margin: 20px 0 10px 0;
+  position: sticky;
+  top: 0;
+  background: white;
+  z-index: 10;
+  padding: 10px 0;
+  text-align: center;
+  /* Centered Title */
+  border-bottom: 2px solid #f0f0f0;
+}
+
+.preset-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 15px;
+  padding: 10px;
+  margin-bottom: 30px;
+  justify-content: center;
+  /* Center buttons */
+}
+
+.preset-btn {
+  width: 140px;
+  /* Fixed width for better centering */
+  height: 120px;
+  border-radius: 12px;
+  border: none;
+  font-size: 32px;
+  font-weight: bold;
+  color: #000;
+  cursor: pointer;
+  transition: transform 0.1s, border 0.1s;
+  flex-shrink: 0;
+}
+
+.preset-btn:hover {
+  border: 3px solid #666;
+  transform: scale(0.98);
+}
+
+.preset-btn.active {
+  border: 4px solid #000;
+}
+
+/* Right Panel: Preview & Stats */
+.right-panel {
+  flex: 35;
+  /* 35% width */
+  display: flex;
+  flex-direction: column;
+  background: white;
+  border-radius: 8px;
+  padding: 10px;
+  gap: 10px;
+  overflow: hidden;
+}
+
+.top-controls {
+  display: flex;
+  justify-content: space-between;
+}
+
+.circle-btn {
+  width: 50px;
+  height: 50px;
+  border-radius: 25px;
+  background: #f5f5f5;
+  border: 1px solid #e0e0e0;
+  font-size: 24px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.circle-btn:hover {
+  background: #e0e0e0;
+}
+
+.preview-box {
+  background-color: #f8f8f8;
+  border: 3px solid #e0e0e0;
+  border-radius: 8px;
+  height: 325px;
+  /* Fixed height from Qt */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.preview-box img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.counters-row {
+  display: flex;
+  gap: 10px;
+}
+
+.counter {
+  flex: 1;
+  height: 100px;
+  border-radius: 5px;
+  color: white;
+  font-weight: bold;
+  font-size: 30px;
+  /* adjusted */
+  display: flex;
+  flex-direction: column;
+  /* Number on top, Label on bottom */
+  align-items: center;
+  justify-content: center;
+  line-height: 1.2;
+}
+
+.counter.good {
+  background-color: #66bb6a;
+}
+
+.counter.bs {
+  background-color: #d32f2f;
+}
+
+.big-result {
+  flex-grow: 1;
+  border-radius: 15px;
+  border: 4px solid #e0e0e0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 48px;
+  font-weight: 900;
+  text-align: center;
+  flex-direction: column;
+  transition: background-color 0.2s;
+  min-height: 150px;
+}
+
+.big-result.idle {
+  background: white;
+  color: #999;
+}
+
+.big-result.pass {
+  background: #4caf50;
+  color: white;
+  border: none;
+}
+
+.big-result.reject {
+  background: #d32f2f;
+  color: white;
+  border: none;
+}
+
+.details-table {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  row-gap: 2px;
+  column-gap: 10px;
+  background: white;
+}
+
+.dt-label {
+  font-weight: bold;
+  color: #999;
+  font-size: 1.2rem;
+  text-align: left;
+}
+
+.dt-value {
+  font-weight: bold;
+  color: #333;
+  font-size: 1.2rem;
+  text-align: right;
+}
+
+.card {
+  background: white;
+  padding: 25px;
+  border-radius: 16px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+  text-align: left;
+}
+
+.big-status {
+  text-align: center;
+  font-size: 3rem;
+  font-weight: 900;
+  padding: 30px 0;
+  border-radius: 12px;
+  margin: 20px 0;
+  color: white;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.pass {
+  background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+}
+
+.fail {
+  background: linear-gradient(135deg, #f56565 0%, #e53e3e 100%);
+}
+
+.idle {
+  background: #cbd5e0;
+  color: #4a5568;
+}
+
+.metrics {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.metric-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 1.2rem;
+  padding: 10px 0;
+  border-bottom: 1px solid #edf2f7;
+}
+
+/* Clean up old prototype classes if needed, or leave them. 
+   The new layout uses .dt-value instead of .value */
+
+/* Navigation & Layout */
+.app-layout {
+  width: 100%;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.app-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  padding: 10px 0;
+}
+
+.back-button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: white;
+  border: 1px solid #ddd;
+  padding: 10px 20px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: bold;
+  color: #333;
+}
+
+.back-button:hover {
+  background: #f5f5f5;
+}
+
+/* Menu Screen */
+.menu-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 80vh;
+}
+
+.menu-title {
+  margin-bottom: 50px;
+  font-size: 2.5rem;
+  color: #1a202c;
+}
+
+.menu-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 30px;
+  width: 100%;
+  max-width: 800px;
+}
+
+.menu-button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 15px;
+  background: white;
+  padding: 40px;
+  border-radius: 16px;
+  border: none;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+  font-size: 1.25rem;
+  font-weight: bold;
+  color: #4a5568;
+}
+
+.menu-button:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+}
+
+.status-bar-wrapper {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 10px;
+}
+
+/* Photo Screen */
+.photo-layout {
+  display: flex;
+  height: 80vh;
+  gap: 20px;
+}
+
+.preview-panel {
+  flex: 3;
+  display: flex;
+  flex-direction: column;
+  background: white;
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+}
+
+.image-viewer {
+  flex-grow: 1;
+  background: #f0f2f5;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  margin-bottom: 20px;
+}
+
+.main-preview {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.placeholder {
+  color: #a0aec0;
+  font-weight: bold;
+}
+
+.gallery-panel {
+  flex: 1;
+  background: white;
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+  display: flex;
+  flex-direction: column;
+}
+
+.gallery-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  gap: 10px;
+  overflow-y: auto;
+  max-height: 100%;
+}
+
+.gallery-item {
+  aspect-ratio: 1;
+  border: 2px solid transparent;
+  border-radius: 8px;
+  overflow: hidden;
+  cursor: pointer;
+  position: relative;
+}
+
+.gallery-item.selected {
+  border-color: #2196F3;
+}
+
+.gallery-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.filename {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: rgba(0, 0, 0, 0.6);
+  color: white;
+  font-size: 0.7rem;
+  padding: 4px;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+/* Buttons */
+.btn {
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-weight: bold;
+  cursor: pointer;
+  border: none;
+  transition: background 0.2s;
+}
+
+.btn.primary {
+  background: #2196F3;
+  color: white;
+}
+
+.btn.primary:hover {
+  background: #1976D2;
+}
+
+.btn:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+}
+
+/* Dataset Screen */
+.dataset-header {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  margin-bottom: 20px;
+  font-size: 1.2rem;
+}
+
+.cam-select {
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  font-size: 1rem;
+}
+
+.dataset-controls {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-top: 20px;
+  gap: 10px;
+}
+
+.capture-btn {
+  background: #4CAF50;
+  color: white;
+  font-size: 1.25rem;
+  display: flex;
+  align-items: center;
+  padding: 15px 40px;
+}
+
+.capture-btn:hover {
+  background: #388E3C;
+}
+
+.capture-btn.success {
+  background: #2E7D32;
+}
+
+.saved-msg {
+  color: #2E7D32;
+  font-weight: bold;
+}
