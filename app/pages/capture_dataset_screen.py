@@ -1,12 +1,20 @@
 import cv2
 import os
 import time
+import numpy as np
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QSizePolicy, QFrame, QComboBox
 )
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt, QTimer, Signal, QMetaObject, Q_ARG, Qt as QtCore_Qt
 from PySide6.QtGui import QPixmap, QImage
+
+# Import PLC Modbus trigger
+try:
+    from input.plc_modbus_trigger import PLCModbusTrigger, ModbusConfig, check_pymodbus_available
+    PLC_AVAILABLE = check_pymodbus_available()
+except ImportError:
+    PLC_AVAILABLE = False
 
 class CaptureDatasetScreen(QWidget):
     def __init__(self, parent=None):
@@ -118,15 +126,87 @@ class CaptureDatasetScreen(QWidget):
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.update_frame)
         self.live_frame = None
+        
+        # -----------------------------------------------------------------
+        # PLC Modbus Trigger
+        # -----------------------------------------------------------------
+        self.plc_trigger = None
+        self.plc_status_label = QLabel("PLC: Not connected")
+        self.plc_status_label.setStyleSheet("color: #888; font-size: 12px;")
+        top_bar.addWidget(self.plc_status_label)
+        
+        self._init_plc_trigger()
+    
+    def _init_plc_trigger(self):
+        """Initialize PLC Modbus trigger"""
+        if not PLC_AVAILABLE:
+            print("[PLC] pymodbus not available. Install with: pip install pymodbus")
+            self.plc_status_label.setText("PLC: pymodbus not installed")
+            return
+        
+        try:
+            config = ModbusConfig(
+                connection_type="rtu",
+                serial_port="COM7",
+                baudrate=9600,
+                parity="E",
+                stopbits=1,
+                bytesize=8,
+                slave_id=1,
+                register_address=12,
+                register_type="holding",
+                poll_interval_ms=100
+            )
+            
+            self.plc_trigger = PLCModbusTrigger(config)
+            self.plc_trigger.on_trigger = self._on_plc_trigger
+            self.plc_trigger.on_value_update = self._on_plc_value_update
+            self.plc_trigger.on_connection_change = self._on_plc_connection_change
+            
+            print("[PLC] Modbus trigger initialized")
+            
+        except Exception as e:
+            print(f"[PLC] Failed to initialize: {e}")
+            self.plc_status_label.setText(f"PLC: Init error")
+    
+    def _on_plc_trigger(self):
+        """Called when PLC trigger fires (value changed 0 -> 1)"""
+        print("[PLC] TRIGGER FIRED! Capturing image...")
+        # Use QTimer to call capture_image on the main thread
+        QTimer.singleShot(0, self.capture_image)
+    
+    def _on_plc_value_update(self, value):
+        """Called when PLC register value is read"""
+        print(f"[PLC] Register value: {value}")
+    
+    def _on_plc_connection_change(self, connected, message):
+        """Called when PLC connection status changes"""
+        print(f"[PLC] Connection: {message}")
+        if connected:
+            self.plc_status_label.setText(f"PLC: Connected")
+            self.plc_status_label.setStyleSheet("color: #0f0; font-size: 12px;")
+        else:
+            self.plc_status_label.setText(f"PLC: {message}")
+            self.plc_status_label.setStyleSheet("color: #f00; font-size: 12px;")
 
     def detect_cameras(self, max_test=3):
+        """Detect available cameras with timeout to prevent freezing"""
         cams = []
         for i in range(max_test):
-            cap = cv2.VideoCapture(i)
-            if cap.isOpened():
-                cams.append(str(i))
-                cap.release()
-        return cams or ["0"]
+            try:
+                # Use DirectShow on Windows for faster detection
+                cap = cv2.VideoCapture(i, cv2.CAP_DSHOW)
+                cap.set(cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, 1000)
+                if cap.isOpened():
+                    ret, _ = cap.read()
+                    cap.release()
+                    if ret:
+                        cams.append(str(i))
+                else:
+                    cap.release()
+            except Exception:
+                continue
+        return cams if cams else ["No cameras found"]
 
     def change_camera(self, index=None):
         try:
@@ -172,10 +252,21 @@ class CaptureDatasetScreen(QWidget):
                 pass
         self.cap = cv2.VideoCapture(cam_index)
         self.timer.start(30)
+        
+        # Start PLC trigger
+        if self.plc_trigger:
+            print("[PLC] Starting Modbus polling...")
+            self.plc_trigger.start()
+        
         super().showEvent(event)
 
     def hideEvent(self, event):
-        """Ensure camera is released when widget is hidden."""
+        """Ensure camera and PLC are released when widget is hidden."""
+        # Stop PLC trigger
+        if self.plc_trigger:
+            print("[PLC] Stopping Modbus polling...")
+            self.plc_trigger.stop()
+        
         try:
             if self.timer.isActive():
                 self.timer.stop()
@@ -190,6 +281,10 @@ class CaptureDatasetScreen(QWidget):
 
     def closeEvent(self, event):
         """Proper cleanup."""
+        # Stop and disconnect PLC trigger
+        if self.plc_trigger:
+            self.plc_trigger.disconnect()
+        
         try:
             if self.timer.isActive():
                 self.timer.stop()
@@ -203,6 +298,10 @@ class CaptureDatasetScreen(QWidget):
         super().closeEvent(event)
 
     def go_back(self):
+        # Stop PLC trigger
+        if self.plc_trigger:
+            self.plc_trigger.stop()
+        
         try:
             if self.timer.isActive():
                 self.timer.stop()

@@ -2,6 +2,7 @@
 import cv2
 import os
 import datetime
+import random
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QComboBox, QFrame, QSizePolicy, QGridLayout, QMenu, QWidgetAction,
@@ -15,6 +16,20 @@ from model.measure_live_sandals import measure_live_sandals
 from project_utilities.json_utility import JsonUtility
 from app.widgets.preset_profile_overlay import PresetProfileOverlay, PROFILES_FILE
 from app.utils.theme_manager import ThemeManager
+
+# Sensor trigger (optional - import safely)
+try:
+    from input.sensor_trigger import get_sensor, SensorConfig
+    SENSOR_AVAILABLE = True
+except ImportError:
+    SENSOR_AVAILABLE = False
+
+# PLC Modbus trigger (optional - import safely)
+try:
+    from input.plc_modbus_trigger import PLCModbusTrigger, ModbusConfig, check_pymodbus_available
+    PLC_AVAILABLE = check_pymodbus_available()
+except ImportError:
+    PLC_AVAILABLE = False
 
 
 # ---------------------------------------------------------------------
@@ -69,6 +84,11 @@ SKU_COLORS = {
 }
 
 class LiveCameraScreen(QWidget):
+    # Signal for sensor trigger (thread-safe)
+    sensor_triggered = Signal()
+    # Signal for PLC trigger (thread-safe)
+    plc_triggered = Signal()
+    
     def __init__(self, parent=None):
         super().__init__(parent)
         self.parent_widget = parent
@@ -112,6 +132,20 @@ class LiveCameraScreen(QWidget):
         from PySide6.QtGui import QShortcut, QKeySequence
         self.capture_shortcut = QShortcut(QKeySequence(Qt.Key_Space), self)
         self.capture_shortcut.activated.connect(self.capture_frame)
+        
+        # Sensor trigger setup
+        self.sensor = None
+        self.sensor_enabled = False
+        self.sensor_triggered.connect(self.capture_frame)  # Thread-safe signal
+        if SENSOR_AVAILABLE:
+            self.setup_sensor()
+        
+        # PLC Modbus trigger setup
+        self.plc_trigger = None
+        self.plc_enabled = False
+        self.plc_triggered.connect(self.capture_frame)  # Thread-safe signal
+        if PLC_AVAILABLE:
+            self.setup_plc_trigger()
         
     def open_profile_dialog(self):
         # Check password first
@@ -585,10 +619,14 @@ class LiveCameraScreen(QWidget):
                 self.good_count += 1
                 self.lbl_big_result.setText(f"{display_size}\nGOOD")
                 self.lbl_big_result.setStyleSheet("color: white; background-color: #4CAF50; padding: 20px; border-radius: 15px; border: none; font-size: 48px; font-weight: 900;")
+                # Write random 1-4 to PLC register 13 for GOOD
+                self._write_plc_result(is_good=True)
             else:
                 self.bs_count += 1
                 self.lbl_big_result.setText(f"{display_size}\nREJECT")
                 self.lbl_big_result.setStyleSheet("color: white; background-color: #D32F2F; padding: 20px; border-radius: 15px; border: none; font-size: 48px; font-weight: 900;")
+                # Write random 5-8 to PLC register 13 for BS
+                self._write_plc_result(is_good=False)
                 
             self.update_counters()
             
@@ -603,6 +641,9 @@ class LiveCameraScreen(QWidget):
             
         # Update Preview with processed frame
         self.show_image(self.captured_frame)
+        
+        # Auto-resume after showing result (allows sensor to trigger again)
+        QTimer.singleShot(1500, self.resume_live)  # Resume after 1.5 seconds
 
     def update_counters(self):
         self.lbl_good.setText(f"{self.good_count}\nGood")
@@ -678,18 +719,65 @@ class LiveCameraScreen(QWidget):
                 # else: keep as string for URL
             
             try:
-                self.cap = cv2.VideoCapture(source)
+                # Use DirectShow backend on Windows for better compatibility
+                if isinstance(source, int):
+                    self.cap = cv2.VideoCapture(source, cv2.CAP_DSHOW)
+                else:
+                    self.cap = cv2.VideoCapture(source)
+                
+                # Set timeouts to avoid hanging
+                if self.cap:
+                    self.cap.set(cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, 3000)
+                    self.cap.set(cv2.CAP_PROP_READ_TIMEOUT_MSEC, 3000)
+                
+                # Check if camera opened successfully
+                if not self.cap or not self.cap.isOpened():
+                    self.preview_label.setText("Camera not found.\nCheck Settings.")
+                    self.preview_label.setStyleSheet("""
+                        background-color: #FFEBEE; 
+                        color: #C62828;
+                        border-radius: 8px;
+                        font-weight: bold;
+                        font-size: 24px;
+                        border: 3px solid #E0E0E0;
+                    """)
+                    self.cap = None
+                    return
+                    
             except Exception as e:
                 print(f"Error opening camera {source}: {e}")
+                self.preview_label.setText(f"Camera Error:\n{str(e)[:50]}")
+                self.preview_label.setStyleSheet("""
+                    background-color: #FFEBEE; 
+                    color: #C62828;
+                    border-radius: 8px;
+                    font-weight: bold;
+                    font-size: 18px;
+                    border: 3px solid #E0E0E0;
+                """)
+                self.cap = None
+                return
                 
         self.timer.start(30)
         self.is_paused = False
+        
+        # Start sensor if available
+        self.start_sensor()
+        
+        # Start PLC trigger if available
+        self.start_plc_trigger()
         
     def stop_camera(self):
         self.timer.stop()
         if self.cap:
             self.cap.release()
             self.cap = None
+        
+        # Stop sensor
+        self.stop_sensor()
+        
+        # Stop PLC trigger
+        self.stop_plc_trigger()
 
     def go_back(self):
         self.stop_camera()
@@ -751,3 +839,141 @@ class LiveCameraScreen(QWidget):
 
     def resume_live(self):
         self.is_paused = False
+
+    # ------------------------------------------------------------------
+    # Sensor Trigger
+    # ------------------------------------------------------------------
+    def setup_sensor(self):
+        """Initialize sensor trigger"""
+        if not SENSOR_AVAILABLE:
+            return
+        
+        try:
+            self.sensor = get_sensor()
+            
+            # Configure sensor
+            self.sensor.config.trigger_threshold_cm = 30.0  # Trigger at 30cm
+            self.sensor.config.cooldown_seconds = 2.0  # 2 second cooldown
+            
+            # Set callbacks
+            self.sensor.on_trigger = self.on_sensor_trigger
+            self.sensor.on_connection_change = self.on_sensor_connection_change
+            
+            # Try to auto-connect
+            if self.sensor.connect():
+                self.sensor_enabled = True
+                print("[Sensor] Connected and ready")
+            else:
+                print("[Sensor] Could not auto-connect - will retry on start_camera")
+        except Exception as e:
+            print(f"[Sensor] Setup error: {e}")
+            self.sensor = None
+    
+    def on_sensor_trigger(self):
+        """Called when sensor detects object within threshold"""
+        if not self.is_paused and self.live_frame is not None:
+            print("[Sensor] Trigger received - capturing frame")
+            # Emit signal to safely call capture_frame on main thread
+            self.sensor_triggered.emit()
+    
+    def on_sensor_connection_change(self, connected: bool, message: str):
+        """Called when sensor connection status changes"""
+        print(f"[Sensor] {'Connected' if connected else 'Disconnected'}: {message}")
+    
+    def start_sensor(self):
+        """Start sensor reading"""
+        if self.sensor and self.sensor_enabled:
+            self.sensor.start()
+    
+    def stop_sensor(self):
+        """Stop sensor reading"""
+        if self.sensor:
+            self.sensor.stop()
+
+    # ------------------------------------------------------------------
+    # PLC Modbus Trigger
+    # ------------------------------------------------------------------
+    def setup_plc_trigger(self):
+        """Initialize PLC Modbus trigger"""
+        if not PLC_AVAILABLE:
+            print("[PLC] pymodbus not available. Install with: pip install pymodbus")
+            return
+        
+        try:
+            config = ModbusConfig(
+                connection_type="rtu",
+                serial_port="COM7",
+                baudrate=9600,
+                parity="E",
+                stopbits=1,
+                bytesize=8,
+                slave_id=1,
+                register_address=12,
+                register_type="holding",
+                poll_interval_ms=100
+            )
+            
+            self.plc_trigger = PLCModbusTrigger(config)
+            self.plc_trigger.on_trigger = self.on_plc_trigger
+            self.plc_trigger.on_value_update = self.on_plc_value_update
+            self.plc_trigger.on_connection_change = self.on_plc_connection_change
+            
+            self.plc_enabled = True
+            print("[PLC] Modbus trigger initialized")
+            
+        except Exception as e:
+            print(f"[PLC] Setup error: {e}")
+            self.plc_trigger = None
+    
+    def on_plc_trigger(self):
+        """Called when PLC register changes from 0 to 1"""
+        if not self.is_paused and self.live_frame is not None:
+            print("[PLC] TRIGGER FIRED! Capturing frame...")
+            # Emit signal to safely call capture_frame on main thread
+            self.plc_triggered.emit()
+    
+    def on_plc_value_update(self, value):
+        """Called when PLC register value is read"""
+        print(f"[PLC] Register value: {value}")
+    
+    def on_plc_connection_change(self, connected: bool, message: str):
+        """Called when PLC connection status changes"""
+        print(f"[PLC] {'Connected' if connected else 'Disconnected'}: {message}")
+    
+    def start_plc_trigger(self):
+        """Start PLC Modbus polling"""
+        if self.plc_trigger and self.plc_enabled:
+            print("[PLC] Starting Modbus polling...")
+            self.plc_trigger.start()
+    
+    def stop_plc_trigger(self):
+        """Stop PLC Modbus polling"""
+        if self.plc_trigger:
+            print("[PLC] Stopping Modbus polling...")
+            self.plc_trigger.stop()
+    
+    def _write_plc_result(self, is_good: bool):
+        """
+        Write QC result to PLC register 13.
+        GOOD: random 1-4
+        BS/REJECT: random 5-8
+        """
+        if not self.plc_trigger or not self.plc_trigger.is_connected():
+            print("[PLC] Cannot write result - not connected")
+            return
+        
+        if is_good:
+            value = random.randint(1, 4)
+            print(f"[PLC] GOOD result - writing {value} to register 13")
+        else:
+            value = random.randint(5, 8)
+            print(f"[PLC] BS result - writing {value} to register 13")
+        
+        self.plc_trigger.write_register(13, value)
+        
+        # Read back register 13 to verify
+        read_value = self.plc_trigger.read_any_register(13)
+        if read_value is not None:
+            print(f"[PLC] Verified - Register 13 now contains: {read_value}")
+        else:
+            print(f"[PLC] Could not read back register 13 for verification")

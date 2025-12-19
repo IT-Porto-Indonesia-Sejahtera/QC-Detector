@@ -1,5 +1,5 @@
 {
-    "camera_index": 0,
+    "camera_index": "rtsp://admin:Porto.cctv@192.168.1.64",
     "mm_per_px": 0.2123459,
     "sensor_delay": 0.2123459,
     "fetch_status": "success",
@@ -9,5 +9,7 @@
         "settings": "C://User/test/asd/",
         "db": "C://User/test/asd/",
         "results": "C://User/test/asd/"
-    }
+    },
+    "ip_camera_username": "admin",
+    "ip_camera_password": "Porto.cctv"
 }

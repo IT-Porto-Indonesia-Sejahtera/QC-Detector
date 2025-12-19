@@ -1,4 +1,6 @@
-numpy==2.2.6
-opencv_python==4.12.0.88
-pyside6==6.10.0
+numpy
+opencv-python
+pyside6
 qt-material
+pyserial
+pymodbus

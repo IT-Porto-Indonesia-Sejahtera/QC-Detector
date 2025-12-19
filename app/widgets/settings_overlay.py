@@ -1,14 +1,16 @@
 import os
+import threading
 from datetime import datetime
 import cv2
 from PySide6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QLineEdit,
-    QComboBox, QFrame, QSizePolicy
+    QComboBox, QFrame, QSizePolicy, QScrollArea, QWidget
 )
-from PySide6.QtCore import Qt, Signal, QTimer
+from PySide6.QtCore import Qt, Signal, QTimer, QThread
 from PySide6.QtGui import QFont, QImage, QPixmap
 from app.widgets.base_overlay import BaseOverlay
 from app.utils.theme_manager import ThemeManager
+from app.utils.ip_camera_discovery import get_discovery, DiscoveredCamera
 from project_utilities.json_utility import JsonUtility
 
 class SettingsOverlay(BaseOverlay):
@@ -25,6 +27,12 @@ class SettingsOverlay(BaseOverlay):
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.update_frame)
         
+        # IP Camera Discovery State
+        self.discovered_cameras = []
+        self.is_scanning = False
+        self.available_cameras = []  # Detected USB cameras
+        self.camera_thread = None  # For background camera operations
+        
         # Make content box larger for settings
         self.content_box.setFixedSize(900, 650)
         self.content_box.setStyleSheet(f"""
@@ -35,6 +43,7 @@ class SettingsOverlay(BaseOverlay):
         """)
         
         self.load_settings()
+        self.detect_available_cameras()  # Detect cameras before UI init
         self.init_ui()
         
     def load_settings(self):
@@ -49,13 +58,40 @@ class SettingsOverlay(BaseOverlay):
                 "sensor_delay": 0.2123459,
                 "fetch_status": "success",
                 "last_fetched": datetime.now().strftime("%d/%m/%Y"),
+                "ip_camera_username": "",
+                "ip_camera_password": "",
                 "paths": {
                     "profile": "C://User/test/asd/",
                     "settings": "C://User/test/asd/",
                     "db": "C://User/test/asd/",
-                    "results": "C://User/test/asd/"
                 }
             }
+    
+    def detect_available_cameras(self):
+        """Quickly detect available USB cameras (runs at init)"""
+        self.available_cameras = []
+        self.camera_detection_error = None
+        
+        # Check first 3 camera indices (0-2) for speed
+        for idx in range(3):
+            try:
+                # Use DirectShow backend on Windows for faster detection
+                cap = cv2.VideoCapture(idx, cv2.CAP_DSHOW)
+                
+                # Set timeout properties to avoid hanging
+                cap.set(cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, 1000)  # 1 second timeout
+                cap.set(cv2.CAP_PROP_READ_TIMEOUT_MSEC, 1000)
+                
+                if cap.isOpened():
+                    ret, _ = cap.read()
+                    cap.release()
+                    if ret:
+                        self.available_cameras.append(idx)
+                else:
+                    cap.release()
+            except Exception as e:
+                self.camera_detection_error = str(e)
+                continue
         
     def init_ui(self):
         layout = self.content_layout
@@ -136,7 +172,13 @@ class SettingsOverlay(BaseOverlay):
         cam_input_row = QHBoxLayout()
         
         self.camera_combo = QComboBox()
-        self.camera_combo.addItems(["Camera 0", "Camera 1", "Camera 2", "Camera 3", "IP Camera / Custom"])
+        # Populate with detected cameras
+        if self.available_cameras:
+            for idx in self.available_cameras:
+                self.camera_combo.addItem(f"Camera {idx} (detected)", idx)
+        else:
+            self.camera_combo.addItem("No cameras detected", -1)
+        self.camera_combo.addItem("IP Camera", "ip")
         self.camera_combo.setStyleSheet(f"""
             QComboBox {{
                 padding: 8px;
@@ -154,9 +196,52 @@ class SettingsOverlay(BaseOverlay):
         camera_row.addWidget(lbl_camera)
         camera_row.addLayout(cam_input_row)
 
-        # Custom URL Input (Hidden by default unless Custom selected)
+        # =========== IP Camera Section (Hidden by default) ===========
+        self.ip_camera_section = QWidget()
+        ip_camera_layout = QVBoxLayout(self.ip_camera_section)
+        ip_camera_layout.setContentsMargins(0, 5, 0, 0)
+        ip_camera_layout.setSpacing(8)
+        
+        # Scan button and discovered cameras
+        scan_row = QHBoxLayout()
+        
+        self.btn_scan_cameras = QPushButton("🔍 Scan Network")
+        self.btn_scan_cameras.setFixedHeight(36)
+        self.btn_scan_cameras.setStyleSheet("""
+            QPushButton {
+                background-color: #4CAF50;
+                color: white;
+                border-radius: 8px;
+                font-weight: bold;
+                padding: 0 15px;
+            }
+            QPushButton:hover {
+                background-color: #45a049;
+            }
+        """)
+        self.btn_scan_cameras.clicked.connect(self.scan_for_cameras)
+        
+        self.discovered_combo = QComboBox()
+        self.discovered_combo.addItem("No cameras found - click Scan")
+        self.discovered_combo.setStyleSheet(f"""
+            QComboBox {{
+                padding: 8px;
+                border: 1px solid {self.theme['border']};
+                border-radius: 8px;
+                background-color: white;
+                color: #333333;
+                font-size: 13px;
+            }}
+        """)
+        self.discovered_combo.currentIndexChanged.connect(self.on_discovered_camera_selected)
+        
+        scan_row.addWidget(self.btn_scan_cameras)
+        scan_row.addWidget(self.discovered_combo, 1)
+        ip_camera_layout.addLayout(scan_row)
+        
+        # Custom URL Input
         self.camera_url_input = QLineEdit()
-        self.camera_url_input.setPlaceholderText("rtsp://... or http://... or device id")
+        self.camera_url_input.setPlaceholderText("Or enter manually: rtsp://ip:port/path")
         self.camera_url_input.setStyleSheet(f"""
             QLineEdit {{
                 padding: 8px;
@@ -167,8 +252,63 @@ class SettingsOverlay(BaseOverlay):
                 font-size: 14px;
             }}
         """)
-        self.camera_url_input.setVisible(False)
-        camera_row.addWidget(self.camera_url_input)
+        ip_camera_layout.addWidget(self.camera_url_input)
+        
+        # Username/Password row
+        creds_row = QHBoxLayout()
+        creds_row.setSpacing(10)
+        
+        lbl_user = QLabel("User:")
+        lbl_user.setStyleSheet(f"color: {self.theme['text_main']}; font-size: 13px;")
+        lbl_user.setFixedWidth(40)
+        
+        self.ip_username_input = QLineEdit()
+        self.ip_username_input.setPlaceholderText("username")
+        self.ip_username_input.setText(self.settings.get("ip_camera_username", ""))
+        self.ip_username_input.setStyleSheet(f"""
+            QLineEdit {{
+                padding: 6px 8px;
+                border: 1px solid {self.theme['border']};
+                border-radius: 6px;
+                background-color: white;
+                color: #333333;
+                font-size: 13px;
+            }}
+        """)
+        
+        lbl_pass = QLabel("Pass:")
+        lbl_pass.setStyleSheet(f"color: {self.theme['text_main']}; font-size: 13px;")
+        lbl_pass.setFixedWidth(40)
+        
+        self.ip_password_input = QLineEdit()
+        self.ip_password_input.setPlaceholderText("password")
+        self.ip_password_input.setEchoMode(QLineEdit.Password)
+        self.ip_password_input.setText(self.settings.get("ip_camera_password", ""))
+        self.ip_password_input.setStyleSheet(f"""
+            QLineEdit {{
+                padding: 6px 8px;
+                border: 1px solid {self.theme['border']};
+                border-radius: 6px;
+                background-color: white;
+                color: #333333;
+                font-size: 13px;
+            }}
+        """)
+        
+        creds_row.addWidget(lbl_user)
+        creds_row.addWidget(self.ip_username_input, 1)
+        creds_row.addWidget(lbl_pass)
+        creds_row.addWidget(self.ip_password_input, 1)
+        ip_camera_layout.addLayout(creds_row)
+        
+        # Connection status
+        self.connection_status = QLabel("")
+        self.connection_status.setStyleSheet("color: #666666; font-size: 12px; font-style: italic;")
+        ip_camera_layout.addWidget(self.connection_status)
+        
+        self.ip_camera_section.setVisible(False)
+        camera_row.addWidget(self.ip_camera_section)
+        # =========== End IP Camera Section ===========
         
         left_col.addLayout(camera_row)
         
@@ -352,37 +492,137 @@ class SettingsOverlay(BaseOverlay):
     
     def set_camera_ui_state(self, val):
         """Populate UI based on current settings value"""
-        if isinstance(val, int) and 0 <= val <= 3:
-            self.camera_combo.setCurrentIndex(val)
-            self.camera_url_input.setVisible(False)
-            self.camera_url_input.setText("") 
+        if isinstance(val, int) and val >= 0:
+            # Find combo item with matching camera index
+            found = False
+            for i in range(self.camera_combo.count()):
+                if self.camera_combo.itemData(i) == val:
+                    self.camera_combo.setCurrentIndex(i)
+                    found = True
+                    break
+            if not found and self.camera_combo.count() > 0:
+                self.camera_combo.setCurrentIndex(0)  # Default to first
+            self.ip_camera_section.setVisible(False)
+            self.camera_url_input.setText("")
         else:
-            # Custom / IP
-            self.camera_combo.setCurrentIndex(4) # "IP Camera / Custom"
-            self.camera_url_input.setVisible(True)
+            # IP Camera - find and select IP Camera option
+            for i in range(self.camera_combo.count()):
+                if self.camera_combo.itemData(i) == "ip":
+                    self.camera_combo.setCurrentIndex(i)
+                    break
+            self.ip_camera_section.setVisible(True)
             self.camera_url_input.setText(str(val))
 
     def on_camera_combo_change(self, index):
-        if index == 4: # Custom
-            self.camera_url_input.setVisible(True)
+        current_data = self.camera_combo.currentData()
+        if current_data == "ip":  # IP Camera
+            self.ip_camera_section.setVisible(True)
         else:
-            self.camera_url_input.setVisible(False)
+            self.ip_camera_section.setVisible(False)
             
         # Restart preview if running
         if self.timer.isActive():
             self.stop_preview()
             self.start_preview()
+    
+    def scan_for_cameras(self):
+        """Scan network for IP cameras"""
+        if self.is_scanning:
+            return
+            
+        self.is_scanning = True
+        self.btn_scan_cameras.setText("⏳ Scanning...")
+        self.btn_scan_cameras.setEnabled(False)
+        self.connection_status.setText("Scanning network for cameras...")
+        self.connection_status.setStyleSheet("color: #2196F3; font-size: 12px; font-style: italic;")
+        
+        # Run discovery in background
+        discovery = get_discovery()
+        discovery.discover_cameras_async(
+            timeout=5.0,
+            callback=self._on_cameras_discovered
+        )
+    
+    def _on_cameras_discovered(self, cameras):
+        """Callback when camera discovery completes"""
+        self.discovered_cameras = cameras
+        self.is_scanning = False
+        
+        # Update UI (must be done via timer for thread safety)
+        QTimer.singleShot(0, self._update_discovered_cameras_ui)
+    
+    def _update_discovered_cameras_ui(self):
+        """Update the discovered cameras dropdown"""
+        self.btn_scan_cameras.setText("🔍 Scan Network")
+        self.btn_scan_cameras.setEnabled(True)
+        
+        self.discovered_combo.clear()
+        
+        if self.discovered_cameras:
+            for cam in self.discovered_cameras:
+                self.discovered_combo.addItem(str(cam), cam)
+            self.connection_status.setText(f"Found {len(self.discovered_cameras)} camera(s)")
+            self.connection_status.setStyleSheet("color: #4CAF50; font-size: 12px; font-style: italic;")
+        else:
+            self.discovered_combo.addItem("No cameras found")
+            self.connection_status.setText("No cameras found. Try manual entry.")
+            self.connection_status.setStyleSheet("color: #FF9800; font-size: 12px; font-style: italic;")
+    
+    def on_discovered_camera_selected(self, index):
+        """When a discovered camera is selected, populate the URL field"""
+        if index < 0 or not self.discovered_cameras:
+            return
+            
+        if index < len(self.discovered_cameras):
+            cam = self.discovered_cameras[index]
+            # Build RTSP URL without credentials (user will add them)
+            url = f"rtsp://{cam.ip}:{cam.port}{cam.rtsp_path}"
+            self.camera_url_input.setText(url)
+            self.connection_status.setText(f"Selected: {cam}")
+            self.connection_status.setStyleSheet("color: #666666; font-size: 12px; font-style: italic;")
             
     def get_selected_camera_source(self):
-        idx = self.camera_combo.currentIndex()
-        if idx == 4:
+        """Get the camera source - either index or RTSP URL with credentials"""
+        # Get the data associated with current selection
+        current_data = self.camera_combo.currentData()
+        
+        # IP Camera selected
+        if current_data == "ip":
             txt = self.camera_url_input.text().strip()
-            # Try to convert to int if it's a number string
-            if txt.isdigit():
-                return int(txt)
-            return txt if txt else 0
+            
+            # If no URL entered, try to build from discovered camera
+            if not txt and self.discovered_cameras:
+                combo_idx = self.discovered_combo.currentIndex()
+                if combo_idx >= 0 and combo_idx < len(self.discovered_cameras):
+                    cam = self.discovered_cameras[combo_idx]
+                    username = self.ip_username_input.text().strip()
+                    password = self.ip_password_input.text().strip()
+                    return cam.get_rtsp_url(username, password)
+            
+            # If URL is provided, inject credentials if needed
+            if txt:
+                username = self.ip_username_input.text().strip()
+                password = self.ip_password_input.text().strip()
+                
+                # If URL already has credentials, use as-is
+                if "@" in txt:
+                    return txt
+                
+                # Inject credentials into rtsp:// URL
+                if username and password and txt.startswith("rtsp://"):
+                    return txt.replace("rtsp://", f"rtsp://{username}:{password}@", 1)
+                
+                # Try to convert to int if it's a number string
+                if txt.isdigit():
+                    return int(txt)
+                return txt
+            
+            return 0  # Default fallback
+        elif isinstance(current_data, int) and current_data >= 0:
+            # USB camera index
+            return current_data
         else:
-            return idx
+            return 0  # Fallback
 
     def toggle_preview(self):
         if self.timer.isActive():
@@ -392,13 +632,27 @@ class SettingsOverlay(BaseOverlay):
             
     def start_preview(self):
         source = self.get_selected_camera_source()
+        self.frame_fail_count = 0  # Track consecutive frame failures
+        
         try:
             self.cap = cv2.VideoCapture(source)
+            
+            # Give camera time to initialize
             if not self.cap.isOpened():
-                self.preview_box.setText("Failed to open camera")
+                if isinstance(source, int):
+                    self.preview_box.setText(f"Camera {source} not found.\nTry a different source or\nconnect a camera.")
+                else:
+                    self.preview_box.setText("Failed to connect.\nCheck URL and credentials.")
+                self.preview_box.setStyleSheet("""
+                    background-color: #FFEBEE; 
+                    border-radius: 10px;
+                    color: #C62828;
+                    font-size: 16px; 
+                    font-weight: bold;
+                """)
                 return
             
-            self.timer.start(30) # 30ms interval ~33 fps
+            self.timer.start(30)  # 30ms interval ~33 fps
             self.btn_preview.setText("Stop Test Feed")
             self.btn_preview.setStyleSheet("""
                 background-color: #F44336;
@@ -408,6 +662,13 @@ class SettingsOverlay(BaseOverlay):
             """)
         except Exception as e:
             self.preview_box.setText(f"Error: {str(e)}")
+            self.preview_box.setStyleSheet("""
+                background-color: #FFEBEE; 
+                border-radius: 10px;
+                color: #C62828;
+                font-size: 14px; 
+                font-weight: bold;
+            """)
             
     def stop_preview(self):
         self.timer.stop()
@@ -416,7 +677,14 @@ class SettingsOverlay(BaseOverlay):
             self.cap = None
             
         self.preview_box.setText("Test Camera\nPreview")
-        self.preview_box.setPixmap(QPixmap()) # Clear
+        self.preview_box.setStyleSheet("""
+            background-color: #E0E0E0; 
+            border-radius: 10px;
+            color: #999999;
+            font-size: 18px; 
+            font-weight: bold;
+        """)
+        self.preview_box.setPixmap(QPixmap())  # Clear
         self.btn_preview.setText("Start Test Feed")
         self.btn_preview.setStyleSheet("""
             background-color: #2196F3;
@@ -431,7 +699,22 @@ class SettingsOverlay(BaseOverlay):
             
         ret, frame = self.cap.read()
         if not ret:
+            # Track consecutive failures
+            self.frame_fail_count = getattr(self, 'frame_fail_count', 0) + 1
+            if self.frame_fail_count >= 10:
+                self.stop_preview()
+                self.preview_box.setText("Connection lost.\nCheck camera or network.")
+                self.preview_box.setStyleSheet("""
+                    background-color: #FFF3E0; 
+                    border-radius: 10px;
+                    color: #E65100;
+                    font-size: 16px; 
+                    font-weight: bold;
+                """)
             return
+        
+        # Reset failure counter on successful frame
+        self.frame_fail_count = 0
             
         # Convert to Pixmap
         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -455,6 +738,8 @@ class SettingsOverlay(BaseOverlay):
         self.settings["camera_index"] = self.get_selected_camera_source()
         self.settings["mm_per_px"] = float(self.mmpx_input.text())
         self.settings["sensor_delay"] = float(self.delay_input.text())
+        self.settings["ip_camera_username"] = self.ip_username_input.text().strip()
+        self.settings["ip_camera_password"] = self.ip_password_input.text().strip()
         self.settings["paths"] = {
             "profile": self.profile_input.text(),
             "settings": self.settings_input.text(),
