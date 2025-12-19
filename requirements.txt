@@ -1,6 +1,18 @@
+# Core dependencies
 numpy
 opencv-python
+
+# GUI Framework
 pyside6
 qt-material
+
+# Serial Communication (ESP32 sensor)
 pyserial
+
+# PLC Modbus Communication
 pymodbus
+
+# Web API (prototype backend - optional)
+fastapi
+uvicorn
+pydantic
