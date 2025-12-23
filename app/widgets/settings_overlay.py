@@ -85,7 +85,8 @@ class SettingsOverlay(BaseOverlay):
                 "sensor_port": "",
                 "plc_port": "",
                 "plc_trigger_reg": 12,
-                "plc_result_reg": 13
+                "plc_result_reg": 13,
+                "layout_mode": "classic"
             }
         
         self.ip_presets = self.settings.get("ip_camera_presets", [])
@@ -427,6 +428,23 @@ class SettingsOverlay(BaseOverlay):
         # --- RIGHT COLUMN: Parameters & Paths ---
         # Parameters Card
         params_card, p_layout = self.create_card("Application Parameters")
+
+        # Layout Mode
+        layout_v = QVBoxLayout()
+        layout_lbl = QLabel("App Layout Mode")
+        l_font = UIScaling.scale_font(14)
+        layout_lbl.setStyleSheet(f"color: {self.theme['text_main']}; font-size: {l_font}px; font-weight: bold;")
+        layout_v.addWidget(layout_lbl)
+
+        self.layout_combo = QComboBox()
+        self.layout_combo.addItems(["Classic (2-Panel)", "Split (3-Panel)"])
+        self.layout_combo.setStyleSheet(self.line_edit_style)
+        # Set current value
+        current_mode = self.settings.get("layout_mode", "classic")
+        idx = 1 if current_mode == "split" else 0
+        self.layout_combo.setCurrentIndex(idx)
+        layout_v.addWidget(self.layout_combo)
+        p_layout.addLayout(layout_v)
 
         mmpx_row, self.mmpx_input = self.create_input_row("Resolution (mm/px)", str(self.settings.get("mm_per_px", 0.21)), help_text="Pixel to real-world size conversion")
         p_layout.addLayout(mmpx_row)
@@ -891,6 +909,10 @@ class SettingsOverlay(BaseOverlay):
             
         self.settings["mm_per_px"] = float(self.mmpx_input.text() or 0.21)
         self.settings["sensor_delay"] = float(self.delay_input.text() or 0.2)
+        
+        # Save Layout Mode
+        mode_idx = self.layout_combo.currentIndex()
+        self.settings["layout_mode"] = "split" if mode_idx == 1 else "classic"
         
         self.settings["ip_camera_presets"] = self.ip_presets
         

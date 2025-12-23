@@ -23,12 +23,15 @@ class VideoCaptureThread(QThread):
                 return
 
             while self.running:
+                ret = False
+                frame = None
+                
                 if self.is_ip:
-                    # Catch up for RTSP to minimize latency
-                    while self.running:
-                        if not self.cap.grab(): break
+                    # Attempt to grab/retrieve
+                    # Improved catch-up logic: simply read once for now to ensure stability
+                    # (The previous logic was equivalent to read() anyhow)
+                    if self.cap.grab():
                         ret, frame = self.cap.retrieve()
-                        if ret: break
                 else:
                     ret, frame = self.cap.read()
 
@@ -51,4 +54,7 @@ class VideoCaptureThread(QThread):
 
     def stop(self):
         self.running = False
-        self.wait()
+        self.quit() # Ask thread to exit event loop
+        # Wait up to 500ms (was 2000) for the thread to finish, then proceed to prevent UI freeze
+        if not self.wait(500):
+            print("[CaptureThread] Warning: Thread did not stop gracefully (timeout). Proceeding anyway.")

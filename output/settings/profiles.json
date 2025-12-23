@@ -9,132 +9,158 @@
             {
                 "sku": "E-0123M",
                 "size": "36",
-                "color_idx": 1
+                "color_idx": 1,
+                "team": "A"
             },
             {
                 "sku": "E-0123M",
                 "size": "37",
-                "color_idx": 1
+                "color_idx": 1,
+                "team": "A"
             },
             {
                 "sku": "E-0123M",
                 "size": "38",
-                "color_idx": 1
+                "color_idx": 1,
+                "team": "A"
             },
             {
                 "sku": "E-0123M",
                 "size": "39",
-                "color_idx": 1
+                "color_idx": 1,
+                "team": "A"
             },
             {
                 "sku": "E-0123M",
                 "size": "40",
-                "color_idx": 1
+                "color_idx": 1,
+                "team": "A"
             },
             {
                 "sku": "E-0123M",
                 "size": "41",
-                "color_idx": 1
+                "color_idx": 1,
+                "team": "A"
             },
             {
                 "sku": "E-0123M",
                 "size": "42",
-                "color_idx": 1
+                "color_idx": 1,
+                "team": "A"
             },
             {
                 "sku": "E-0123M",
                 "size": "43",
-                "color_idx": 1
+                "color_idx": 1,
+                "team": "A"
             },
             {
                 "sku": "E-9008L",
                 "size": "36",
-                "color_idx": 2
+                "color_idx": 2,
+                "team": "A"
             },
             {
                 "sku": "E-9008L",
                 "size": "37",
-                "color_idx": 2
+                "color_idx": 2,
+                "team": "A"
             },
             {
                 "sku": "E-9008L",
                 "size": "38",
-                "color_idx": 2
+                "color_idx": 2,
+                "team": "A"
             },
             {
                 "sku": "E-9008L",
                 "size": "39",
-                "color_idx": 2
+                "color_idx": 2,
+                "team": "A"
             },
             {
                 "sku": "E-9008L",
                 "size": "40",
-                "color_idx": 2
+                "color_idx": 2,
+                "team": "A"
             },
             {
                 "sku": "E-9008L",
                 "size": "41",
-                "color_idx": 2
+                "color_idx": 2,
+                "team": "A"
             },
             {
                 "sku": "X-5000-Pro",
                 "size": "XS",
-                "color_idx": 3
+                "color_idx": 3,
+                "team": "B"
             },
             {
                 "sku": "X-5000-Pro",
                 "size": "S",
-                "color_idx": 3
+                "color_idx": 3,
+                "team": "B"
             },
             {
                 "sku": "X-5000-Pro",
                 "size": "M",
-                "color_idx": 3
+                "color_idx": 3,
+                "team": "B"
             },
             {
                 "sku": "X-5000-Pro",
                 "size": "L",
-                "color_idx": 3
+                "color_idx": 3,
+                "team": "B"
             },
             {
                 "sku": "X-5000-Pro",
                 "size": "XL",
-                "color_idx": 3
+                "color_idx": 3,
+                "team": "B"
             },
             {
                 "sku": "X-5000-Pro",
                 "size": "XXL",
-                "color_idx": 3
+                "color_idx": 3,
+                "team": "B"
             },
             {
                 "sku": "A-1001X",
                 "size": "37",
-                "color_idx": 2
+                "color_idx": 2,
+                "team": "B"
             },
             {
                 "sku": "A-1001X",
                 "size": "38",
-                "color_idx": 2
+                "color_idx": 2,
+                "team": "B"
             },
             {
                 "sku": "A-1001X",
                 "size": "39",
-                "color_idx": 2
+                "color_idx": 2,
+                "team": "B"
             },
             {
                 "sku": "A-1001X",
                 "size": "40",
-                "color_idx": 2
+                "color_idx": 2,
+                "team": "B"
             },
             {
                 "sku": "A-1001X",
                 "size": "41",
-                "color_idx": 2
+                "color_idx": 2,
+                "team": "B"
             },
             {
                 "sku": "A-1001X",
                 "size": "42",
-                "color_idx": 2
+                "color_idx": 2,
+                "team": "B"
             }
         ]
     }

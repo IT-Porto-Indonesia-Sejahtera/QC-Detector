@@ -21,6 +21,9 @@ from app.utils.camera_utils import open_video_capture
 from app.utils.capture_thread import VideoCaptureThread
 from app.utils.ui_scaling import UIScaling
 
+# Global list to hold stuck threads so they aren't garbage collected abruptly
+_zombie_threads = []
+
 # Sensor trigger (optional - import safely)
 try:
     from input.sensor_trigger import get_sensor, SensorConfig
@@ -99,6 +102,10 @@ class LiveCameraScreen(QWidget):
         
         self.theme = ThemeManager.get_colors() # Initialize theme here
         
+        
+        # Team Layout State
+        self.team_layout_order = "A_LEFT" # or "B_LEFT"
+        
         # State
         self.good_count = 0
         self.bs_count = 0
@@ -160,6 +167,18 @@ class LiveCameraScreen(QWidget):
         overlay.profile_selected.connect(self.on_profile_selected)
         # No exec(), just let it exist. It manages its own show/close.
     
+    
+    def on_switch_sides(self):
+        # Toggle side preference
+        if self.team_layout_order == "A_LEFT":
+            self.team_layout_order = "B_LEFT"
+        else:
+            self.team_layout_order = "A_LEFT"
+            
+        print(f"Switched sides: {self.team_layout_order}")
+        # Re-render presets
+        self.render_presets()
+    
     def on_profile_selected(self, profile_data):
         # Update active profile when selected from dialog
         self.active_profile_id = profile_data.get("id")
@@ -177,240 +196,101 @@ class LiveCameraScreen(QWidget):
         # Use theme variables
         self.setStyleSheet(f"background-color: {self.theme['bg_main']}; color: {self.theme['text_main']};")
         
+        if self.layout_mode == "classic":
+            self.setup_classic_layout()
+        else:
+            self.setup_split_layout()
+            
+        # Create Settings Menu (Hidden)
+        self.create_settings_menu()
+        
+        # Initial UI Update
+        self.update_info_bar()
+
+    def setup_split_layout(self):
         # Main Layout: Left (Presets) vs Right (Preview/Stats)
         main_h_layout = QHBoxLayout()
         main_h_layout.setContentsMargins(10, 10, 10, 10)
-        main_h_layout.setSpacing(10) # Changed from 20 to 10 based on instruction snippet
-        self.setLayout(main_h_layout) # Moved from end of init_ui to here
+        main_h_layout.setSpacing(10)
+        self.setLayout(main_h_layout)
 
-        # -----------------------------------------------------
-        # LEFT PANEL: Presets
-        # -----------------------------------------------------
-        left_panel = QFrame()
-        left_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)  # Allow natural expansion
-        left_layout = QVBoxLayout(left_panel)
-        left_layout.setContentsMargins(0, 0, 0, 0)
-        left_layout.setSpacing(10)
-        
-        # Header Row: "Presets" | Info Bar | Edit Button
-        header_layout = QHBoxLayout()
-        
-        lbl_presets = QLabel("Presets")
-        lbl_presets_font_size = UIScaling.scale_font(18)
-        lbl_presets.setStyleSheet(f"font-size: {lbl_presets_font_size}px; font-weight: bold;")
-        
-        # Info Bar (Shift 1, Team A...)
-        self.info_bar = QLabel(" Loading... ")
-        info_bar_font_size = UIScaling.scale_font(14)
-        info_bar_padding = UIScaling.scale(15)
-        info_bar_radius = UIScaling.scale(5)
-        self.info_bar.setStyleSheet(f"""
-            background-color: #F5F5F5; 
-            color: #333333; 
-            padding: 5px {info_bar_padding}px; 
-            border-radius: {info_bar_radius}px; 
-            font-weight: bold;
-            font-size: {info_bar_font_size}px;
-        """)
-        self.info_bar.setMinimumHeight(UIScaling.scale(40))
-        self.update_info_bar()
-        
-        btn_edit = QPushButton("Edit")
-        btn_edit.setMinimumSize(UIScaling.scale(80), UIScaling.scale(40))
-        btn_edit_font_size = UIScaling.scale_font(14)
-        btn_edit_radius = UIScaling.scale(5)
-        btn_edit.setStyleSheet(f"background-color: #F5F5F5; border-radius: {btn_edit_radius}px; color: #333333; border: 1px solid #E0E0E0; font-size: {btn_edit_font_size}px;")
-        btn_edit.clicked.connect(self.open_profile_dialog)
-        
-        header_layout.addWidget(lbl_presets)
-        header_layout.addSpacing(15)
-        header_layout.addWidget(self.info_bar, stretch=1)
-        header_layout.addWidget(btn_edit)
-        
-        left_layout.addLayout(header_layout) # Fixed: use left_layout
-        
-        # --- PRESETS CONTAINER (Directly in left_layout for auto-scaling) ---
-        self.presets_container = QWidget()
-        self.presets_container_layout = QVBoxLayout(self.presets_container)
-        self.presets_container_layout.setSpacing(10)
-        self.presets_container_layout.setContentsMargins(0, 0, 0, 0)
-        
-        # Render the presets
-        self.render_presets()
-        
-        left_layout.addWidget(self.presets_container, stretch=1)
-        
-        # -------------------------------------------------------------
-        # RIGHT PANEL: Preview & Stats
-        # -------------------------------------------------------------
-        right_panel = QFrame()
-        right_panel.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)  # Preferred width, don't expand horizontally
-        right_layout = QVBoxLayout(right_panel)
-        right_layout.setContentsMargins(0, 0, 0, 0)
-        right_layout.setSpacing(10)
-        
-        # Top Controls: Back | Settings
-        top_ctrl_layout = QHBoxLayout()
-        
-        ctrl_btn_size = UIScaling.scale(50)
-        ctrl_btn_radius = ctrl_btn_size // 2
-        ctrl_btn_font_size = UIScaling.scale_font(24)
-        
-        self.back_button = QPushButton("←")
-        self.back_button.setFixedSize(ctrl_btn_size, ctrl_btn_size)
-        self.back_button.setStyleSheet(f"""
-            QPushButton {{
-                background: #F5F5F5; color: #333333; border-radius: {ctrl_btn_radius}px; font-size: {ctrl_btn_font_size}px; border: 1px solid #E0E0E0;
-            }}
-            QPushButton:hover {{ background: #E8E8E8; }}
-        """)
-        self.back_button.clicked.connect(self.go_back)
-        
-        self.settings_btn = QPushButton("⚙️")
-        self.settings_btn.setFixedSize(ctrl_btn_size, ctrl_btn_size)
-        self.settings_btn.setStyleSheet(f"""
-            QPushButton {{
-                background: #F5F5F5; color: #333333; border-radius: {ctrl_btn_radius}px; font-size: {ctrl_btn_font_size}px; border: 1px solid #E0E0E0;
-            }}
-            QPushButton:hover {{ background: #E8E8E8; }}
-        """)
-        self.settings_btn.clicked.connect(self.show_settings_menu)
-        
-        top_ctrl_layout.addWidget(self.back_button)
-        top_ctrl_layout.addStretch()
-        top_ctrl_layout.addWidget(self.settings_btn)
-        
-        right_layout.addLayout(top_ctrl_layout)
-        
-        # Review Frameshot
-        self.preview_label = QLabel("Review\nFrameshot")
-        self.preview_label.setAlignment(Qt.AlignCenter)
-        preview_font_size = UIScaling.scale_font(36)
-        preview_radius = UIScaling.scale(8)
-        preview_border = UIScaling.scale(3)
-        self.preview_label.setStyleSheet(f"""
-            background-color: #F8F8F8; 
-            color: #AAAAAA; 
-            border-radius: {preview_radius}px;
-            font-weight: bold;
-            font-size: {preview_font_size}px;
-            border: {preview_border}px solid #E0E0E0;
-        """)
-        # Use Ignored policy so pixmap doesn't cause size expansion
-        self.preview_label.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Ignored)
-        self.preview_label.setMinimumSize(UIScaling.scale(200), UIScaling.scale(150))
-        
-        right_layout.addWidget(self.preview_label, stretch=3)
-        
-        # Counters: Good | BS
-        counters_layout = QHBoxLayout()
-        counters_layout.setSpacing(UIScaling.scale(10))
-        
-        counter_font_size = UIScaling.scale_font(28)  # Reduced for better scaling
-        counter_height = UIScaling.scale(70)  # Fixed height, not minimum
-        counter_radius = UIScaling.scale(5)
-        counter_padding = UIScaling.scale(5)
-        
-        # Good Counter
-        self.lbl_good = QLabel(f"{self.good_count}\nGood")
-        self.lbl_good.setAlignment(Qt.AlignCenter)
-        self.lbl_good.setFixedHeight(counter_height)  # Fixed height to prevent overlap
-        self.lbl_good.setStyleSheet(f"""
-            background-color: #66BB6A; 
-            color: white; 
-            font-weight: bold; 
-            font-size: {counter_font_size}px;
-            border-radius: {counter_radius}px;
-            padding: {counter_padding}px;
-        """)
-        
-        # BS Counter
-        self.lbl_bs = QLabel(f"{self.bs_count}\nBS")
-        self.lbl_bs.setAlignment(Qt.AlignCenter)
-        self.lbl_bs.setFixedHeight(counter_height)  # Fixed height to prevent overlap
-        self.lbl_bs.setStyleSheet(f"""
-            background-color: #D32F2F; 
-            color: white; 
-            font-weight: bold; 
-            font-size: {counter_font_size}px;
-            border-radius: {counter_radius}px;
-            padding: {counter_padding}px;
-        """)
-        
-        counters_layout.addWidget(self.lbl_good)
-        counters_layout.addWidget(self.lbl_bs)
-        
-        right_layout.addLayout(counters_layout)
-        
-        # Big Result (REJECT / ACCEPT)
-        # Logic: Show SIZE (Big) \n STATUS (Small)
-        self.lbl_big_result = QLabel("-\nIDLE")
-        self.lbl_big_result.setAlignment(Qt.AlignCenter)
-        self.lbl_big_result.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        big_result_font_size = UIScaling.scale_font(48)  # Reduced for better scaling
-        big_result_padding = UIScaling.scale(10)
-        big_result_radius = UIScaling.scale(15)
-        big_result_border = UIScaling.scale(4)
-        self.lbl_big_result.setStyleSheet(f"""
-            color: #999999; 
-            background-color: white; 
-            font-size: {big_result_font_size}px; 
-            font-weight: 900; 
-            padding: {big_result_padding}px; 
-            border-radius: {big_result_radius}px; 
-            border: {big_result_border}px solid #E0E0E0;
-        """)
-        right_layout.addWidget(self.lbl_big_result, stretch=2)  # Give result area stretch factor
-        
-        # Details Box
-        details_layout = QGridLayout()
-        details_layout.setVerticalSpacing(2) # tighter
-        details_layout.setHorizontalSpacing(10)
-        
-        self.lbl_detail_sku = QLabel("SKU/Size :")
-        self.val_detail_sku = QLabel("---/---")
-        
-        self.lbl_detail_len = QLabel("Length :")
-        self.val_detail_len = QLabel("-")
-        
-        self.lbl_detail_wid = QLabel("Width :")
-        self.val_detail_wid = QLabel("-")
-        
-        self.lbl_detail_res = QLabel("Result :")
-        self.val_detail_res = QLabel("-")
-        
-        # Styling details - Updated for light theme
-        detail_font_size = UIScaling.scale_font(24)
-        label_style = f"font-weight: bold; color: #999999; font-size: {detail_font_size}px;"
-        val_style = f"font-weight: bold; color: #333333; font-size: {detail_font_size}px;"
+        # ---------------------------------------------------------------------
+        # LAYOUT STRUCTURE: 
+        # Left Panel (Team 1) | Middle Panel (Preview/Stats) | Right Panel (Team 2)
+        # ---------------------------------------------------------------------
 
-        for w in [self.lbl_detail_sku, self.lbl_detail_len, self.lbl_detail_wid, self.lbl_detail_res]:
-            w.setStyleSheet(label_style)
-            
-        for w in [self.val_detail_sku, self.val_detail_len, self.val_detail_wid, self.val_detail_res]:
-            w.setAlignment(Qt.AlignRight)
-            w.setStyleSheet(val_style)
+        # --- LEFT PANEL (30%) ---
+        self.left_panel = QFrame()
+        self.left_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.left_layout = QVBoxLayout(self.left_panel)
+        self.left_layout.setContentsMargins(0, 0, 0, 0)
+        self.left_layout.setSpacing(10)
+        
+        # Presets container for Left side
+        self.left_presets_container = QWidget()
+        self.left_presets_layout = QVBoxLayout(self.left_presets_container)
+        self.left_presets_layout.setSpacing(10)
+        self.left_presets_layout.setContentsMargins(0, 0, 0, 0)
+        
+        # Header for Left Panel (e.g. "Team A")
+        self.lbl_left_team = QLabel("Team A")
+        self.lbl_left_team.setAlignment(Qt.AlignCenter)
+        team_font_size = UIScaling.scale_font(20)
+        self.lbl_left_team.setStyleSheet(f"font-weight: bold; font-size: {team_font_size}px; color: {self.theme['text_main']}; padding: 5px;")
+        
+        self.left_layout.addWidget(self.lbl_left_team)
+        self.left_layout.addWidget(self.left_presets_container, stretch=1)
+        
+        
+        # --- RIGHT PANEL (30%) ---
+        self.right_panel = QFrame()
+        self.right_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.right_layout = QVBoxLayout(self.right_panel)
+        self.right_layout.setContentsMargins(0, 0, 0, 0)
+        self.right_layout.setSpacing(10)
+        
+        # Presets container for Right side
+        self.right_presets_container = QWidget()
+        self.right_presets_layout = QVBoxLayout(self.right_presets_container)
+        self.right_presets_layout.setSpacing(10)
+        self.right_presets_layout.setContentsMargins(0, 0, 0, 0)
+        
+        # Header for Right Panel (e.g. "Team B")
+        self.lbl_right_team = QLabel("Team B")
+        self.lbl_right_team.setAlignment(Qt.AlignCenter)
+        self.lbl_right_team.setStyleSheet(f"font-weight: bold; font-size: {team_font_size}px; color: {self.theme['text_main']}; padding: 5px;")
+        
+        self.right_layout.addWidget(self.lbl_right_team)
+        self.right_layout.addWidget(self.right_presets_container, stretch=1)
 
-        details_layout.addWidget(self.lbl_detail_sku, 0, 0)
-        details_layout.addWidget(self.val_detail_sku, 0, 1)
-        details_layout.addWidget(self.lbl_detail_len, 1, 0)
-        details_layout.addWidget(self.val_detail_len, 1, 1)
-        details_layout.addWidget(self.lbl_detail_wid, 2, 0)
-        details_layout.addWidget(self.val_detail_wid, 2, 1)
-        details_layout.addWidget(self.lbl_detail_res, 3, 0)
-        details_layout.addWidget(self.val_detail_res, 3, 1)
+
+        # --- MIDDLE PANEL (40%) ---
+        middle_panel = self._create_camera_panel()
+
+        # Add to Main Layout: 35% - 30% - 35%
+        # Middle (30%) is smaller than original 40% but bigger than 26%.
+        # Reverting fixed width to allow proportional scaling.
+        self.left_panel.setFixedWidth(16777215) # Unlock fixed width
+        self.right_panel.setFixedWidth(16777215) # Unlock fixed width
+        self.left_panel.setMinimumWidth(UIScaling.scale(50)) # Allow shrinking
+        self.right_panel.setMinimumWidth(UIScaling.scale(50)) # Allow shrinking
+        self.left_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.right_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         
-        right_layout.addLayout(details_layout)
-        
-        # Add layouts to main
-        # Left Panel weight 65%, Right Panel weight 35%
-        main_h_layout.addWidget(left_panel, 65)
-        main_h_layout.addWidget(right_panel, 35)
+        main_h_layout.addWidget(self.left_panel, 35)
+        main_h_layout.addWidget(middle_panel, 30)
+        main_h_layout.addWidget(self.right_panel, 35)
         
         self.setLayout(main_h_layout)
+
+        # Render Presets (Will populate left/right containers)
+        self.render_presets()
         
         # Create Settings Menu (Hidden)
         self.create_settings_menu()
+        
+        # Initial UI Update
+        self.update_info_bar()
 
     # ------------------------------------------------------------------
     # Data / Logic
@@ -477,6 +357,7 @@ class LiveCameraScreen(QWidget):
             self.mm_per_px = self.settings.get("mm_per_px", 0.215984148)
             self.camera_index = self.settings.get("camera_index", 0)
             self.active_profile_id = self.settings.get("active_profile_id", None)
+            self.layout_mode = self.settings.get("layout_mode", "split") # split or classic
             
             # Handle IP Preset data
             self.ip_presets = self.settings.get("ip_camera_presets", [])
@@ -485,8 +366,192 @@ class LiveCameraScreen(QWidget):
             self.mm_per_px = 0.215984148
             self.camera_index = 0
             self.active_profile_id = None
+            self.layout_mode = "split"
             self.ip_presets = []
             self.active_ip_preset_id = None
+
+    def setup_classic_layout(self):
+        # Classic Layout: Left (Presets Grid) | Right (Preview/Stats)
+        main_h_layout = QHBoxLayout()
+        main_h_layout.setContentsMargins(10, 10, 10, 10)
+        main_h_layout.setSpacing(10)
+        self.setLayout(main_h_layout)
+
+        # --- LEFT PANEL (Presets) 30% ---
+        self.left_panel = QFrame()
+        self.left_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.left_layout = QVBoxLayout(self.left_panel)
+        self.left_layout.setContentsMargins(0, 0, 0, 0)
+        self.left_layout.setSpacing(10)
+        
+        # Header for Presets
+        lbl_presets_header = QLabel("Presets")
+        lbl_presets_header.setAlignment(Qt.AlignCenter)
+        header_font_size = UIScaling.scale_font(20)
+        lbl_presets_header.setStyleSheet(f"font-weight: bold; font-size: {header_font_size}px; color: {self.theme['text_main']}; padding: 5px;")
+        
+        self.left_layout.addWidget(lbl_presets_header)
+        
+        # Presets container (Single container for all)
+        self.classic_presets_container = QWidget()
+        self.classic_presets_layout = QVBoxLayout(self.classic_presets_container)
+        self.classic_presets_layout.setSpacing(10)
+        self.classic_presets_layout.setContentsMargins(0, 0, 0, 0)
+        
+        self.left_layout.addWidget(self.classic_presets_container, 1)
+
+        # --- RIGHT PANEL (Camera/Stats) 70% ---
+        self.right_panel = QFrame() # Reusing right_panel name for the camera side in classic 
+        self.right_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.right_layout = QVBoxLayout(self.right_panel)
+        self.right_layout.setContentsMargins(0, 0, 0, 0)
+        self.right_layout.setSpacing(10)
+
+        # Camera Panel reused
+        self.camera_panel_widget = self._create_camera_panel()
+        self.right_layout.addWidget(self.camera_panel_widget)
+
+        # Add Panels to Main Layout
+        main_h_layout.addWidget(self.left_panel, 70)
+        main_h_layout.addWidget(self.right_panel, 30)
+        
+        # Render Presets
+        self.render_presets()
+        
+    def _create_camera_panel(self):
+        panel = QFrame()
+        panel.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(10)
+        
+        # Top Controls: Back | Info | Edit | Switch | Settings
+        top_ctrl_layout = QHBoxLayout()
+        
+        ctrl_btn_size = UIScaling.scale(50)
+        ctrl_btn_radius = ctrl_btn_size // 2
+        ctrl_btn_font_size = UIScaling.scale_font(24)
+        
+        # Back
+        self.back_button = QPushButton("←")
+        self.back_button.setFixedSize(ctrl_btn_size, ctrl_btn_size)
+        self.back_button.setStyleSheet(f"QPushButton {{ background: #F5F5F5; color: #333333; border-radius: {ctrl_btn_radius}px; font-size: {ctrl_btn_font_size}px; border: 1px solid #E0E0E0; }} QPushButton:hover {{ background: #E8E8E8; }}")
+        # Ensure only one connection if reused? 
+        # Actually create_camera_panel creates NEW instances of buttons.
+        # So we need to connect them here.
+        self.back_button.clicked.connect(self.go_back)
+        
+        # Info Bar (Compact)
+        self.info_bar = QLabel(" Loading... ")
+        info_bar_font_size = UIScaling.scale_font(12) 
+        info_bar_radius = UIScaling.scale(5)
+        self.info_bar.setAlignment(Qt.AlignCenter)
+        self.info_bar.setStyleSheet(f"background-color: #F5F5F5; color: #333333; padding: 5px; border-radius: {info_bar_radius}px; font-weight: bold; font-size: {info_bar_font_size}px;")
+        self.info_bar.setFixedHeight(ctrl_btn_size)
+        
+        # Edit Button
+        btn_edit = QPushButton("Edit")
+        btn_edit.setFixedSize(UIScaling.scale(60), ctrl_btn_size)
+        btn_edit_font_size = UIScaling.scale_font(12)
+        btn_edit.setStyleSheet(f"background-color: #F5F5F5; border-radius: {info_bar_radius}px; color: #333333; border: 1px solid #E0E0E0; font-size: {btn_edit_font_size}px;")
+        btn_edit.clicked.connect(self.open_profile_dialog)
+        
+        # Switch Button (Arrows)
+        self.btn_switch = QPushButton("⇄")
+        self.btn_switch.setFixedSize(ctrl_btn_size, ctrl_btn_size)
+        self.btn_switch.setStyleSheet(f"QPushButton {{ background: #E3F2FD; color: #1565C0; border-radius: {ctrl_btn_radius}px; font-size: {ctrl_btn_font_size}px; border: 1px solid #BBDEFB; }} QPushButton:hover {{ background: #BBDEFB; }}")
+        self.btn_switch.clicked.connect(self.on_switch_sides)
+        
+        # Settings
+        self.settings_btn = QPushButton("⚙️")
+        self.settings_btn.setFixedSize(ctrl_btn_size, ctrl_btn_size)
+        self.settings_btn.setStyleSheet(f"QPushButton {{ background: #F5F5F5; color: #333333; border-radius: {ctrl_btn_radius}px; font-size: {ctrl_btn_font_size}px; border: 1px solid #E0E0E0; }} QPushButton:hover {{ background: #E8E8E8; }}")
+        self.settings_btn.clicked.connect(self.show_settings_menu)
+        
+        top_ctrl_layout.addWidget(self.back_button)
+        top_ctrl_layout.addWidget(self.info_bar, 1) 
+        top_ctrl_layout.addWidget(btn_edit)
+        top_ctrl_layout.addWidget(self.btn_switch)
+        top_ctrl_layout.addWidget(self.settings_btn)
+        
+        layout.addLayout(top_ctrl_layout)
+        
+        # Preview Label
+        self.preview_label = QLabel("Review\nFrameshot")
+        self.preview_label.setAlignment(Qt.AlignCenter)
+        preview_font_size = UIScaling.scale_font(36)
+        preview_radius = UIScaling.scale(8)
+        preview_border = UIScaling.scale(3)
+        self.preview_label.setStyleSheet(f"""
+            background-color: #F8F8F8; color: #AAAAAA; border-radius: {preview_radius}px; font-weight: bold; font-size: {preview_font_size}px; border: {preview_border}px solid #E0E0E0;
+        """)
+        self.preview_label.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Ignored)
+        self.preview_label.setMinimumSize(UIScaling.scale(200), UIScaling.scale(150))
+        
+        layout.addWidget(self.preview_label, stretch=1)
+        
+        # Counters
+        counters_layout = QHBoxLayout()
+        counters_layout.setSpacing(UIScaling.scale(10))
+        
+        counter_font_size = UIScaling.scale_font(28)
+        counter_height = UIScaling.scale(100) # Smaller height
+        counter_radius = UIScaling.scale(5)
+        
+        self.lbl_good = QLabel(f"{self.good_count}\nGood")
+        self.lbl_good.setAlignment(Qt.AlignCenter)
+        self.lbl_good.setFixedHeight(counter_height)
+        self.lbl_good.setStyleSheet(f"background-color: #66BB6A; color: white; font-weight: bold; font-size: {counter_font_size}px; border-radius: {counter_radius}px;")
+        
+        self.lbl_bs = QLabel(f"{self.bs_count}\nBS")
+        self.lbl_bs.setAlignment(Qt.AlignCenter)
+        self.lbl_bs.setFixedHeight(counter_height)
+        self.lbl_bs.setStyleSheet(f"background-color: #D32F2F; color: white; font-weight: bold; font-size: {counter_font_size}px; border-radius: {counter_radius}px;")
+        
+        counters_layout.addWidget(self.lbl_good)
+        counters_layout.addWidget(self.lbl_bs)
+        
+        layout.addLayout(counters_layout)
+        
+        # Big Result
+        self.lbl_big_result = QLabel("-\nIDLE")
+        self.lbl_big_result.setAlignment(Qt.AlignCenter)
+        self.lbl_big_result.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        big_result_font_size = UIScaling.scale_font(48)
+        big_result_radius = UIScaling.scale(15)
+        self.lbl_big_result.setStyleSheet(f"color: #999999; background-color: white; font-size: {big_result_font_size}px; font-weight: 900; border-radius: {big_result_radius}px; border: 4px solid #E0E0E0;")
+        
+        layout.addWidget(self.lbl_big_result, stretch=2)
+        
+        # Details Box
+        details_layout = QGridLayout()
+        self.lbl_detail_sku = QLabel("SKU/Size :")
+        self.val_detail_sku = QLabel("---/---")
+        self.lbl_detail_len = QLabel("Length :")
+        self.val_detail_len = QLabel("-")
+        self.lbl_detail_wid = QLabel("Width :")
+        self.val_detail_wid = QLabel("-")
+        self.lbl_detail_res = QLabel("Result :")
+        self.val_detail_res = QLabel("-")
+        
+        detail_font_size = UIScaling.scale_font(18)
+        label_style = f"font-weight: bold; color: #999999; font-size: {detail_font_size}px;"
+        val_style = f"font-weight: bold; color: #333333; font-size: {detail_font_size}px;"
+        
+        for w in [self.lbl_detail_sku, self.lbl_detail_len, self.lbl_detail_wid, self.lbl_detail_res]: w.setStyleSheet(label_style)
+        for w in [self.val_detail_sku, self.val_detail_len, self.val_detail_wid, self.val_detail_res]: 
+            w.setAlignment(Qt.AlignRight)
+            w.setStyleSheet(val_style)
+            
+        details_layout.addWidget(self.lbl_detail_sku, 0, 0); details_layout.addWidget(self.val_detail_sku, 0, 1)
+        details_layout.addWidget(self.lbl_detail_len, 1, 0); details_layout.addWidget(self.val_detail_len, 1, 1)
+        details_layout.addWidget(self.lbl_detail_wid, 2, 0); details_layout.addWidget(self.val_detail_wid, 2, 1)
+        details_layout.addWidget(self.lbl_detail_res, 3, 0); details_layout.addWidget(self.val_detail_res, 3, 1)
+        
+        layout.addLayout(details_layout)
+        
+        return panel 
+
             
     def save_settings(self):
         # We should load existing settings first to not overwrite other fields
@@ -501,86 +566,157 @@ class LiveCameraScreen(QWidget):
         })
         JsonUtility.save_to_json(SETTINGS_FILE, settings)
 
+
+
     def render_presets(self):
-        # 1. Clear existing layout items
-        # Recursively delete items if needed, or just clear widgets
-        while self.presets_container_layout.count():
-            item = self.presets_container_layout.takeAt(0)
+        # Handle Layout Modes
+        if self.layout_mode == "classic":
+            # CLASSIC MODE: All presets in left panel, but split by Team A (Left) and B (Right)
+            if hasattr(self, 'btn_switch'): 
+                self.btn_switch.setVisible(False)
+                
+            self._clear_layout(self.classic_presets_layout)
+            
+            # Create a Horizontal Split within the Left Panel
+            h_split_widget = QWidget()
+            h_split = QHBoxLayout(h_split_widget)
+            h_split.setContentsMargins(0, 0, 0, 0)
+            h_split.setSpacing(10)
+            
+            # Team A Container
+            container_A = QWidget()
+            layout_A = QVBoxLayout(container_A)
+            layout_A.setContentsMargins(0, 0, 0, 0)
+            
+            # Team B Container
+            container_B = QWidget()
+            layout_B = QVBoxLayout(container_B)
+            layout_B.setContentsMargins(0, 0, 0, 0)
+            
+            # Filter Presets
+            presets_A = [p for p in self.presets if p.get("team", "A") == "A"]
+            presets_B = [p for p in self.presets if p.get("team", "A") == "B"]
+            
+            # Render to respective layouts
+            self._render_presets_auto_fit(presets_A, layout_A)
+            self._render_presets_auto_fit(presets_B, layout_B)
+            
+            # Add to Split Layout (50/50 split within the 55% panel)
+            h_split.addWidget(container_A, 50)
+            h_split.addWidget(container_B, 50)
+            
+            # Add Split Widget to Main Classic Layout
+            self.classic_presets_layout.addWidget(h_split_widget)
+
+        else:
+            # SPLIT MODE: Team A/B Logic
+            if hasattr(self, 'btn_switch'): 
+                self.btn_switch.setVisible(True)
+                
+            # 1. Determine which team goes where
+            # Default: A is Left, B is Right
+            left_team = "A"
+            right_team = "B"
+            
+            if self.team_layout_order == "B_LEFT":
+                left_team = "B"
+                right_team = "A"
+                
+            # 2. Update Headers
+            self.lbl_left_team.setText(f"Team {left_team}")
+            self.lbl_right_team.setText(f"Team {right_team}")
+            
+            # 3. Filter Presets
+            presets_left = []
+            presets_right = []
+            
+            for p in self.presets:
+                p_team = p.get("team", "A") # Default to A
+                if p_team == left_team:
+                    presets_left.append(p)
+                elif p_team == right_team:
+                    presets_right.append(p)
+                    
+            # 4. Clear existing items
+            self._clear_layout(self.left_presets_layout)
+            self._clear_layout(self.right_presets_layout)
+            
+            # 5. Render to layouts
+            self._render_presets_auto_fit(presets_left, self.left_presets_layout)
+            self._render_presets_auto_fit(presets_right, self.right_presets_layout)
+        
+    def _clear_layout(self, layout):
+        while layout.count():
+            item = layout.takeAt(0)
             widget = item.widget()
             if widget:
                 widget.setParent(None)
             else:
                 layout = item.layout()
                 if layout:
-                    # Recursively clear sub-layout if needed implementation
-                    pass
-        
-        # 2. Group Presets by SKU
-        # Use simple dict for grouping to maintain order of appearance if desired,
-        # or just sort first. Let's group by appearance order.
-        # 2. Group Presets by SKU
+                    self._clear_layout(layout)
+
+    def _render_presets_auto_fit(self, presets, parent_layout):
+        """
+        Renders presets into parent_layout using a dynamic Auto-Fit approach.
+        - No ScrollArea.
+        - Groups are distributed evenly vertically (stretch=1).
+        - Buttons expand to fill space.
+        """
+        if not presets:
+            lbl_empty = QLabel("No Presets")
+            lbl_empty.setAlignment(Qt.AlignCenter)
+            parent_layout.addWidget(lbl_empty)
+            return
+
+        # Group by SKU
         grouped = {}
         order = []
-        for p in self.presets:
+        for p in presets:
             sku = p.get("sku", "Unknown SKU") or "Unknown SKU"
             if sku not in grouped:
                 grouped[sku] = []
                 order.append(sku)
             grouped[sku].append(p)
-
-        # 3. Create a single Grid for all content
-        # Total 4 columns (2 columns for SKU groups, each containing 2 columns for buttons)
-        main_grid = QGridLayout()
-        main_grid.setSpacing(10)
-        main_grid.setContentsMargins(0, 0, 0, 0)
-        
-        sku_cols = 2 # 2 SKU groups side-by-side
-        btns_per_sku_col = 3 # 3 buttons per SKU row
-        # total_cols will be 6
-        
-        # Track the next available row for each side (0=left, 1=right)
-        side_rows = [0] * sku_cols
-
-        for i, sku in enumerate(order):
-            side = i % sku_cols # 0 or 1
-            col_start = side * btns_per_sku_col
             
+        # Create a container widget for each group to ensure equal vertical distribution
+        for sku in order:
             items = grouped[sku]
-            start_row = side_rows[side]
             
-            # -- SKU HEADER (Spans its 3 columns) --
+            # Group Container (Header + Grid)
+            group_container = QWidget()
+            group_layout = QVBoxLayout(group_container)
+            group_layout.setContentsMargins(0, 5, 0, 5)
+            group_layout.setSpacing(5)
+            
+            # Header
             lbl_header = QLabel(sku)
             header_font_size = UIScaling.scale_font(18)
-            lbl_header.setStyleSheet(f"font-size: {header_font_size}px; font-weight: bold; color: #333333; margin-top: 5px; margin-bottom: 2px;")
-            main_grid.addWidget(lbl_header, start_row, col_start, 1, btns_per_sku_col)
+            lbl_header.setStyleSheet(f"font-size: {header_font_size}px; font-weight: bold; color: {self.theme['text_main']};")
+            lbl_header.setAlignment(Qt.AlignLeft)
+            group_layout.addWidget(lbl_header)
             
-            # -- PRESET BUTTONS --
-            btn_font_size = UIScaling.scale_font(42)
-            btn_min_size = UIScaling.scale(40)
+            # Grid of Buttons
+            grid = QGridLayout()
+            grid.setSpacing(UIScaling.scale(10))
+            grid.setContentsMargins(0, 0, 0, 0)
+            
+            columns = 3 # Fixed columns for consistency
+            
             btn_radius = UIScaling.scale(12)
+            btn_font_size = UIScaling.scale_font(32) # Slightly smaller to fit grid
             
-            for j, p in enumerate(items):
-                r_offset, c_offset = divmod(j, btns_per_sku_col)
+            for i, p in enumerate(items):
+                r, c = divmod(i, columns)
                 
                 size = p.get("size", "??")
                 color_idx = p.get("color_idx", 0)
                 bg_color = SKU_COLORS.get(color_idx, "#E0E0E0")
                 
                 btn = QPushButton(str(size))
-                btn.setMinimumSize(btn_min_size, btn_min_size)
+                # Dynamic Sizing: Expanding Policy
                 btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-                btn.setStyleSheet(f"""
-                    QPushButton {{
-                        background-color: {bg_color};
-                        border: none;
-                        border-radius: {btn_radius}px;
-                        color: #000000;
-                        font-weight: bold;
-                        font-size: {btn_font_size}px;
-                        padding: 5px;
-                    }}
-                    QPushButton:hover {{ border: 3px solid #666666; }}
-                """)
+                btn.setStyleSheet(f"background-color: {bg_color}; border: none; border-radius: {btn_radius}px; color: #000000; font-weight: bold; font-size: {btn_font_size}px; padding: 5px;")
                 
                 try:
                     global_idx = self.presets.index(p)
@@ -589,15 +725,13 @@ class LiveCameraScreen(QWidget):
                 
                 btn.clicked.connect(lambda _, idx=global_idx: self.on_preset_clicked(idx))
                 
-                main_grid.addWidget(btn, start_row + 1 + r_offset, col_start + c_offset)
+                grid.addWidget(btn, r, c)
             
-            # Update row tracking for this side
-            # header(1) + rows of buttons (no extra spacing row)
-            item_rows = (len(items) + btns_per_sku_col - 1) // btns_per_sku_col
-            side_rows[side] += 1 + item_rows
- 
-
-        self.presets_container_layout.addLayout(main_grid)
+            # Add grid to group layout, stretching to fill remaining space in group
+            group_layout.addLayout(grid, stretch=1)
+            
+            # Add Group Container to Parent, with stretch=1 (Equal height for all groups)
+            parent_layout.addWidget(group_container, stretch=1)
 
     def on_preset_clicked(self, idx):
         if idx < 0 or idx >= len(self.presets):
@@ -714,7 +848,15 @@ class LiveCameraScreen(QWidget):
         
         lbl_w = self.preview_label.width()
         lbl_h = self.preview_label.height()
+        
+        # Scale to FIT the label (Letterbox if needed), ensuring full image visibility
+        # Matches 'BoxFit.contain' behavior
         pix = pix.scaled(lbl_w, lbl_h, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        
+        # No cropping logic needed
+            
+        self.preview_label.setPixmap(pix)
+            
         self.preview_label.setPixmap(pix)
     
     def cv2_to_pixmap(self, img):
@@ -775,9 +917,22 @@ class LiveCameraScreen(QWidget):
         self.preview_label.setText(f"Camera error.\nCheck settings.")
         self.preview_label.setStyleSheet(f"background-color: #FFF2F2; color: #D32F2F; border-radius: {error_radius}px; font-weight: bold; font-size: {error_font_size}px;")
 
+
+
     def stop_camera(self):
         if self.cap_thread:
             self.cap_thread.stop()
+            
+            # If thread is still running (timeout occurred), do NOT destroy it.
+            if self.cap_thread.isRunning():
+                print(f"[LiveCamera] Thread {self.cap_thread} is stuck. Detaching and abandoning (zombie)...")
+                # Detach from parent (so it's not destroyed when self is destroyed)
+                self.cap_thread.setParent(None)
+                # Keep reference globally
+                _zombie_threads.append(self.cap_thread)
+            else:
+                self.cap_thread = None
+        else:
             self.cap_thread = None
         
         # Stop sensor
@@ -809,10 +964,30 @@ class LiveCameraScreen(QWidget):
         self.settings_menu.addAction("MM per Pixel:")
         self.settings_menu.addAction(mm_action)
         self.settings_menu.addSeparator()
+
+        # Layout Mode Switch
+        current_layout_name = "Classic" if self.layout_mode == "split" else "Split" # Toggle text
+        self.settings_menu.addAction(f"Switch to {current_layout_name} Layout", self.toggle_layout_mode)
+        self.settings_menu.addSeparator()
         
         # Trigger Capture manually
         self.settings_menu.addAction("Refocus / Resume Live", self.resume_live)
         self.settings_menu.addAction("Capture Frame", self.capture_frame)
+
+    def toggle_layout_mode(self):
+        new_mode = "classic" if self.layout_mode == "split" else "split"
+        self.layout_mode = new_mode
+        self.save_settings()
+        self.reload_ui()
+
+    def reload_ui(self):
+        # Clear existing layout
+        if self.layout():
+            # Reparenting the layout to a temporary widget deletes it
+            QWidget().setLayout(self.layout())
+        
+        # Re-initialize UI
+        self.init_ui()
         
     def show_settings_menu(self):
         # Check settings password first
@@ -834,8 +1009,16 @@ class LiveCameraScreen(QWidget):
     
     def on_settings_saved(self, settings):
         """Handle settings saved from overlay"""
+        # Store old mode to check for changes
+        old_mode = self.layout_mode
+        
         # Reload all settings from file to get the complete updated state
         self.load_settings()
+        
+        # If layout mode changed, reload the UI
+        if self.layout_mode != old_mode:
+            print(f"[Live] Layout changed from {old_mode} to {self.layout_mode}. Reloading UI...")
+            self.reload_ui()
         
         # Note: Camera will be restarted via the closed signal connection
         # But if on_settings_saved is called before closed, we need to ensure camera restarts
@@ -863,7 +1046,14 @@ class LiveCameraScreen(QWidget):
         try:
             self.sensor = get_sensor()
             # Configure sensor
-            self.sensor.config.port = self.settings.get("sensor_port", "")
+            sensor_port = self.settings.get("sensor_port", "")
+            
+            if not sensor_port:
+                 print("[Live] Sensor not configured (port empty)")
+                 self.sensor = None
+                 return
+                 
+            self.sensor.config.port = sensor_port
             self.sensor.config.trigger_threshold_cm = 30.0
             self.sensor.config.cooldown_seconds = 2.0
             

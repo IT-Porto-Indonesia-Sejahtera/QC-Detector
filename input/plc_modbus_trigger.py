@@ -59,6 +59,7 @@ class PLCModbusTrigger:
             )
         
         self.config = config or ModbusConfig()
+        print(f"[DEBUG] Initializing PLCModbusTrigger from {__file__}")
         self.client: Optional[ModbusTcpClient | ModbusSerialClient] = None
         self.read_thread: Optional[threading.Thread] = None
         self.running = False
@@ -83,12 +84,18 @@ class PLCModbusTrigger:
         
         try:
             if self.config.connection_type.lower() == "tcp":
+                if not self.config.host:
+                    self._notify_connection(False, "TCP Host is empty")
+                    return False
                 self.client = ModbusTcpClient(
                     host=self.config.host,
                     port=self.config.port
                 )
                 connection_str = f"{self.config.host}:{self.config.port}"
             else:  # RTU
+                if not self.config.serial_port:
+                    self._notify_connection(False, "Serial Port is empty")
+                    return False
                 self.client = ModbusSerialClient(
                     port=self.config.serial_port,
                     baudrate=self.config.baudrate,
@@ -178,13 +185,13 @@ class PLCModbusTrigger:
             slave = self.config.slave_id
             
             if reg_type == "coil":
-                result = self.client.read_coils(address, count=1, slave=slave)
+                result = self.client.read_coils(address, count=1, device_id=slave)
             elif reg_type == "discrete_input":
-                result = self.client.read_discrete_inputs(address, count=1, slave=slave)
+                result = self.client.read_discrete_inputs(address, count=1, device_id=slave)
             elif reg_type == "holding":
-                result = self.client.read_holding_registers(address, count=1, slave=slave)
+                result = self.client.read_holding_registers(address, count=1, device_id=slave)
             elif reg_type == "input":
-                result = self.client.read_input_registers(address, count=1, slave=slave)
+                result = self.client.read_input_registers(address, count=1, device_id=slave)
             else:
                 print(f"Unknown register type: {reg_type}")
                 return None
@@ -239,7 +246,7 @@ class PLCModbusTrigger:
         
         try:
             slave = self.config.slave_id
-            result = self.client.write_register(address, value, slave=slave)
+            result = self.client.write_register(address, value, device_id=slave)
             
             if result.isError():
                 print(f"[PLC] Write error to register {address}: {result}")
@@ -268,7 +275,7 @@ class PLCModbusTrigger:
         
         try:
             slave = self.config.slave_id
-            result = self.client.read_holding_registers(address, count=1, slave=slave)
+            result = self.client.read_holding_registers(address, count=1, device_id=slave)
             
             if result.isError():
                 print(f"[PLC] Read error from register {address}: {result}")
