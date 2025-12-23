@@ -3,6 +3,7 @@ import cv2
 import os
 import datetime
 import random
+import threading
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QComboBox, QFrame, QSizePolicy, QGridLayout, QMenu, QWidgetAction,
@@ -16,6 +17,9 @@ from model.measure_live_sandals import measure_live_sandals
 from project_utilities.json_utility import JsonUtility
 from app.widgets.preset_profile_overlay import PresetProfileOverlay, PROFILES_FILE
 from app.utils.theme_manager import ThemeManager
+from app.utils.camera_utils import open_video_capture
+from app.utils.capture_thread import VideoCaptureThread
+from app.utils.ui_scaling import UIScaling
 
 # Sensor trigger (optional - import safely)
 try:
@@ -36,7 +40,7 @@ except ImportError:
 # Constants & Defaults
 # ---------------------------------------------------------------------
 PRESETS_FILE = os.path.join("output", "settings", "presets.json")
-SETTINGS_FILE = os.path.join("output", "settings", "settings.json")
+SETTINGS_FILE = os.path.join("output", "settings", "app_settings.json")
 
 # Default Presets (Testing Grouping)
 DEFAULT_PRESETS = [
@@ -49,27 +53,26 @@ DEFAULT_PRESETS = [
     {"sku": "E-0123M", "size": "42", "color_idx": 1},
     {"sku": "E-0123M", "size": "43", "color_idx": 1},
 
+    {"sku": "E-9008L", "size": "36", "color_idx": 2},
+    {"sku": "E-9008L", "size": "37", "color_idx": 2},
     {"sku": "E-9008L", "size": "38", "color_idx": 2},
     {"sku": "E-9008L", "size": "39", "color_idx": 2},
     {"sku": "E-9008L", "size": "40", "color_idx": 2},
     {"sku": "E-9008L", "size": "41", "color_idx": 2},
 
+    {"sku": "X-5000-Pro", "size": "XS", "color_idx": 3},
     {"sku": "X-5000-Pro", "size": "S", "color_idx": 3},
     {"sku": "X-5000-Pro", "size": "M", "color_idx": 3},
     {"sku": "X-5000-Pro", "size": "L", "color_idx": 3},
+    {"sku": "X-5000-Pro", "size": "XL", "color_idx": 3},
+    {"sku": "X-5000-Pro", "size": "XXL", "color_idx": 3},
 
+    {"sku": "A-1001X", "size": "37", "color_idx": 2},
     {"sku": "A-1001X", "size": "38", "color_idx": 2},
     {"sku": "A-1001X", "size": "39", "color_idx": 2},
     {"sku": "A-1001X", "size": "40", "color_idx": 2},
-
-    {"sku": "B-2020Y", "size": "S", "color_idx": 3},
-    {"sku": "B-2020Y", "size": "M", "color_idx": 3},
-    {"sku": "B-2020Y", "size": "L", "color_idx": 3},
-    {"sku": "B-2020Y", "size": "XL", "color_idx": 3},
-
-    {"sku": "C-3030Z", "size": "40", "color_idx": 4},
-    {"sku": "C-3030Z", "size": "41", "color_idx": 4},
-    {"sku": "C-3030Z", "size": "42", "color_idx": 4},
+    {"sku": "A-1001X", "size": "41", "color_idx": 2},
+    {"sku": "A-1001X", "size": "42", "color_idx": 2},
 ]
 
 
@@ -113,9 +116,7 @@ class LiveCameraScreen(QWidget):
         self.load_active_profile() # Replaces direct load_presets
         
         # Camera Setup
-        self.cap = None
-        self.timer = QTimer(self)
-        self.timer.timeout.connect(self.update_frame)
+        self.cap_thread = None
         self.live_frame = None
         self.captured_frame = None
         self.is_paused = False # If True, show captured_frame instead of live_frame
@@ -185,32 +186,40 @@ class LiveCameraScreen(QWidget):
         # -----------------------------------------------------
         # LEFT PANEL: Presets
         # -----------------------------------------------------
-        left_panel = QFrame() # Changed from QVBoxLayout to QFrame based on instruction snippet
-        left_layout = QVBoxLayout(left_panel) # Added from instruction snippet
-        left_layout.setContentsMargins(0, 0, 0, 0) # Added from instruction snippet
-        left_layout.setSpacing(10) # Added from instruction snippet
+        left_panel = QFrame()
+        left_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)  # Allow natural expansion
+        left_layout = QVBoxLayout(left_panel)
+        left_layout.setContentsMargins(0, 0, 0, 0)
+        left_layout.setSpacing(10)
         
         # Header Row: "Presets" | Info Bar | Edit Button
         header_layout = QHBoxLayout()
         
         lbl_presets = QLabel("Presets")
-        lbl_presets.setStyleSheet("font-size: 18px; font-weight: bold;")
+        lbl_presets_font_size = UIScaling.scale_font(18)
+        lbl_presets.setStyleSheet(f"font-size: {lbl_presets_font_size}px; font-weight: bold;")
         
         # Info Bar (Shift 1, Team A...)
         self.info_bar = QLabel(" Loading... ")
-        self.info_bar.setStyleSheet("""
+        info_bar_font_size = UIScaling.scale_font(14)
+        info_bar_padding = UIScaling.scale(15)
+        info_bar_radius = UIScaling.scale(5)
+        self.info_bar.setStyleSheet(f"""
             background-color: #F5F5F5; 
             color: #333333; 
-            padding: 5px 15px; 
-            border-radius: 5px; 
+            padding: 5px {info_bar_padding}px; 
+            border-radius: {info_bar_radius}px; 
             font-weight: bold;
+            font-size: {info_bar_font_size}px;
         """)
-        self.info_bar.setFixedHeight(35)
+        self.info_bar.setMinimumHeight(UIScaling.scale(40))
         self.update_info_bar()
         
         btn_edit = QPushButton("Edit")
-        btn_edit.setFixedSize(80, 50)
-        btn_edit.setStyleSheet("background-color: #F5F5F5; border-radius: 5px; color: #333333; border: 1px solid #E0E0E0;")
+        btn_edit.setMinimumSize(UIScaling.scale(80), UIScaling.scale(40))
+        btn_edit_font_size = UIScaling.scale_font(14)
+        btn_edit_radius = UIScaling.scale(5)
+        btn_edit.setStyleSheet(f"background-color: #F5F5F5; border-radius: {btn_edit_radius}px; color: #333333; border: 1px solid #E0E0E0; font-size: {btn_edit_font_size}px;")
         btn_edit.clicked.connect(self.open_profile_dialog)
         
         header_layout.addWidget(lbl_presets)
@@ -220,55 +229,50 @@ class LiveCameraScreen(QWidget):
         
         left_layout.addLayout(header_layout) # Fixed: use left_layout
         
-        # --- SCROLL AREA FOR PRESETS ---
-        self.scroll_area = QScrollArea()
-        self.scroll_area.setWidgetResizable(True)
-        self.scroll_area.setStyleSheet("background-color: transparent; border: none;")
-        
-        # Container for the content inside scroll area
+        # --- PRESETS CONTAINER (Directly in left_layout for auto-scaling) ---
         self.presets_container = QWidget()
         self.presets_container_layout = QVBoxLayout(self.presets_container)
-        self.presets_container_layout.setSpacing(20) # Spacing between SKU groups
+        self.presets_container_layout.setSpacing(10)
         self.presets_container_layout.setContentsMargins(0, 0, 0, 0)
         
-        self.scroll_area.setWidget(self.presets_container)
-        
-        # Enable Touch Scrolling (Kinetic)
-        QScroller.grabGesture(self.scroll_area.viewport(), QScroller.LeftMouseButtonGesture)
-        
-        # Render the presets (Grouped by SKU)
+        # Render the presets
         self.render_presets()
         
-        left_layout.addWidget(self.scroll_area, stretch=1)
+        left_layout.addWidget(self.presets_container, stretch=1)
         
         # -------------------------------------------------------------
         # RIGHT PANEL: Preview & Stats
         # -------------------------------------------------------------
         right_panel = QFrame()
+        right_panel.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)  # Preferred width, don't expand horizontally
         right_layout = QVBoxLayout(right_panel)
         right_layout.setContentsMargins(0, 0, 0, 0)
-        right_layout.setSpacing(10) # compacted
+        right_layout.setSpacing(10)
         
         # Top Controls: Back | Settings
         top_ctrl_layout = QHBoxLayout()
         
+        ctrl_btn_size = UIScaling.scale(50)
+        ctrl_btn_radius = ctrl_btn_size // 2
+        ctrl_btn_font_size = UIScaling.scale_font(24)
+        
         self.back_button = QPushButton("←")
-        self.back_button.setFixedSize(50, 50)
-        self.back_button.setStyleSheet("""
-            QPushButton {
-                background: #F5F5F5; color: #333333; border-radius: 25px; font-size: 24px; border: 1px solid #E0E0E0;
-            }
-            QPushButton:hover { background: #E8E8E8; }
+        self.back_button.setFixedSize(ctrl_btn_size, ctrl_btn_size)
+        self.back_button.setStyleSheet(f"""
+            QPushButton {{
+                background: #F5F5F5; color: #333333; border-radius: {ctrl_btn_radius}px; font-size: {ctrl_btn_font_size}px; border: 1px solid #E0E0E0;
+            }}
+            QPushButton:hover {{ background: #E8E8E8; }}
         """)
         self.back_button.clicked.connect(self.go_back)
         
         self.settings_btn = QPushButton("⚙️")
-        self.settings_btn.setFixedSize(50, 50)
-        self.settings_btn.setStyleSheet("""
-            QPushButton {
-                background: #F5F5F5; color: #333333; border-radius: 25px; font-size: 24px; border: 1px solid #E0E0E0;
-            }
-            QPushButton:hover { background: #E8E8E8; }
+        self.settings_btn.setFixedSize(ctrl_btn_size, ctrl_btn_size)
+        self.settings_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: #F5F5F5; color: #333333; border-radius: {ctrl_btn_radius}px; font-size: {ctrl_btn_font_size}px; border: 1px solid #E0E0E0;
+            }}
+            QPushButton:hover {{ background: #E8E8E8; }}
         """)
         self.settings_btn.clicked.connect(self.show_settings_menu)
         
@@ -281,48 +285,56 @@ class LiveCameraScreen(QWidget):
         # Review Frameshot
         self.preview_label = QLabel("Review\nFrameshot")
         self.preview_label.setAlignment(Qt.AlignCenter)
-        self.preview_label.setStyleSheet("""
+        preview_font_size = UIScaling.scale_font(36)
+        preview_radius = UIScaling.scale(8)
+        preview_border = UIScaling.scale(3)
+        self.preview_label.setStyleSheet(f"""
             background-color: #F8F8F8; 
             color: #AAAAAA; 
-            border-radius: 8px;
+            border-radius: {preview_radius}px;
             font-weight: bold;
-            font-size: 60px;
-            border: 3px solid #E0E0E0;
+            font-size: {preview_font_size}px;
+            border: {preview_border}px solid #E0E0E0;
         """)
-        # Make Preview smaller / fixed height
-        self.preview_label.setFixedHeight(325) 
-        self.preview_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        # Use Ignored policy so pixmap doesn't cause size expansion
+        self.preview_label.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Ignored)
+        self.preview_label.setMinimumSize(UIScaling.scale(200), UIScaling.scale(150))
         
-        right_layout.addWidget(self.preview_label)
+        right_layout.addWidget(self.preview_label, stretch=3)
         
         # Counters: Good | BS
         counters_layout = QHBoxLayout()
-        counters_layout.setSpacing(10)
+        counters_layout.setSpacing(UIScaling.scale(10))
+        
+        counter_font_size = UIScaling.scale_font(28)  # Reduced for better scaling
+        counter_height = UIScaling.scale(70)  # Fixed height, not minimum
+        counter_radius = UIScaling.scale(5)
+        counter_padding = UIScaling.scale(5)
         
         # Good Counter
         self.lbl_good = QLabel(f"{self.good_count}\nGood")
         self.lbl_good.setAlignment(Qt.AlignCenter)
-        self.lbl_good.setMinimumHeight(100) # Increased height
-        self.lbl_good.setStyleSheet("""
+        self.lbl_good.setFixedHeight(counter_height)  # Fixed height to prevent overlap
+        self.lbl_good.setStyleSheet(f"""
             background-color: #66BB6A; 
             color: white; 
             font-weight: bold; 
-            font-size: 40px;
-            border-radius: 5px;
-            padding: 5px;
+            font-size: {counter_font_size}px;
+            border-radius: {counter_radius}px;
+            padding: {counter_padding}px;
         """)
         
         # BS Counter
         self.lbl_bs = QLabel(f"{self.bs_count}\nBS")
         self.lbl_bs.setAlignment(Qt.AlignCenter)
-        self.lbl_bs.setMinimumHeight(100) # Increased height
-        self.lbl_bs.setStyleSheet("""
+        self.lbl_bs.setFixedHeight(counter_height)  # Fixed height to prevent overlap
+        self.lbl_bs.setStyleSheet(f"""
             background-color: #D32F2F; 
             color: white; 
             font-weight: bold; 
-            font-size: 40px;
-            border-radius: 5px;
-            padding: 5px;
+            font-size: {counter_font_size}px;
+            border-radius: {counter_radius}px;
+            padding: {counter_padding}px;
         """)
         
         counters_layout.addWidget(self.lbl_good)
@@ -334,17 +346,21 @@ class LiveCameraScreen(QWidget):
         # Logic: Show SIZE (Big) \n STATUS (Small)
         self.lbl_big_result = QLabel("-\nIDLE")
         self.lbl_big_result.setAlignment(Qt.AlignCenter)
-        self.lbl_big_result.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding) # Fill space
-        self.lbl_big_result.setStyleSheet("""
+        self.lbl_big_result.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        big_result_font_size = UIScaling.scale_font(48)  # Reduced for better scaling
+        big_result_padding = UIScaling.scale(10)
+        big_result_radius = UIScaling.scale(15)
+        big_result_border = UIScaling.scale(4)
+        self.lbl_big_result.setStyleSheet(f"""
             color: #999999; 
             background-color: white; 
-            font-size: 64px; 
+            font-size: {big_result_font_size}px; 
             font-weight: 900; 
-            padding: 10px; 
-            border-radius: 15px; 
-            border: 4px solid #E0E0E0;
+            padding: {big_result_padding}px; 
+            border-radius: {big_result_radius}px; 
+            border: {big_result_border}px solid #E0E0E0;
         """)
-        right_layout.addWidget(self.lbl_big_result, stretch=1) # Give it the stretch factor
+        right_layout.addWidget(self.lbl_big_result, stretch=2)  # Give result area stretch factor
         
         # Details Box
         details_layout = QGridLayout()
@@ -364,8 +380,9 @@ class LiveCameraScreen(QWidget):
         self.val_detail_res = QLabel("-")
         
         # Styling details - Updated for light theme
-        label_style = "font-weight: bold; color: #999999; font-size: 24px;"
-        val_style = "font-weight: bold; color: #333333; font-size: 24px;"
+        detail_font_size = UIScaling.scale_font(24)
+        label_style = f"font-weight: bold; color: #999999; font-size: {detail_font_size}px;"
+        val_style = f"font-weight: bold; color: #333333; font-size: {detail_font_size}px;"
 
         for w in [self.lbl_detail_sku, self.lbl_detail_len, self.lbl_detail_wid, self.lbl_detail_res]:
             w.setStyleSheet(label_style)
@@ -455,23 +472,34 @@ class LiveCameraScreen(QWidget):
             self.info_bar.setText(" No Profile Selected ")
 
     def load_settings(self):
-        settings = JsonUtility.load_from_json(SETTINGS_FILE)
-        if settings:
-            self.mm_per_px = settings.get("mm_per_px", 0.215984148)
-            self.camera_index = settings.get("camera_index", 0)
-            self.active_profile_id = settings.get("active_profile_id", None)
+        self.settings = JsonUtility.load_from_json(SETTINGS_FILE) or {}
+        if self.settings:
+            self.mm_per_px = self.settings.get("mm_per_px", 0.215984148)
+            self.camera_index = self.settings.get("camera_index", 0)
+            self.active_profile_id = self.settings.get("active_profile_id", None)
+            
+            # Handle IP Preset data
+            self.ip_presets = self.settings.get("ip_camera_presets", [])
+            self.active_ip_preset_id = self.settings.get("active_ip_preset_id", None)
         else:
             self.mm_per_px = 0.215984148
             self.camera_index = 0
             self.active_profile_id = None
+            self.ip_presets = []
+            self.active_ip_preset_id = None
             
     def save_settings(self):
-        data = {
+        # We should load existing settings first to not overwrite other fields
+        settings = JsonUtility.load_from_json(SETTINGS_FILE) or {}
+        
+        settings.update({
             "mm_per_px": self.mm_per_px,
             "camera_index": self.camera_index,
-            "active_profile_id": self.active_profile_id
-        }
-        JsonUtility.save_to_json(SETTINGS_FILE, data)
+            "active_profile_id": self.active_profile_id,
+            "ip_camera_username": self.ip_camera_username,
+            "ip_camera_password": self.ip_camera_password
+        })
+        JsonUtility.save_to_json(SETTINGS_FILE, settings)
 
     def render_presets(self):
         # 1. Clear existing layout items
@@ -490,67 +518,70 @@ class LiveCameraScreen(QWidget):
         # 2. Group Presets by SKU
         # Use simple dict for grouping to maintain order of appearance if desired,
         # or just sort first. Let's group by appearance order.
+        # 2. Group Presets by SKU
         grouped = {}
         order = []
-        
         for p in self.presets:
-            sku = p.get("sku", "Unknown SKU")
-            if not sku: sku = "Unknown SKU"
-            
+            sku = p.get("sku", "Unknown SKU") or "Unknown SKU"
             if sku not in grouped:
                 grouped[sku] = []
                 order.append(sku)
             grouped[sku].append(p)
+
+        # 3. Create a single Grid for all content
+        # Total 4 columns (2 columns for SKU groups, each containing 2 columns for buttons)
+        main_grid = QGridLayout()
+        main_grid.setSpacing(10)
+        main_grid.setContentsMargins(0, 0, 0, 0)
+        
+        sku_cols = 2 # 2 SKU groups side-by-side
+        btns_per_sku_col = 3 # 3 buttons per SKU row
+        # total_cols will be 6
+        
+        # Track the next available row for each side (0=left, 1=right)
+        side_rows = [0] * sku_cols
+
+        for i, sku in enumerate(order):
+            side = i % sku_cols # 0 or 1
+            col_start = side * btns_per_sku_col
             
-        # 3. Create Sections for each SKU
-        for sku in order:
             items = grouped[sku]
+            start_row = side_rows[side]
             
-            # -- SECTION HEADER --
+            # -- SKU HEADER (Spans its 3 columns) --
             lbl_header = QLabel(sku)
-            lbl_header.setStyleSheet("font-size: 24px; font-weight: bold; color: #333333; margin-top: 10px;")
-            self.presets_container_layout.addWidget(lbl_header)
+            header_font_size = UIScaling.scale_font(18)
+            lbl_header.setStyleSheet(f"font-size: {header_font_size}px; font-weight: bold; color: #333333; margin-top: 5px; margin-bottom: 2px;")
+            main_grid.addWidget(lbl_header, start_row, col_start, 1, btns_per_sku_col)
             
-            # -- GRID FOR ITEMS --
-            grid_widget = QWidget()
-            grid = QGridLayout(grid_widget)
-            grid.setSpacing(10)
-            grid.setContentsMargins(0, 0, 0, 0)
+            # -- PRESET BUTTONS --
+            btn_font_size = UIScaling.scale_font(42)
+            btn_min_size = UIScaling.scale(40)
+            btn_radius = UIScaling.scale(12)
             
-            # Populate Grid (5 columns max based on mockup)
-            cols = 6
-            grid.setAlignment(Qt.AlignLeft | Qt.AlignTop) # Align grid content to top-left
-            
-            for i, p in enumerate(items):
-                row, col = divmod(i, cols)
+            for j, p in enumerate(items):
+                r_offset, c_offset = divmod(j, btns_per_sku_col)
                 
                 size = p.get("size", "??")
                 color_idx = p.get("color_idx", 0)
-                
-                # Determine color
                 bg_color = SKU_COLORS.get(color_idx, "#E0E0E0")
                 
                 btn = QPushButton(str(size))
-                btn.setFixedSize(150, 190) # Fixed Size matching mockup roughly
+                btn.setMinimumSize(btn_min_size, btn_min_size)
+                btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
                 btn.setStyleSheet(f"""
                     QPushButton {{
                         background-color: {bg_color};
                         border: none;
-                        border-radius: 12px;
+                        border-radius: {btn_radius}px;
                         color: #000000;
                         font-weight: bold;
-                        font-size: 32px;
+                        font-size: {btn_font_size}px;
+                        padding: 5px;
                     }}
-                    QPushButton:hover {{
-                        border: 3px solid #666666;
-                    }}
-                    QPushButton:pressed {{
-                        opacity: 0.8;
-                    }}
+                    QPushButton:hover {{ border: 3px solid #666666; }}
                 """)
                 
-                # Connect click
-                # WARNING: Loop variable capture issue. Use default arg.
                 try:
                     global_idx = self.presets.index(p)
                 except ValueError:
@@ -558,16 +589,15 @@ class LiveCameraScreen(QWidget):
                 
                 btn.clicked.connect(lambda _, idx=global_idx: self.on_preset_clicked(idx))
                 
-                grid.addWidget(btn, row, col)
+                main_grid.addWidget(btn, start_row + 1 + r_offset, col_start + c_offset)
             
-            # Align items to left/top
-            # If we have few items, they should stick to left.
-            # QGridLayout puts them in 0,0 0,1 etc so they are left by default.
-            
-            self.presets_container_layout.addWidget(grid_widget)
-            
-        # Add stretch at bottom to push everything up
-        self.presets_container_layout.addStretch()
+            # Update row tracking for this side
+            # header(1) + rows of buttons (no extra spacing row)
+            item_rows = (len(items) + btns_per_sku_col - 1) // btns_per_sku_col
+            side_rows[side] += 1 + item_rows
+ 
+
+        self.presets_container_layout.addLayout(main_grid)
 
     def on_preset_clicked(self, idx):
         if idx < 0 or idx >= len(self.presets):
@@ -615,16 +645,20 @@ class LiveCameraScreen(QWidget):
             # Content: SIZE on top (Big), STATUS on bottom (Smaller)
             display_size = self.current_size if self.current_size != "---" else "-"
             
+            res_font_size = UIScaling.scale_font(48)
+            res_padding = UIScaling.scale(20)
+            res_radius = UIScaling.scale(15)
+            
             if pf == "PASS":
                 self.good_count += 1
                 self.lbl_big_result.setText(f"{display_size}\nGOOD")
-                self.lbl_big_result.setStyleSheet("color: white; background-color: #4CAF50; padding: 20px; border-radius: 15px; border: none; font-size: 48px; font-weight: 900;")
+                self.lbl_big_result.setStyleSheet(f"color: white; background-color: #4CAF50; padding: {res_padding}px; border-radius: {res_radius}px; border: none; font-size: {res_font_size}px; font-weight: 900;")
                 # Write random 1-4 to PLC register 13 for GOOD
                 self._write_plc_result(is_good=True)
             else:
                 self.bs_count += 1
                 self.lbl_big_result.setText(f"{display_size}\nREJECT")
-                self.lbl_big_result.setStyleSheet("color: white; background-color: #D32F2F; padding: 20px; border-radius: 15px; border: none; font-size: 48px; font-weight: 900;")
+                self.lbl_big_result.setStyleSheet(f"color: white; background-color: #D32F2F; padding: {res_padding}px; border-radius: {res_radius}px; border: none; font-size: {res_font_size}px; font-weight: 900;")
                 # Write random 5-8 to PLC register 13 for BS
                 self._write_plc_result(is_good=False)
                 
@@ -636,7 +670,10 @@ class LiveCameraScreen(QWidget):
             self.val_detail_wid.setText("-")
             self.lbl_big_result.setText("-\nIDLE")
             # Idle: Grey text on white
-            self.lbl_big_result.setStyleSheet("color: #999999; background-color: white; font-size: 48px; font-weight: 900; padding: 20px; border-radius: 15px; border: 4px solid #E0E0E0;")
+            res_font_size = UIScaling.scale_font(48)
+            res_padding = UIScaling.scale(20)
+            res_radius = UIScaling.scale(15)
+            self.lbl_big_result.setStyleSheet(f"color: #999999; background-color: white; font-size: {res_font_size}px; font-weight: 900; padding: {res_padding}px; border-radius: {res_radius}px; border: 4px solid #E0E0E0;")
 
             
         # Update Preview with processed frame
@@ -652,23 +689,14 @@ class LiveCameraScreen(QWidget):
     # ------------------------------------------------------------------
     # Camera & Frame Handling
     # ------------------------------------------------------------------
-    def update_frame(self):
-        """
-        Reads frame from camera but DOES NOT display it live.
-        Only keeps self.live_frame fresh for capturing.
-        """
-        if not self.cap or not self.cap.isOpened():
-            return
-            
-        ret, frame = self.cap.read()
-        if not ret or frame is None:
-            return
-            
+    def on_frame_received(self, frame):
+        """Called by VideoCaptureThread when a new frame is available"""
         self.live_frame = frame
         
-        # REMOVED: Live feed display
-        # if not self.is_paused:
-        #    self.show_image(self.live_frame)
+        # We don't display it live on the main preview, 
+        # but we could if we wanted to. 
+        # The logic here is that we only show the "Captured" (paused) frame.
+        pass
 
     def show_image(self, frame):
         if frame is None: return
@@ -709,56 +737,29 @@ class LiveCameraScreen(QWidget):
         super().closeEvent(event)
         
     def start_camera(self):
-        if self.cap is None:
-            # self.camera_index can be int or string (url)
-            # cv2.VideoCapture handles both, but be sure it's correct type
+        if self.cap_thread is None:
             source = self.camera_index
-            if isinstance(source, str):
-                if source.isdigit():
-                    source = int(source)
-                # else: keep as string for URL
             
-            try:
-                # Use DirectShow backend on Windows for better compatibility
-                if isinstance(source, int):
-                    self.cap = cv2.VideoCapture(source, cv2.CAP_DSHOW)
+            # If IP camera is active, resolve the preset
+            if source == "ip":
+                preset = next((p for p in self.ip_presets if p["id"] == self.active_ip_preset_id), None)
+                if not preset and self.ip_presets:
+                    preset = self.ip_presets[0]
+                if preset:
+                    source = preset
                 else:
-                    self.cap = cv2.VideoCapture(source)
-                
-                # Set timeouts to avoid hanging
-                if self.cap:
-                    self.cap.set(cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, 3000)
-                    self.cap.set(cv2.CAP_PROP_READ_TIMEOUT_MSEC, 3000)
-                
-                # Check if camera opened successfully
-                if not self.cap or not self.cap.isOpened():
-                    self.preview_label.setText("Camera not found.\nCheck Settings.")
-                    self.preview_label.setStyleSheet("""
-                        background-color: #FFEBEE; 
-                        color: #C62828;
-                        border-radius: 8px;
-                        font-weight: bold;
-                        font-size: 24px;
-                        border: 3px solid #E0E0E0;
-                    """)
-                    self.cap = None
-                    return
-                    
-            except Exception as e:
-                print(f"Error opening camera {source}: {e}")
-                self.preview_label.setText(f"Camera Error:\n{str(e)[:50]}")
-                self.preview_label.setStyleSheet("""
-                    background-color: #FFEBEE; 
-                    color: #C62828;
-                    border-radius: 8px;
-                    font-weight: bold;
-                    font-size: 18px;
-                    border: 3px solid #E0E0E0;
-                """)
-                self.cap = None
-                return
-                
-        self.timer.start(30)
+                    source = 0 
+            elif isinstance(source, str) and source.isdigit():
+                source = int(source)
+            
+            is_ip = not isinstance(source, int)
+            
+            # Start background capture
+            self.cap_thread = VideoCaptureThread(source, is_ip)
+            self.cap_thread.frame_ready.connect(self.on_frame_received)
+            self.cap_thread.connection_failed.connect(self.on_camera_connection_failed)
+            self.cap_thread.start()
+            
         self.is_paused = False
         
         # Start sensor if available
@@ -767,11 +768,17 @@ class LiveCameraScreen(QWidget):
         # Start PLC trigger if available
         self.start_plc_trigger()
         
+    def on_camera_connection_failed(self, error):
+        print(f"[Live] Camera connection failed: {error}")
+        error_font_size = UIScaling.scale_font(28)
+        error_radius = UIScaling.scale(8)
+        self.preview_label.setText(f"Camera error.\nCheck settings.")
+        self.preview_label.setStyleSheet(f"background-color: #FFF2F2; color: #D32F2F; border-radius: {error_radius}px; font-weight: bold; font-size: {error_font_size}px;")
+
     def stop_camera(self):
-        self.timer.stop()
-        if self.cap:
-            self.cap.release()
-            self.cap = None
+        if self.cap_thread:
+            self.cap_thread.stop()
+            self.cap_thread = None
         
         # Stop sensor
         self.stop_sensor()
@@ -814,20 +821,25 @@ class LiveCameraScreen(QWidget):
         if not PasswordDialog.authenticate(self, password_type="settings"):
             return  # Password incorrect or cancelled
         
+        # Stop camera so Settings Overlay can detect it
+        self.stop_camera()
+        
         # Show settings overlay
         from app.widgets.settings_overlay import SettingsOverlay
         overlay = SettingsOverlay(self)
         overlay.settings_saved.connect(self.on_settings_saved)
+        
+        # Restart camera when overlay closes
+        overlay.closed.connect(self.start_camera)
     
     def on_settings_saved(self, settings):
         """Handle settings saved from overlay"""
-        # Update local settings
-        self.mm_per_px = settings.get("mm_per_px", self.mm_per_px)
-        self.camera_index = settings.get("camera_index", self.camera_index)
+        # Reload all settings from file to get the complete updated state
+        self.load_settings()
         
-        # Restart camera with new settings?
-        self.stop_camera()
-        self.start_camera()
+        # Note: Camera will be restarted via the closed signal connection
+        # But if on_settings_saved is called before closed, we need to ensure camera restarts
+        # The stop_camera is already called in show_settings_menu before overlay opens
         
     def on_mm_changed(self, text):
         try:
@@ -850,21 +862,18 @@ class LiveCameraScreen(QWidget):
         
         try:
             self.sensor = get_sensor()
-            
             # Configure sensor
-            self.sensor.config.trigger_threshold_cm = 30.0  # Trigger at 30cm
-            self.sensor.config.cooldown_seconds = 2.0  # 2 second cooldown
+            self.sensor.config.port = self.settings.get("sensor_port", "")
+            self.sensor.config.trigger_threshold_cm = 30.0
+            self.sensor.config.cooldown_seconds = 2.0
             
             # Set callbacks
             self.sensor.on_trigger = self.on_sensor_trigger
             self.sensor.on_connection_change = self.on_sensor_connection_change
             
-            # Try to auto-connect
-            if self.sensor.connect():
-                self.sensor_enabled = True
-                print("[Sensor] Connected and ready")
-            else:
-                print("[Sensor] Could not auto-connect - will retry on start_camera")
+            # Note: We NO LONGER call connect() here to avoid blocking initialization.
+            # connect() will be called in start_sensor() which we can move to a thread if needed.
+            print("[Sensor] Initialized (connection deferred)")
         except Exception as e:
             print(f"[Sensor] Setup error: {e}")
             self.sensor = None
@@ -881,9 +890,18 @@ class LiveCameraScreen(QWidget):
         print(f"[Sensor] {'Connected' if connected else 'Disconnected'}: {message}")
     
     def start_sensor(self):
-        """Start sensor reading"""
-        if self.sensor and self.sensor_enabled:
-            self.sensor.start()
+        """Start sensor reading in background"""
+        if self.sensor:
+            # We can start it in a separate thread if connect itself is slow
+            def task():
+                try:
+                    if self.sensor.connect():
+                        self.sensor_enabled = True
+                        self.sensor.start()
+                except Exception as e:
+                    print(f"[Sensor] Start error: {e}")
+            
+            threading.Thread(target=task, daemon=True).start()
     
     def stop_sensor(self):
         """Stop sensor reading"""
@@ -902,13 +920,13 @@ class LiveCameraScreen(QWidget):
         try:
             config = ModbusConfig(
                 connection_type="rtu",
-                serial_port="COM7",
+                serial_port=self.settings.get("plc_port", ""),
                 baudrate=9600,
                 parity="E",
                 stopbits=1,
                 bytesize=8,
                 slave_id=1,
-                register_address=12,
+                register_address=int(self.settings.get("plc_trigger_reg", 12)),
                 register_type="holding",
                 poll_interval_ms=100
             )
@@ -941,10 +959,17 @@ class LiveCameraScreen(QWidget):
         print(f"[PLC] {'Connected' if connected else 'Disconnected'}: {message}")
     
     def start_plc_trigger(self):
-        """Start PLC Modbus polling"""
-        if self.plc_trigger and self.plc_enabled:
-            print("[PLC] Starting Modbus polling...")
-            self.plc_trigger.start()
+        """Start PLC Modbus polling in background"""
+        if self.plc_trigger:
+            def task():
+                try:
+                    print("[PLC] Starting Modbus in background...")
+                    if self.plc_trigger.start():
+                        self.plc_enabled = True
+                except Exception as e:
+                    print(f"[PLC] Start error: {e}")
+            
+            threading.Thread(target=task, daemon=True).start()
     
     def stop_plc_trigger(self):
         """Stop PLC Modbus polling"""
@@ -962,18 +987,19 @@ class LiveCameraScreen(QWidget):
             print("[PLC] Cannot write result - not connected")
             return
         
+        res_reg = int(self.settings.get("plc_result_reg", 13))
         if is_good:
             value = random.randint(1, 4)
-            print(f"[PLC] GOOD result - writing {value} to register 13")
+            print(f"[PLC] GOOD result - writing {value} to register {res_reg}")
         else:
             value = random.randint(5, 8)
-            print(f"[PLC] BS result - writing {value} to register 13")
+            print(f"[PLC] BS result - writing {value} to register {res_reg}")
         
-        self.plc_trigger.write_register(13, value)
+        self.plc_trigger.write_register(res_reg, value)
         
-        # Read back register 13 to verify
-        read_value = self.plc_trigger.read_any_register(13)
+        # Read back register to verify
+        read_value = self.plc_trigger.read_any_register(res_reg)
         if read_value is not None:
-            print(f"[PLC] Verified - Register 13 now contains: {read_value}")
+            print(f"[PLC] Verified - Register {res_reg} now contains: {read_value}")
         else:
             print(f"[PLC] Could not read back register 13 for verification")

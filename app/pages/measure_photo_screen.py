@@ -10,6 +10,7 @@ from PySide6.QtCore import Qt
 from datetime import datetime
 from model.measurement import measure_sandals
 import project_utilities as putils
+from app.utils.ui_scaling import UIScaling
 
 class MeasurePhotoScreen(QWidget):
     def __init__(self, controller):
@@ -28,17 +29,18 @@ class MeasurePhotoScreen(QWidget):
         # === Left Panel: Image Preview ===
         self.image_label = QLabel()
         self.image_label.setAlignment(Qt.AlignCenter)
-        self.image_label.setStyleSheet("""
+        borderRadius = UIScaling.scale(10)
+        self.image_label.setStyleSheet(f"""
             border: 2px dashed #CCCCCC;
-            border-radius: 10px;
+            border-radius: {borderRadius}px;
             background: #F8F8F8;
         """)
         self.image_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.image_label.setMinimumSize(400, 400)
-        self.image_label.setMaximumSize(1000, 800)
+        self.image_label.setMinimumSize(UIScaling.scale(400), UIScaling.scale(400))
 
         # Placeholder
-        placeholder = QPixmap(256, 256)
+        placeholder_size = UIScaling.scale(256)
+        placeholder = QPixmap(placeholder_size, placeholder_size)
         placeholder.fill(Qt.transparent)
         self.image_label.setPixmap(placeholder)
         left_panel.addStretch()
@@ -47,14 +49,18 @@ class MeasurePhotoScreen(QWidget):
 
         # === Buttons ===
         button_layout = QHBoxLayout()
+        btn_padding = UIScaling.scale(8)
+        btn_font_size = UIScaling.scale_font(14)
+        btn_radius = UIScaling.scale(8)
+        
         self.measure_button = QPushButton("Measure")
-        self.measure_button.setStyleSheet("background-color: #2196F3; color: white; border-radius: 8px; font-weight: bold; padding: 8px;")
+        self.measure_button.setStyleSheet(f"background-color: #2196F3; color: white; border-radius: {btn_radius}px; font-weight: bold; padding: {btn_padding}px; font-size: {btn_font_size}px;")
         self.measure_button.clicked.connect(self.measure_image)
         self.quit_button = QPushButton("Quit")
-        self.quit_button.setStyleSheet("background-color: #F5F5F5; color: #333333; border-radius: 8px; font-weight: bold; padding: 8px;")
+        self.quit_button.setStyleSheet(f"background-color: #F5F5F5; color: #333333; border-radius: {btn_radius}px; font-weight: bold; padding: {btn_padding}px; font-size: {btn_font_size}px;")
         self.quit_button.clicked.connect(self.close)
         self.back_button = QPushButton("Back to Menu")
-        self.back_button.setStyleSheet("background-color: #F5F5F5; color: #333333; border-radius: 8px; font-weight: bold; padding: 8px;")
+        self.back_button.setStyleSheet(f"background-color: #F5F5F5; color: #333333; border-radius: {btn_radius}px; font-weight: bold; padding: {btn_padding}px; font-size: {btn_font_size}px;")
         self.back_button.clicked.connect(self.controller.go_back)
         button_layout.addWidget(self.back_button)
         button_layout.addWidget(self.measure_button)
@@ -66,7 +72,7 @@ class MeasurePhotoScreen(QWidget):
         scroll.setWidgetResizable(True)
         grid_container = QWidget()
         self.grid_layout = QGridLayout(grid_container)
-        self.grid_layout.setSpacing(8)
+        self.grid_layout.setSpacing(UIScaling.scale(8))
         scroll.setWidget(grid_container)
         right_panel.addWidget(scroll)
 
@@ -92,14 +98,15 @@ class MeasurePhotoScreen(QWidget):
             if f.lower().endswith(('.png', '.jpg', '.jpeg'))
         ]
 
+        thumb_size = UIScaling.scale(100)
         for i, img_name in enumerate(images):
             img_path = os.path.join(self.image_folder, img_name)
             thumb = QLabel()
-            thumb_pix = QPixmap(img_path).scaled(100, 100, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            thumb_pix = QPixmap(img_path).scaled(thumb_size, thumb_size, Qt.KeepAspectRatio, Qt.SmoothTransformation)
             thumb.setPixmap(thumb_pix)
             thumb.setAlignment(Qt.AlignCenter)
             thumb.setFrameShape(QFrame.Box)
-            thumb.setStyleSheet("border: 1px solid #aaa; border-radius: 4px;")
+            thumb.setStyleSheet(f"border: 1px solid #aaa; border-radius: {UIScaling.scale(4)}px;")
             thumb.mousePressEvent = lambda event, path=img_path: self.select_image(path)
             row, col = divmod(i, 3)
             self.grid_layout.addWidget(thumb, row, col)

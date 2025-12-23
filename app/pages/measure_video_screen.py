@@ -8,6 +8,7 @@ from PySide6.QtGui import QPixmap, QImage
 from PySide6.QtCore import Qt
 from model.measurement_video import process_video
 from model.preprocessor import ensure_dir
+from app.utils.ui_scaling import UIScaling
 
 
 class MeasureVideoScreen(QWidget):
@@ -20,16 +21,20 @@ class MeasureVideoScreen(QWidget):
 
         self.video_label = QLabel("No video loaded.")
         self.video_label.setAlignment(Qt.AlignCenter)
-        self.video_label.setStyleSheet("background: #F8F8F8; border: 2px dashed #CCCCCC;")
+        self.video_label.setStyleSheet(f"background: #F8F8F8; border: 2px dashed #CCCCCC; border-radius: {UIScaling.scale(8)}px;")
         layout.addWidget(self.video_label)
 
         btn_layout = QHBoxLayout()
+        btn_padding = UIScaling.scale(8)
+        btn_radius = UIScaling.scale(8)
+        btn_font_size = UIScaling.scale_font(14)
+        
         self.load_btn = QPushButton("Load Video")
-        self.load_btn.setStyleSheet("background-color: #F5F5F5; color: #333333; border-radius: 8px; font-weight: bold; padding: 8px;")
+        self.load_btn.setStyleSheet(f"background-color: #F5F5F5; color: #333333; border-radius: {btn_radius}px; font-weight: bold; padding: {btn_padding}px; font-size: {btn_font_size}px;")
         self.start_btn = QPushButton("Start Processing")
-        self.start_btn.setStyleSheet("background-color: #2196F3; color: white; border-radius: 8px; font-weight: bold; padding: 8px;")
+        self.start_btn.setStyleSheet(f"background-color: #2196F3; color: white; border-radius: {btn_radius}px; font-weight: bold; padding: {btn_padding}px; font-size: {btn_font_size}px;")
         self.back_btn = QPushButton("Back")
-        self.back_btn.setStyleSheet("background-color: #F5F5F5; color: #333333; border-radius: 8px; font-weight: bold; padding: 8px;")
+        self.back_btn.setStyleSheet(f"background-color: #F5F5F5; color: #333333; border-radius: {btn_radius}px; font-weight: bold; padding: {btn_padding}px; font-size: {btn_font_size}px;")
         self.start_btn.setEnabled(False)
 
         btn_layout.addWidget(self.load_btn)

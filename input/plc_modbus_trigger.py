@@ -30,7 +30,7 @@ class ModbusConfig:
     port: int = 502
     
     # RTU (Serial) settings
-    serial_port: str = "COM7"
+    serial_port: str = ""  # Let it be empty for manual entry or discovery
     baudrate: int = 9600
     parity: str = "E"  # N, E, O
     stopbits: int = 1

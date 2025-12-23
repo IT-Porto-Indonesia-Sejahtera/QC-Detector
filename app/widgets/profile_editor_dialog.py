@@ -7,13 +7,14 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, QDate
 from PySide6.QtGui import QIcon
+from app.utils.ui_scaling import UIScaling
 
 class ProfileEditorDialog(QDialog):
     def __init__(self, parent=None, profile_data=None):
         super().__init__(parent)
         self.setWindowTitle("Add/Edit Preset Profile")
         self.setModal(True)
-        self.resize(600, 700)
+        self.resize(UIScaling.scale(600), UIScaling.scale(700))
         self.setStyleSheet("""
             QDialog {
                 background-color: white;
@@ -46,21 +47,27 @@ class ProfileEditorDialog(QDialog):
         # Header
         header = QHBoxLayout()
         btn_back = QPushButton("❮")
-        btn_back.setFixedSize(40, 40)
-        btn_back.setStyleSheet("border: none; font-size: 24px; font-weight: bold;")
+        btn_back_size = UIScaling.scale(40)
+        btn_back_font_size = UIScaling.scale_font(24)
+        btn_back.setFixedSize(btn_back_size, btn_back_size)
+        btn_back.setStyleSheet(f"border: none; font-size: {btn_back_font_size}px; font-weight: bold;")
         btn_back.clicked.connect(self.reject)
         
         lbl_title = QLabel("Add/Edit Preset Profile")
-        lbl_title.setStyleSheet("font-size: 20px; font-weight: bold;")
+        title_font_size = UIScaling.scale_font(20)
+        lbl_title.setStyleSheet(f"font-size: {title_font_size}px; font-weight: bold;")
         lbl_title.setAlignment(Qt.AlignCenter)
         
         self.btn_save = QPushButton("Save")
-        self.btn_save.setFixedSize(80, 40)
-        self.btn_save.setStyleSheet("""
+        btn_save_w = UIScaling.scale(80)
+        btn_save_h = UIScaling.scale(40)
+        self.btn_save.setFixedSize(btn_save_w, btn_save_h)
+        self.btn_save.setStyleSheet(f"""
             background-color: #E0E0E0;
-            border-radius: 8px;
+            border-radius: {UIScaling.scale(8)}px;
             font-weight: bold;
             color: black;
+            font-size: {UIScaling.scale_font(14)}px;
         """)
         self.btn_save.clicked.connect(self.on_save)
         
@@ -77,7 +84,9 @@ class ProfileEditorDialog(QDialog):
         # Tag
         hbox_tag = QHBoxLayout()
         lbl_tag = QLabel("Tag")
-        lbl_tag.setFixedWidth(50)
+        lbl_w = UIScaling.scale(50)
+        lbl_tag.setFixedWidth(lbl_w)
+        lbl_tag.setStyleSheet(f"font-size: {UIScaling.scale_font(14)}px;")
         self.txt_tag = QLineEdit()
         self.txt_tag.setPlaceholderText("Shift X")
         hbox_tag.addWidget(lbl_tag)
@@ -87,7 +96,8 @@ class ProfileEditorDialog(QDialog):
         # Date
         hbox_date = QHBoxLayout()
         lbl_date = QLabel("Date")
-        lbl_date.setFixedWidth(50)
+        lbl_date.setFixedWidth(lbl_w)
+        lbl_date.setStyleSheet(f"font-size: {UIScaling.scale_font(14)}px;")
         self.date_edit = QDateEdit()
         self.date_edit.setCalendarPopup(True)
         self.date_edit.setDate(QDate.currentDate())
@@ -113,7 +123,7 @@ class ProfileEditorDialog(QDialog):
 
     def create_sku_row(self, index):
         container = QFrame()
-        container.setFixedHeight(120)
+        container.setFixedHeight(UIScaling.scale(120))
         container.setStyleSheet("background-color: transparent;")
         
         layout = QHBoxLayout(container)
@@ -123,8 +133,9 @@ class ProfileEditorDialog(QDialog):
         # Image Placeholder
         # Mocking the blank square
         img_placeholder = QLabel()
-        img_placeholder.setFixedSize(80, 80)
-        img_placeholder.setStyleSheet("background-color: #E0E0E0; border-radius: 8px;")
+        img_size = UIScaling.scale(80)
+        img_placeholder.setFixedSize(img_size, img_size)
+        img_placeholder.setStyleSheet(f"background-color: #E0E0E0; border-radius: {UIScaling.scale(8)}px;")
         layout.addWidget(img_placeholder)
         
         # Info Column
@@ -134,17 +145,21 @@ class ProfileEditorDialog(QDialog):
         # SKU Row
         sku_row = QHBoxLayout()
         lbl_sku = QLabel("SKU")
-        lbl_sku.setFixedWidth(40)
+        sku_lbl_w = UIScaling.scale(40)
+        lbl_sku.setFixedWidth(sku_lbl_w)
+        lbl_sku.setStyleSheet(f"font-size: {UIScaling.scale_font(13)}px;")
         
         # SKU Value Display (Disabled input or Label)
         txt_sku_val = QLineEdit()
         txt_sku_val.setReadOnly(True)
         txt_sku_val.setPlaceholderText("Select SKU first...")
-        txt_sku_val.setStyleSheet("background-color: #E0E0E0; border: none; padding: 5px; color: black;")
+        txt_sku_val.setStyleSheet(f"background-color: #E0E0E0; border: none; padding: {UIScaling.scale(5)}px; color: black; font-size: {UIScaling.scale_font(13)}px;")
         
         btn_select = QPushButton("select")
-        btn_select.setFixedSize(60, 30)
-        btn_select.setStyleSheet("background-color: #CCC; border-radius: 5px; font-weight: bold; color: black;")
+        btn_sel_w = UIScaling.scale(60)
+        btn_sel_h = UIScaling.scale(30)
+        btn_select.setFixedSize(btn_sel_w, btn_sel_h)
+        btn_select.setStyleSheet(f"background-color: #CCC; border-radius: {UIScaling.scale(5)}px; font-weight: bold; color: black; font-size: {UIScaling.scale_font(13)}px;")
         btn_select.clicked.connect(lambda _, idx=index: self.select_sku(idx))
         
         sku_row.addWidget(lbl_sku)
@@ -154,7 +169,8 @@ class ProfileEditorDialog(QDialog):
         # Team Row
         team_row = QHBoxLayout()
         lbl_team = QLabel("Team")
-        lbl_team.setFixedWidth(40)
+        lbl_team.setFixedWidth(sku_lbl_w)
+        lbl_team.setStyleSheet(f"font-size: {UIScaling.scale_font(13)}px;")
         
         cmb_team = QComboBox()
         cmb_team.addItems(["", "Team A", "Team B", "Team C", "Team D"])

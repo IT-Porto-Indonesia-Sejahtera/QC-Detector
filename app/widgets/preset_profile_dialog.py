@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, Signal
 from project_utilities.json_utility import JsonUtility
+from app.utils.ui_scaling import UIScaling
 
 PROFILES_FILE = os.path.join("output", "settings", "profiles.json")
 
@@ -20,7 +21,7 @@ class PresetProfileDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Select Preset Profile")
         self.setModal(True)
-        self.resize(500, 600)
+        self.resize(UIScaling.scale(500), UIScaling.scale(600))
         self.setStyleSheet("""
             QDialog {
                 background-color: white;
@@ -43,12 +44,15 @@ class PresetProfileDialog(QDialog):
         # Header
         header = QHBoxLayout()
         btn_back = QPushButton("❮")
-        btn_back.setFixedSize(40, 40)
-        btn_back.setStyleSheet("border: none; font-size: 24px; font-weight: bold;")
+        btn_back_size = UIScaling.scale(40)
+        btn_back_font_size = UIScaling.scale_font(24)
+        btn_back.setFixedSize(btn_back_size, btn_back_size)
+        btn_back.setStyleSheet(f"border: none; font-size: {btn_back_font_size}px; font-weight: bold;")
         btn_back.clicked.connect(self.reject)
         
         lbl_title = QLabel("Select Preset Profile")
-        lbl_title.setStyleSheet("font-size: 20px; font-weight: bold;")
+        title_font_size = UIScaling.scale_font(20)
+        lbl_title.setStyleSheet(f"font-size: {title_font_size}px; font-weight: bold;")
         lbl_title.setAlignment(Qt.AlignCenter)
         
         header.addWidget(btn_back)
@@ -77,18 +81,20 @@ class PresetProfileDialog(QDialog):
         
         # Floating Add Button (Centered at bottom)
         btn_add = QPushButton("+")
-        btn_add.setFixedSize(50, 50)
-        btn_add.setStyleSheet("""
-            QPushButton {
+        btn_add_size = UIScaling.scale(50)
+        btn_add_font_size = UIScaling.scale_font(30)
+        btn_add.setFixedSize(btn_add_size, btn_add_size)
+        btn_add.setStyleSheet(f"""
+            QPushButton {{
                 background-color: #2196F3;
                 color: white;
-                border-radius: 25px;
-                font-size: 30px;
+                border_radius: {btn_add_size // 2}px;
+                font-size: {btn_add_font_size}px;
                 font-weight: bold;
-            }
-            QPushButton:hover {
+            }}
+            QPushButton:hover {{
                 background-color: #1976D2;
-            }
+            }}
         """)
         btn_add.clicked.connect(self.add_profile)
         
@@ -154,13 +160,14 @@ class PresetProfileDialog(QDialog):
 
     def create_profile_card(self, profile):
         card = QFrame()
-        card.setStyleSheet("""
-            QFrame {
+        card_radius = UIScaling.scale(10)
+        card.setStyleSheet(f"""
+            QFrame {{
                 background-color: #E0E0E0;
-                border-radius: 10px;
-            }
+                border-radius: {card_radius}px;
+            }}
         """)
-        card.setFixedHeight(100) # Or wrap content
+        card.setFixedHeight(UIScaling.scale(100)) # Or wrap content
         
         card_layout = QHBoxLayout(card)
         card_layout.setContentsMargins(15, 10, 15, 10)
@@ -176,13 +183,15 @@ class PresetProfileDialog(QDialog):
         info_layout.setSpacing(2)
         
         name = QLabel(profile.get("name", "Unknown"))
-        name.setStyleSheet("font-weight: bold; font-size: 16px; color: black;")
+        name_font_size = UIScaling.scale_font(16)
+        name.setStyleSheet(f"font-weight: bold; font-size: {name_font_size}px; color: black;")
         
         sub = QLabel(profile.get("sub_label", ""))
-        sub.setStyleSheet("color: black; font-size: 14px;") # Changed from #555
+        sub_font_size = UIScaling.scale_font(14)
+        sub.setStyleSheet(f"color: black; font-size: {sub_font_size}px;") # Changed from #555
         
         sku = QLabel(profile.get("sku_label", ""))
-        sku.setStyleSheet("color: black; font-size: 14px;") # Changed from #555
+        sku.setStyleSheet(f"color: black; font-size: {sub_font_size}px;") # Changed from #555
         
         info_layout.addWidget(name)
         info_layout.addWidget(sub)
@@ -201,13 +210,15 @@ class PresetProfileDialog(QDialog):
         actions_layout.addStretch()
         
         btn_edit = QPushButton("✏️") # Edit Icon
-        btn_edit.setFixedSize(30, 30)
-        btn_edit.setStyleSheet("border: none; font-size: 16px;")
+        btn_edit_size = UIScaling.scale(30)
+        btn_edit_font_size = UIScaling.scale_font(16)
+        btn_edit.setFixedSize(btn_edit_size, btn_edit_size)
+        btn_edit.setStyleSheet(f"border: none; font-size: {btn_edit_font_size}px;")
         btn_edit.clicked.connect(lambda _, p=profile: self.edit_profile(p))
         
         btn_del = QPushButton("🗑️") # Delete Icon
-        btn_del.setFixedSize(30, 30)
-        btn_del.setStyleSheet("border: none; font-size: 16px;")
+        btn_del.setFixedSize(btn_edit_size, btn_edit_size)
+        btn_del.setStyleSheet(f"border: none; font-size: {btn_edit_font_size}px;")
         btn_del.clicked.connect(lambda _, p=profile: self.delete_profile(p))
         
         actions_layout.addWidget(btn_edit)

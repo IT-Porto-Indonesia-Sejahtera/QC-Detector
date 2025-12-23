@@ -6,6 +6,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, Signal
 from project_utilities.json_utility import JsonUtility
+from app.utils.ui_scaling import UIScaling
 
 SKUS_FILE = os.path.join("output", "settings", "skus.json")
 
@@ -16,7 +17,7 @@ class SkuSelectorDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Select SKU")
         self.setModal(True)
-        self.resize(500, 600)
+        self.resize(UIScaling.scale(500), UIScaling.scale(600))
         self.setStyleSheet("""
             QDialog {
                 background-color: white;
@@ -48,12 +49,15 @@ class SkuSelectorDialog(QDialog):
         # Header
         header = QHBoxLayout()
         btn_back = QPushButton("❮")
-        btn_back.setFixedSize(40, 40)
-        btn_back.setStyleSheet("border: none; font-size: 24px; font-weight: bold; color: black;")
+        btn_back_size = UIScaling.scale(40)
+        btn_back_font_size = UIScaling.scale_font(24)
+        btn_back.setFixedSize(btn_back_size, btn_back_size)
+        btn_back.setStyleSheet(f"border: none; font-size: {btn_back_font_size}px; font-weight: bold; color: black;")
         btn_back.clicked.connect(self.reject)
         
         lbl_title = QLabel("Select SKU")
-        lbl_title.setStyleSheet("font-size: 20px; font-weight: bold; color: black;")
+        title_font_size = UIScaling.scale_font(20)
+        lbl_title.setStyleSheet(f"font-size: {title_font_size}px; font-weight: bold; color: black;")
         lbl_title.setAlignment(Qt.AlignCenter)
         
         header.addWidget(btn_back)
@@ -135,12 +139,14 @@ class SkuSelectorDialog(QDialog):
     def create_sku_card(self, sku):
         # Card Frame
         card = QFrame()
-        card.setFixedSize(200, 150) # Approx size from ratio
-        card.setStyleSheet("""
-            QFrame {
+        card_w = UIScaling.scale(200)
+        card_h = UIScaling.scale(150)
+        card.setFixedSize(card_w, card_h) # Approx size from ratio
+        card.setStyleSheet(f"""
+            QFrame {{
                 background-color: #E0E0E0;
-                border-radius: 10px;
-            }
+                border-radius: {UIScaling.scale(10)}px;
+            }}
         """)
         
         # Layout for overlay
@@ -152,7 +158,8 @@ class SkuSelectorDialog(QDialog):
         layout.setAlignment(Qt.AlignCenter)
         
         code_lbl = QLabel(sku.get("code", "UNKNOWN"))
-        code_lbl.setStyleSheet("font-size: 24px; font-weight: 900; color: black;")
+        code_font_size = UIScaling.scale_font(24)
+        code_lbl.setStyleSheet(f"font-size: {code_font_size}px; font-weight: 900; color: black;")
         code_lbl.setAlignment(Qt.AlignCenter)
         
         layout.addWidget(code_lbl)

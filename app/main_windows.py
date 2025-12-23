@@ -50,6 +50,11 @@ class MainWindow(QWidget):
 
 
 def run_app():
+    # Enable High DPI scaling and set rounding policy for fractional scaling
+    from PySide6.QtCore import Qt
+    from PySide6.QtGui import QGuiApplication
+    QGuiApplication.setHighDpiScaleFactorRoundingPolicy(Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
+
     app = QApplication(sys.argv)
     window = MainWindow()
     window.showMaximized()

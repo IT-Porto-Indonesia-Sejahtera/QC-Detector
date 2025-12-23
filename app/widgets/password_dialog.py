@@ -3,6 +3,7 @@ from PySide6.QtWidgets import QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPush
 from PySide6.QtCore import Qt, Signal
 from app.widgets.base_overlay import BaseOverlay
 from app.utils.theme_manager import ThemeManager
+from app.utils.ui_scaling import UIScaling
 
 class PasswordDialog(BaseOverlay):
     """Password overlay for profile operations"""
@@ -16,11 +17,22 @@ class PasswordDialog(BaseOverlay):
         self.password_type = password_type  # "preset" or "settings"
         
         # Style content box
-        self.content_box.setFixedSize(450, 280)
+        scaled_w = UIScaling.scale(450)
+        scaled_h = UIScaling.scale(280)
+        
+        # Ensure it doesn't exceed 90% of screen
+        screen_size = UIScaling.get_screen_size()
+        max_w = int(screen_size.width() * 0.9)
+        max_h = int(screen_size.height() * 0.9)
+        
+        self.content_box.setMinimumSize(UIScaling.scale(300), UIScaling.scale(200))
+        self.content_box.setMaximumSize(min(scaled_w, max_w), min(scaled_h, max_h))
+        self.content_box.resize(min(scaled_w, max_w), min(scaled_h, max_h))
+
         self.content_box.setStyleSheet(f"""
             QFrame {{
                 background-color: {self.theme['bg_panel']}; 
-                border-radius: 15px;
+                border-radius: {UIScaling.scale(15)}px;
             }}
         """)
         
@@ -32,7 +44,8 @@ class PasswordDialog(BaseOverlay):
         
         # Title
         title = QLabel("Enter Password")
-        title.setStyleSheet(f"font-size: 22px; font-weight: bold; color: {self.theme['text_main']};")
+        title_font_size = UIScaling.scale_font(22)
+        title.setStyleSheet(f"font-size: {title_font_size}px; font-weight: bold; color: {self.theme['text_main']};")
         title.setAlignment(Qt.AlignCenter)
         layout.addWidget(title)
         
@@ -40,12 +53,15 @@ class PasswordDialog(BaseOverlay):
         self.password_input = QLineEdit()
         self.password_input.setEchoMode(QLineEdit.Password)
         self.password_input.setPlaceholderText("Password")
+        input_padding = UIScaling.scale(12)
+        input_font_size = UIScaling.scale_font(16)
+        input_radius = UIScaling.scale(8)
         self.password_input.setStyleSheet(f"""
             QLineEdit {{
-                padding: 12px;
+                padding: {input_padding}px;
                 border: 1px solid {self.theme['border']};
-                border-radius: 8px;
-                font-size: 16px;
+                border-radius: {input_radius}px;
+                font-size: {input_font_size}px;
                 background-color: white;
                 color: #333333;
             }}
@@ -56,37 +72,43 @@ class PasswordDialog(BaseOverlay):
         # Buttons
         btn_layout = QHBoxLayout()
         
+        btn_h = UIScaling.scale(48)
+        btn_font_size = UIScaling.scale_font(16)
+        btn_radius = UIScaling.scale(8)
+        btn_padding_v = UIScaling.scale(12)
+        btn_padding_h = UIScaling.scale(24)
+
         btn_cancel = QPushButton("Cancel")
-        btn_cancel.setFixedHeight(48)
-        btn_cancel.setStyleSheet("""
-            QPushButton {
+        btn_cancel.setFixedHeight(btn_h)
+        btn_cancel.setStyleSheet(f"""
+            QPushButton {{
                 background-color: #F5F5F5;
                 color: #333333;
-                border-radius: 8px;
-                padding: 12px 24px;
+                border-radius: {btn_radius}px;
+                padding: {btn_padding_v}px {btn_padding_h}px;
                 font-weight: bold;
-                font-size: 16px;
-            }
-            QPushButton:hover {
+                font-size: {btn_font_size}px;
+            }}
+            QPushButton:hover {{
                 background-color: #E8E8E8;
-            }
+            }}
         """)
         btn_cancel.clicked.connect(self.cancel)
         
         btn_ok = QPushButton("OK")
-        btn_ok.setFixedHeight(48)
-        btn_ok.setStyleSheet("""
-            QPushButton {
+        btn_ok.setFixedHeight(btn_h)
+        btn_ok.setStyleSheet(f"""
+            QPushButton {{
                 background-color: #2196F3;
                 color: white;
-                border-radius: 8px;
-                padding: 12px 24px;
+                border-radius: {btn_radius}px;
+                padding: {btn_padding_v}px {btn_padding_h}px;
                 font-weight: bold;
-                font-size: 16px;
-            }
-            QPushButton:hover {
+                font-size: {btn_font_size}px;
+            }}
+            QPushButton:hover {{
                 background-color: #1976D2;
-            }
+            }}
         """)
         btn_ok.clicked.connect(self.verify_password)
         
@@ -99,7 +121,8 @@ class PasswordDialog(BaseOverlay):
             hint = QLabel("Default password: admin")
         else:
             hint = QLabel("Default password: settings")
-        hint.setStyleSheet(f"color: {self.theme['text_sub']}; font-size: 14px;")
+        hint_font_size = UIScaling.scale_font(14)
+        hint.setStyleSheet(f"color: {self.theme['text_sub']}; font-size: {hint_font_size}px;")
         hint.setAlignment(Qt.AlignCenter)
         layout.addWidget(hint)
         

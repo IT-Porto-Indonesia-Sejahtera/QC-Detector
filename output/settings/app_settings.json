@@ -1,5 +1,5 @@
 {
-    "camera_index": "rtsp://admin:Porto.cctv@192.168.1.64",
+    "camera_index": "ip",
     "mm_per_px": 0.2123459,
     "sensor_delay": 0.2123459,
     "fetch_status": "success",
@@ -11,5 +11,24 @@
         "results": "C://User/test/asd/"
     },
     "ip_camera_username": "admin",
-    "ip_camera_password": "Porto.cctv"
+    "ip_camera_password": "Porto.cctv",
+    "active_profile_id": "2ddd15e6-ce5d-48e0-a68b-f706b1a70c44",
+    "ip_camera_presets": [
+        {
+            "id": "ip-preset-1",
+            "name": "Office Camera",
+            "protocol": "rtsp",
+            "address": "192.168.1.64",
+            "port": "554",
+            "path": "",
+            "username": "admin",
+            "password": "Porto.cctv",
+            "transport": "tcp"
+        }
+    ],
+    "active_ip_preset_id": "ip-preset-1",
+    "sensor_port": "",
+    "plc_port": "",
+    "plc_trigger_reg": 12,
+    "plc_result_reg": 13
 }

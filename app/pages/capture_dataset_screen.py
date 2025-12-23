@@ -2,12 +2,17 @@ import cv2
 import os
 import time
 import numpy as np
+import threading
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QSizePolicy, QFrame, QComboBox
 )
-from PySide6.QtCore import Qt, QTimer, Signal, QMetaObject, Q_ARG, Qt as QtCore_Qt
+from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtGui import QPixmap, QImage
+from app.utils.camera_utils import open_video_capture
+from app.utils.capture_thread import VideoCaptureThread
+from project_utilities.json_utility import JsonUtility
+from app.utils.ui_scaling import UIScaling
 
 # Import PLC Modbus trigger
 try:
@@ -21,6 +26,9 @@ class CaptureDatasetScreen(QWidget):
         super().__init__(parent)
         self.parent_widget = parent
         self.setWindowTitle("Capture Dataset")
+        
+        # Load settings
+        self.settings = JsonUtility.load_from_json(os.path.join("output", "settings", "app_settings.json")) or {}
         
         # Ensure output directory exists
         self.output_dir = os.path.join("output", "dataset")
@@ -38,18 +46,20 @@ class CaptureDatasetScreen(QWidget):
 
         # Camera Selector
         self.cam_select = QComboBox()
-        self.cam_select.setFixedWidth(200)
+        self.cam_select.setFixedWidth(UIScaling.scale(200))
         self.cam_select.addItems(self.detect_cameras())
         self.cam_select.currentIndexChanged.connect(self.change_camera)
-        self.cam_select.setStyleSheet("""
-            QComboBox {
-                padding: 5px;
+        
+        cam_select_padding = UIScaling.scale(5)
+        self.cam_select.setStyleSheet(f"""
+            QComboBox {{
+                padding: {cam_select_padding}px;
                 border: 1px solid #555;
                 border-radius: 5px;
                 background: #333;
                 color: white;
-            }
-            QComboBox::drop-down { border: 0px; }
+            }}
+            QComboBox::drop-down {{ border: 0px; }}
         """)
 
         # -----------------------------------------------------------------
@@ -65,16 +75,18 @@ class CaptureDatasetScreen(QWidget):
 
         # Back Button
         self.back_button = QPushButton("←")
-        self.back_button.setFixedSize(40, 40)
-        self.back_button.setStyleSheet("""
-            QPushButton {
+        back_btn_size = UIScaling.scale(40)
+        back_btn_font_size = UIScaling.scale_font(18)
+        self.back_button.setFixedSize(back_btn_size, back_btn_size)
+        self.back_button.setStyleSheet(f"""
+            QPushButton {{
                 background: #444;
                 color: white;
                 font-weight: bold;
-                border-radius: 20px;
-                font-size: 18px;
-            }
-            QPushButton:hover { background: #666; }
+                border-radius: {back_btn_size // 2}px;
+                font-size: {back_btn_font_size}px;
+            }}
+            QPushButton:hover {{ background: #666; }}
         """)
         self.back_button.clicked.connect(self.go_back)
         self.back_button.setToolTip("Back to previous screen")
@@ -91,26 +103,27 @@ class CaptureDatasetScreen(QWidget):
 
         # --- BOTTOM AREA ---
         bottom_container = QFrame()
-        bottom_container.setFixedHeight(100)
+        bottom_container.setMinimumHeight(UIScaling.scale(100))
         bottom_container.setStyleSheet("background: #1A1A1A; border-radius: 10px;")
         
         bottom_layout = QHBoxLayout(bottom_container)
         bottom_layout.setContentsMargins(15, 15, 15, 15)
-        bottom_layout.setSpacing(20)
+        bottom_layout.setSpacing(UIScaling.scale(20))
 
         # Capture Button
         self.capture_btn = QPushButton("📸 Capture Image")
-        self.capture_btn.setFixedHeight(60)
-        self.capture_btn.setStyleSheet("""
-            QPushButton {
+        self.capture_btn.setMinimumHeight(UIScaling.scale(60))
+        capture_btn_font_size = UIScaling.scale_font(20)
+        self.capture_btn.setStyleSheet(f"""
+            QPushButton {{
                 background: #007AFF;
                 color: white;
                 font-weight: bold;
                 border-radius: 10px;
-                font-size: 20px;
-            }
-            QPushButton:hover { background: #0056b3; }
-            QPushButton:pressed { background: #004080; }
+                font-size: {capture_btn_font_size}px;
+            }}
+            QPushButton:hover {{ background: #0056b3; }}
+            QPushButton:pressed {{ background: #004080; }}
         """)
         self.capture_btn.clicked.connect(self.capture_image)
         
@@ -119,12 +132,8 @@ class CaptureDatasetScreen(QWidget):
         main_layout.addWidget(bottom_container)
         self.setLayout(main_layout)
 
-        # -----------------------------------------------------------------
         # Camera system
-        # -----------------------------------------------------------------
-        self.cap = None
-        self.timer = QTimer(self)
-        self.timer.timeout.connect(self.update_frame)
+        self.cap_thread = None
         self.live_frame = None
         
         # -----------------------------------------------------------------
@@ -132,7 +141,8 @@ class CaptureDatasetScreen(QWidget):
         # -----------------------------------------------------------------
         self.plc_trigger = None
         self.plc_status_label = QLabel("PLC: Not connected")
-        self.plc_status_label.setStyleSheet("color: #888; font-size: 12px;")
+        plc_status_font_size = UIScaling.scale_font(12)
+        self.plc_status_label.setStyleSheet(f"color: #888; font-size: {plc_status_font_size}px;")
         top_bar.addWidget(self.plc_status_label)
         
         self._init_plc_trigger()
@@ -147,13 +157,13 @@ class CaptureDatasetScreen(QWidget):
         try:
             config = ModbusConfig(
                 connection_type="rtu",
-                serial_port="COM7",
+                serial_port=self.settings.get("plc_port", ""),
                 baudrate=9600,
                 parity="E",
                 stopbits=1,
                 bytesize=8,
                 slave_id=1,
-                register_address=12,
+                register_address=int(self.settings.get("plc_trigger_reg", 12)),
                 register_type="holding",
                 poll_interval_ms=100
             )
@@ -163,25 +173,20 @@ class CaptureDatasetScreen(QWidget):
             self.plc_trigger.on_value_update = self._on_plc_value_update
             self.plc_trigger.on_connection_change = self._on_plc_connection_change
             
-            print("[PLC] Modbus trigger initialized")
-            
+            print("[PLC] Modbus trigger initialized (connection deferred)")
         except Exception as e:
             print(f"[PLC] Failed to initialize: {e}")
             self.plc_status_label.setText(f"PLC: Init error")
     
     def _on_plc_trigger(self):
-        """Called when PLC trigger fires (value changed 0 -> 1)"""
+        """Called when PLC trigger fires"""
         print("[PLC] TRIGGER FIRED! Capturing image...")
-        # Use QTimer to call capture_image on the main thread
         QTimer.singleShot(0, self.capture_image)
     
     def _on_plc_value_update(self, value):
-        """Called when PLC register value is read"""
-        print(f"[PLC] Register value: {value}")
+        pass
     
     def _on_plc_connection_change(self, connected, message):
-        """Called when PLC connection status changes"""
-        print(f"[PLC] Connection: {message}")
         if connected:
             self.plc_status_label.setText(f"PLC: Connected")
             self.plc_status_label.setStyleSheet("color: #0f0; font-size: 12px;")
@@ -190,182 +195,113 @@ class CaptureDatasetScreen(QWidget):
             self.plc_status_label.setStyleSheet("color: #f00; font-size: 12px;")
 
     def detect_cameras(self, max_test=3):
-        """Detect available cameras with timeout to prevent freezing"""
+        """Detect available cameras"""
         cams = []
         for i in range(max_test):
             try:
-                # Use DirectShow on Windows for faster detection
-                cap = cv2.VideoCapture(i, cv2.CAP_DSHOW)
-                cap.set(cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, 1000)
-                if cap.isOpened():
+                cap = open_video_capture(i, timeout_ms=500)
+                if cap and cap.isOpened():
                     ret, _ = cap.read()
                     cap.release()
-                    if ret:
-                        cams.append(str(i))
-                else:
+                    if ret: cams.append(str(i))
+                elif cap:
                     cap.release()
             except Exception:
                 continue
+        
+        if self.settings.get("ip_camera_presets"):
+            cams.append("IP Camera")
+            
         return cams if cams else ["No cameras found"]
 
     def change_camera(self, index=None):
-        try:
-            if self.cap and self.cap.isOpened():
-                self.cap.release()
-        except Exception:
-            pass
-        try:
-            cam_text = self.cam_select.currentText() or "0"
-            cam_idx = int(cam_text)
-        except Exception:
-            cam_idx = 0
-        self.cap = cv2.VideoCapture(cam_idx)
+        self.stop_camera()
+        self.start_camera()
 
-    # ------------------------------------------------------------------
-    # Lifecycle
-    # ------------------------------------------------------------------
+    def start_camera(self):
+        if self.cap_thread is not None:
+            return
+
+        cam_text = self.cam_select.currentText() if self.cam_select.count() > 0 else "0"
+        try:
+            if cam_text == "IP Camera":
+                presets = self.settings.get("ip_camera_presets", [])
+                active_id = self.settings.get("active_ip_preset_id")
+                cam_source = next((p for p in presets if p["id"] == active_id), presets[0] if presets else 0)
+            else:
+                cam_source = int(cam_text)
+        except Exception:
+            cam_source = 0
+
+        is_ip = (cam_text == "IP Camera")
+        self.cap_thread = VideoCaptureThread(cam_source, is_ip)
+        self.cap_thread.frame_ready.connect(self.on_frame_received)
+        self.cap_thread.start()
+        
+        # Start PLC trigger in background
+        if self.plc_trigger:
+            threading.Thread(target=self.plc_trigger.start, daemon=True).start()
+
+    def on_frame_received(self, frame):
+        self.live_frame = frame.copy()
+        pix = self.cv2_to_pixmap(self.live_frame, self.big_label.width(), self.big_label.height())
+        self.big_label.setPixmap(pix)
+
     def showEvent(self, event):
-        """Reinitialize camera whenever this screen becomes visible."""
-        # Refresh camera list
+        """Refresh camera list and start."""
         current_cam = self.cam_select.currentText()
         self.cam_select.blockSignals(True)
         self.cam_select.clear()
         self.cam_select.addItems(self.detect_cameras())
         self.cam_select.blockSignals(False)
         
-        # Restore selection if possible, else default
         index = self.cam_select.findText(current_cam)
         if index >= 0:
             self.cam_select.setCurrentIndex(index)
         
-        # guard: ensure we have at least one camera string
-        cam_text = self.cam_select.currentText() if self.cam_select.count() > 0 else "0"
-        try:
-            cam_index = int(cam_text)
-        except Exception:
-            cam_index = 0
-
-        if self.cap is not None and self.cap.isOpened():
-            try:
-                self.cap.release()
-            except Exception:
-                pass
-        self.cap = cv2.VideoCapture(cam_index)
-        self.timer.start(30)
-        
-        # Start PLC trigger
-        if self.plc_trigger:
-            print("[PLC] Starting Modbus polling...")
-            self.plc_trigger.start()
-        
+        self.start_camera()
         super().showEvent(event)
 
-    def hideEvent(self, event):
-        """Ensure camera and PLC are released when widget is hidden."""
-        # Stop PLC trigger
-        if self.plc_trigger:
-            print("[PLC] Stopping Modbus polling...")
-            self.plc_trigger.stop()
+    def stop_camera(self):
+        if self.cap_thread:
+            self.cap_thread.stop()
+            self.cap_thread = None
         
-        try:
-            if self.timer.isActive():
-                self.timer.stop()
-        except Exception:
-            pass
-        try:
-            if self.cap and self.cap.isOpened():
-                self.cap.release()
-        except Exception:
-            pass
+        if self.plc_trigger:
+            self.plc_trigger.stop()
+
+    def hideEvent(self, event):
+        self.stop_camera()
         super().hideEvent(event)
 
     def closeEvent(self, event):
-        """Proper cleanup."""
-        # Stop and disconnect PLC trigger
-        if self.plc_trigger:
-            self.plc_trigger.disconnect()
-        
-        try:
-            if self.timer.isActive():
-                self.timer.stop()
-        except Exception:
-            pass
-        try:
-            if self.cap and self.cap.isOpened():
-                self.cap.release()
-        except Exception:
-            pass
+        self.stop_camera()
         super().closeEvent(event)
 
     def go_back(self):
-        # Stop PLC trigger
-        if self.plc_trigger:
-            self.plc_trigger.stop()
-        
-        try:
-            if self.timer.isActive():
-                self.timer.stop()
-        except Exception:
-            pass
-        try:
-            if self.cap and self.cap.isOpened():
-                self.cap.release()
-        except Exception:
-            pass
+        self.stop_camera()
         if self.parent_widget:
             self.parent_widget.go_back()
 
-    # ------------------------------------------------------------------
-    # Frame conversion
-    # ------------------------------------------------------------------
     def cv2_to_pixmap(self, img, target_width, target_height):
-        if img is None:
+        if img is None: return QPixmap()
+        try:
+            img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+            h, w, _ = img_rgb.shape
+            scale = min(max(1e-6, target_width / w), max(1e-6, target_height / h))
+            new_w, new_h = int(w * scale), int(h * scale)
+            if new_w == 0 or new_h == 0: return QPixmap()
+            resized = cv2.resize(img_rgb, (new_w, new_h), interpolation=cv2.INTER_AREA)
+            qimg = QImage(resized.data, new_w, new_h, 3 * new_w, QImage.Format_RGB888)
+            return QPixmap.fromImage(qimg.copy())
+        except Exception:
             return QPixmap()
-
-        img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        h, w, _ = img_rgb.shape
-        scale = min(max(1e-6, target_width / w), max(1e-6, target_height / h))
-        new_w, new_h = int(w * scale), int(h * scale)
-        if new_w == 0 or new_h == 0:
-            return QPixmap()
-
-        resized = cv2.resize(img_rgb, (new_w, new_h), interpolation=cv2.INTER_AREA)
-
-        canvas = np.zeros((target_height, target_width, 3), dtype=np.uint8)
-        x_offset = (target_width - new_w) // 2
-        y_offset = (target_height - new_h) // 2
-        canvas[y_offset:y_offset+new_h, x_offset:x_offset+new_w] = resized
-
-        qimg = QImage(canvas.data, target_width, target_height, 3 * target_width, QImage.Format_RGB888)
-        qimg_copy = qimg.copy()
-        return QPixmap.fromImage(qimg_copy)
-
-    # ------------------------------------------------------------------
-    # Main functions
-    # ------------------------------------------------------------------
-    def update_frame(self):
-        if not self.cap or not self.cap.isOpened():
-            return
-
-        ret, frame = self.cap.read()
-        if not ret or frame is None:
-            return
-
-        self.live_frame = frame.copy()
-        pix = self.cv2_to_pixmap(self.live_frame, self.big_label.width(), self.big_label.height())
-        self.big_label.setPixmap(pix)
 
     def capture_image(self):
-        if self.live_frame is None:
-            return
-
+        if self.live_frame is None: return
         timestamp = int(time.time() * 1000)
         filename = f"dataset_{timestamp}.jpg"
         filepath = os.path.join(self.output_dir, filename)
-        
         cv2.imwrite(filepath, self.live_frame)
-        print(f"[INFO] Saved image to {filepath}")
-        
-        # Optional: Flash effect or feedback
         self.capture_btn.setText("Saved!")
         QTimer.singleShot(1000, lambda: self.capture_btn.setText("📸 Capture Image"))

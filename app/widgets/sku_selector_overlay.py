@@ -9,6 +9,7 @@ from project_utilities.json_utility import JsonUtility
 from app.widgets.base_overlay import BaseOverlay
 
 from app.utils.theme_manager import ThemeManager
+from app.utils.ui_scaling import UIScaling
 
 SKUS_FILE = os.path.join("output", "settings", "skus.json")
 
@@ -19,11 +20,22 @@ class SkuSelectorOverlay(BaseOverlay):
         super().__init__(parent)
         self.theme = ThemeManager.get_colors()
         
-        self.content_box.setFixedSize(500, 600)
+        scaled_w = UIScaling.scale(500)
+        scaled_h = UIScaling.scale(600)
+        
+        # Ensure it doesn't exceed 90% of screen
+        screen_size = UIScaling.get_screen_size()
+        max_w = int(screen_size.width() * 0.9)
+        max_h = int(screen_size.height() * 0.9)
+        
+        self.content_box.setMinimumSize(UIScaling.scale(300), UIScaling.scale(300))
+        self.content_box.setMaximumSize(min(scaled_w, max_w), min(scaled_h, max_h))
+        self.content_box.resize(min(scaled_w, max_w), min(scaled_h, max_h))
+
         self.content_box.setStyleSheet(f"""
             QFrame {{
                 background-color: {self.theme['bg_panel']}; 
-                border-radius: 15px;
+                border-radius: {UIScaling.scale(15)}px;
             }}
         """)
         
@@ -40,12 +52,15 @@ class SkuSelectorOverlay(BaseOverlay):
         # Header
         header = QHBoxLayout()
         btn_back = QPushButton("❮")
-        btn_back.setFixedSize(60, 60)
-        btn_back.setStyleSheet(f"border: none; font-size: 24px; font-weight: bold; color: {self.theme['text_main']};")
+        btn_back_size = UIScaling.scale(60)
+        btn_back_font_size = UIScaling.scale_font(24)
+        btn_back.setFixedSize(btn_back_size, btn_back_size)
+        btn_back.setStyleSheet(f"border: none; font-size: {btn_back_font_size}px; font-weight: bold; color: {self.theme['text_main']};")
         btn_back.clicked.connect(self.close_overlay)
         
         lbl_title = QLabel("Select SKU")
-        lbl_title.setStyleSheet(f"font-size: 20px; font-weight: bold; color: {self.theme['text_main']};")
+        title_font_size = UIScaling.scale_font(20)
+        lbl_title.setStyleSheet(f"font-size: {title_font_size}px; font-weight: bold; color: {self.theme['text_main']};")
         lbl_title.setAlignment(Qt.AlignCenter)
         
         header.addWidget(btn_back)
@@ -58,12 +73,15 @@ class SkuSelectorOverlay(BaseOverlay):
         self.txt_search = QLineEdit()
         self.txt_search.setPlaceholderText("Search..")
         self.txt_search.textChanged.connect(self.filter_skus)
+        search_padding = UIScaling.scale(10)
+        search_font_size = UIScaling.scale_font(16)
+        search_radius = UIScaling.scale(8)
         self.txt_search.setStyleSheet(f"""
-            padding: 10px;
+            padding: {search_padding}px;
             border: 1px solid {self.theme['border']};
-            border-radius: 8px;
+            border-radius: {search_radius}px;
             background-color: {self.theme['input_bg']};
-            font-size: 16px;
+            font-size: {search_font_size}px;
             color: {self.theme['input_text']};
         """)
         
@@ -126,11 +144,13 @@ class SkuSelectorOverlay(BaseOverlay):
 
     def create_sku_card(self, sku):
         card = QFrame()
-        card.setFixedSize(200, 150)
+        card_w = UIScaling.scale(200)
+        card_h = UIScaling.scale(150)
+        card.setFixedSize(card_w, card_h)
         card.setStyleSheet(f"""
             QFrame {{
                 background-color: {self.theme['bg_card']};
-                border-radius: 10px;
+                border-radius: {UIScaling.scale(10)}px;
             }}
         """)
         
@@ -138,7 +158,8 @@ class SkuSelectorOverlay(BaseOverlay):
         layout.setAlignment(Qt.AlignCenter)
         
         code_lbl = QLabel(sku.get("code", "UNKNOWN"))
-        code_lbl.setStyleSheet(f"font-size: 24px; font-weight: 900; color: {self.theme['text_main']};")
+        code_font_size = UIScaling.scale_font(24)
+        code_lbl.setStyleSheet(f"font-size: {code_font_size}px; font-weight: 900; color: {self.theme['text_main']};")
         code_lbl.setAlignment(Qt.AlignCenter)
         
         layout.addWidget(code_lbl)

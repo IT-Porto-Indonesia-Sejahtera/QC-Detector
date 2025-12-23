@@ -20,7 +20,7 @@ from dataclasses import dataclass
 @dataclass
 class SensorConfig:
     """Configuration for sensor trigger"""
-    port: str = "COM6"  # COM port (e.g., "COM3")
+    port: str = ""  # Empty by default to trigger auto-detection or scanning
     baud_rate: int = 115200  # ESP32 default
     trigger_threshold_cm: float = 30.0  # Trigger when distance < this
     cooldown_seconds: float = 2.0  # Minimum time between triggers

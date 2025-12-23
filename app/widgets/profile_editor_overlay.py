@@ -6,8 +6,8 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, QDate, Signal
 from app.widgets.base_overlay import BaseOverlay
-
 from app.utils.theme_manager import ThemeManager
+from app.utils.ui_scaling import UIScaling
 
 class ProfileEditorOverlay(BaseOverlay):
     data_saved = Signal(dict) # Emits the updated profile data
@@ -16,11 +16,23 @@ class ProfileEditorOverlay(BaseOverlay):
         super().__init__(parent)
         self.theme = ThemeManager.get_colors()
         
-        self.content_box.setFixedSize(600, 700)
+        # Make content box responsive
+        scaled_w = UIScaling.scale(600)
+        scaled_h = UIScaling.scale(700)
+        
+        # Ensure it doesn't exceed 90% of screen
+        screen_size = UIScaling.get_screen_size()
+        max_w = int(screen_size.width() * 0.9)
+        max_h = int(screen_size.height() * 0.9)
+        
+        self.content_box.setMinimumSize(UIScaling.scale(400), UIScaling.scale(400))
+        self.content_box.setMaximumSize(min(scaled_w, max_w), min(scaled_h, max_h))
+        self.content_box.resize(min(scaled_w, max_w), min(scaled_h, max_h))
+
         self.content_box.setStyleSheet(f"""
             QFrame {{
                 background-color: {self.theme['bg_panel']}; 
-                border-radius: 15px;
+                border-radius: {UIScaling.scale(15)}px;
             }}
         """)
         
@@ -37,21 +49,27 @@ class ProfileEditorOverlay(BaseOverlay):
         # Header
         header = QHBoxLayout()
         btn_back = QPushButton("❮")
-        btn_back.setFixedSize(60, 60)
-        btn_back.setStyleSheet(f"border: none; font-size: 24px; font-weight: bold; color: {self.theme['text_main']};")
+        btn_back_size = UIScaling.scale(60)
+        btn_back_font_size = UIScaling.scale_font(24)
+        btn_back.setFixedSize(btn_back_size, btn_back_size)
+        btn_back.setStyleSheet(f"border: none; font-size: {btn_back_font_size}px; font-weight: bold; color: {self.theme['text_main']};")
         btn_back.clicked.connect(self.close_overlay)
         
         lbl_title = QLabel("Add/Edit Preset Profile")
-        lbl_title.setStyleSheet(f"font-size: 20px; font-weight: bold; color: {self.theme['text_main']};")
+        title_font_size = UIScaling.scale_font(20)
+        lbl_title.setStyleSheet(f"font-size: {title_font_size}px; font-weight: bold; color: {self.theme['text_main']};")
         lbl_title.setAlignment(Qt.AlignCenter)
         
         self.btn_save = QPushButton("Save")
-        self.btn_save.setFixedSize(100, 50)
+        btn_save_w = UIScaling.scale(100)
+        btn_save_h = UIScaling.scale(50)
+        self.btn_save.setFixedSize(btn_save_w, btn_save_h)
         self.btn_save.setStyleSheet(f"""
             background-color: {self.theme['btn_bg']};
-            border-radius: 8px;
+            border-radius: {UIScaling.scale(8)}px;
             font-weight: bold;
             color: {self.theme['btn_text']};
+            font-size: {UIScaling.scale_font(16)}px;
         """)
         self.btn_save.clicked.connect(self.on_save)
         
@@ -66,23 +84,27 @@ class ProfileEditorOverlay(BaseOverlay):
         form_layout.setSpacing(10)
         
         # Style Inputs - Enhanced with proper dropdown and calendar styling
+        input_padding = UIScaling.scale(8)
+        input_radius = UIScaling.scale(8)
+        input_font_size = UIScaling.scale_font(14)
         input_style = f"""
             QLineEdit, QDateEdit, QComboBox {{
-                padding: 8px;
+                padding: {input_padding}px;
                 border: 1px solid {self.theme['border']};
-                border-radius: 8px;
+                border-radius: {input_radius}px;
                 background-color: {self.theme['input_bg']};
                 color: {self.theme['input_text']};
+                font-size: {input_font_size}px;
             }}
             
             /* Date Picker Button with Calendar Icon */
             QDateEdit::drop-down {{
                 subcontrol-origin: padding;
                 subcontrol-position: center right;
-                width: 35px;
+                width: {UIScaling.scale(35)}px;
                 border-left: 1px solid {self.theme['border']};
-                border-top-right-radius: 8px;
-                border-bottom-right-radius: 8px;
+                border-top-right-radius: {input_radius}px;
+                border-bottom-right-radius: {input_radius}px;
                 background-color: #F5F5F5;
             }}
             
@@ -94,17 +116,17 @@ class ProfileEditorOverlay(BaseOverlay):
             
             QDateEdit::drop-down::after {{
                 content: "📅";
-                font-size: 16px;
+                font-size: {UIScaling.scale_font(16)}px;
             }}
             
             /* ComboBox Dropdown Button */
             QComboBox::drop-down {{
                 subcontrol-origin: padding;
                 subcontrol-position: center right;
-                width: 30px;
+                width: {UIScaling.scale(30)}px;
                 border-left: 1px solid {self.theme['border']};
-                border-top-right-radius: 8px;
-                border-bottom-right-radius: 8px;
+                border-top-right-radius: {input_radius}px;
+                border-bottom-right-radius: {input_radius}px;
                 background-color: #F5F5F5;
             }}
             
@@ -188,8 +210,9 @@ class ProfileEditorOverlay(BaseOverlay):
         # Tag
         hbox_tag = QHBoxLayout()
         lbl_tag = QLabel("Tag")
-        lbl_tag.setFixedWidth(50)
-        lbl_tag.setStyleSheet(f"color: {self.theme['text_main']};")
+        lbl_w = UIScaling.scale(50)
+        lbl_tag.setFixedWidth(lbl_w)
+        lbl_tag.setStyleSheet(f"color: {self.theme['text_main']}; font-size: {input_font_size}px;")
         self.txt_tag = QLineEdit()
         self.txt_tag.setPlaceholderText("Shift X")
         hbox_tag.addWidget(lbl_tag)
@@ -199,8 +222,8 @@ class ProfileEditorOverlay(BaseOverlay):
         # Date with Calendar Icon - Custom Layout
         hbox_date = QHBoxLayout()
         lbl_date = QLabel("Date")
-        lbl_date.setFixedWidth(50)
-        lbl_date.setStyleSheet(f"color: {self.theme['text_main']};")
+        lbl_date.setFixedWidth(lbl_w)
+        lbl_date.setStyleSheet(f"color: {self.theme['text_main']}; font-size: {input_font_size}px;")
         
         # Create custom date widget with calendar button
         date_container = QWidget()
@@ -216,11 +239,12 @@ class ProfileEditorOverlay(BaseOverlay):
         
         # Set larger calendar widget size
         calendar = self.date_edit.calendarWidget()
-        calendar.setMinimumSize(350, 300)
+        calendar.setMinimumSize(UIScaling.scale(350), UIScaling.scale(300))
+        cal_font_size = UIScaling.scale_font(14)
         calendar.setStyleSheet(f"""
             QCalendarWidget {{
                 background-color: white;
-                font-size: 14px;
+                font-size: {cal_font_size}px;
             }}
             QCalendarWidget QWidget {{
                 background-color: white;
@@ -234,9 +258,9 @@ class ProfileEditorOverlay(BaseOverlay):
             QCalendarWidget QToolButton {{
                 background-color: #F5F5F5;
                 color: #333333;
-                border-radius: 4px;
-                padding: 8px;
-                font-size: 14px;
+                border-radius: {UIScaling.scale(4)}px;
+                padding: {UIScaling.scale(8)}px;
+                font-size: {cal_font_size}px;
             }}
             QCalendarWidget QToolButton:hover {{
                 background-color: #E3F2FD;
@@ -249,18 +273,18 @@ class ProfileEditorOverlay(BaseOverlay):
                 background-color: white;
                 color: #333333;
                 border: 1px solid {self.theme['border']};
-                border-radius: 4px;
-                padding: 4px;
+                border-radius: {UIScaling.scale(4)}px;
+                padding: {UIScaling.scale(4)}px;
             }}
         """)
         
         self.date_edit.setStyleSheet(f"""
             QDateEdit {{
                 border: 1px solid {self.theme['border']};
-                border-top-left-radius: 8px;
-                border-bottom-left-radius: 8px;
+                border-top-left-radius: {input_radius}px;
+                border-bottom-left-radius: {input_radius}px;
                 border-right: none;
-                padding: 8px;
+                padding: {input_padding}px;
                 background-color: white;
                 color: #333333;
             }}
@@ -268,15 +292,18 @@ class ProfileEditorOverlay(BaseOverlay):
         
         # Calendar button
         cal_btn = QPushButton("📅")
-        cal_btn.setFixedSize(40, 36)
+        cal_btn_w = UIScaling.scale(40)
+        cal_btn_h = UIScaling.scale(36)
+        cal_btn_font_size = UIScaling.scale_font(18)
+        cal_btn.setFixedSize(cal_btn_w, cal_btn_h)
         cal_btn.setStyleSheet(f"""
             QPushButton {{
                 background-color: #F5F5F5;
                 border: 1px solid {self.theme['border']};
                 border-left: none;
-                border-top-right-radius: 8px;
-                border-bottom-right-radius: 8px;
-                font-size: 18px;
+                border-top-right-radius: {input_radius}px;
+                border-bottom-right-radius: {input_radius}px;
+                font-size: {cal_btn_font_size}px;
             }}
             QPushButton:hover {{
                 background-color: #E8E8E8;
@@ -306,16 +333,17 @@ class ProfileEditorOverlay(BaseOverlay):
 
     def create_sku_row(self, index):
         container = QFrame()
-        container.setFixedHeight(140)
+        container.setFixedHeight(UIScaling.scale(140))
         container.setStyleSheet("background-color: transparent;")
         
         layout = QHBoxLayout(container)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(15)
         
+        img_size = UIScaling.scale(100)
         img_placeholder = QLabel()
-        img_placeholder.setFixedSize(100, 100)
-        img_placeholder.setStyleSheet(f"background-color: {self.theme['bg_card']}; border-radius: 8px;")
+        img_placeholder.setFixedSize(img_size, img_size)
+        img_placeholder.setStyleSheet(f"background-color: {self.theme['bg_card']}; border-radius: {UIScaling.scale(8)}px;")
         layout.addWidget(img_placeholder)
         
         info_col = QVBoxLayout()
@@ -323,17 +351,20 @@ class ProfileEditorOverlay(BaseOverlay):
         
         sku_row = QHBoxLayout()
         lbl_sku = QLabel("SKU")
-        lbl_sku.setFixedWidth(40)
-        lbl_sku.setStyleSheet(f"color: {self.theme['text_main']};")
+        sku_lbl_w = UIScaling.scale(40)
+        lbl_sku.setFixedWidth(sku_lbl_w)
+        lbl_sku.setStyleSheet(f"color: {self.theme['text_main']}; font-size: {UIScaling.scale_font(13)}px;")
         
         txt_sku_val = QLineEdit()
         txt_sku_val.setReadOnly(True)
         txt_sku_val.setPlaceholderText("Select SKU first...")
-        txt_sku_val.setStyleSheet(f"background-color: {self.theme['bg_card']}; border: none; padding: 5px; color: {self.theme['text_main']};")
+        txt_sku_val.setStyleSheet(f"background-color: {self.theme['bg_card']}; border: none; padding: {UIScaling.scale(5)}px; color: {self.theme['text_main']};")
         
         btn_select = QPushButton("select")
-        btn_select.setFixedSize(100, 50)
-        btn_select.setStyleSheet(f"background-color: {self.theme['btn_bg']}; border-radius: 5px; font-weight: bold; color: {self.theme['btn_text']}; font-size: 16px;")
+        btn_sel_w = UIScaling.scale(100)
+        btn_sel_h = UIScaling.scale(50)
+        btn_select.setFixedSize(btn_sel_w, btn_sel_h)
+        btn_select.setStyleSheet(f"background-color: {self.theme['btn_bg']}; border-radius: {UIScaling.scale(5)}px; font-weight: bold; color: {self.theme['btn_text']}; font-size: {UIScaling.scale_font(16)}px;")
         btn_select.clicked.connect(lambda _, idx=index: self.select_sku(idx))
         
         sku_row.addWidget(lbl_sku)
@@ -342,8 +373,8 @@ class ProfileEditorOverlay(BaseOverlay):
         
         team_row = QHBoxLayout()
         lbl_team = QLabel("Team")
-        lbl_team.setFixedWidth(40)
-        lbl_team.setStyleSheet(f"color: {self.theme['text_main']};")
+        lbl_team.setFixedWidth(sku_lbl_w)
+        lbl_team.setStyleSheet(f"color: {self.theme['text_main']}; font-size: {UIScaling.scale_font(13)}px;")
         
         cmb_team = QComboBox()
         cmb_team.addItems(["", "Team A", "Team B", "Team C", "Team D"])

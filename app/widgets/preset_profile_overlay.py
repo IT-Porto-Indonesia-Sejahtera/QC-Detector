@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, Signal
 from project_utilities.json_utility import JsonUtility
 from app.widgets.base_overlay import BaseOverlay
+from app.utils.ui_scaling import UIScaling
 
 PROFILES_FILE = os.path.join("output", "settings", "profiles.json")
 
@@ -24,11 +25,23 @@ class PresetProfileOverlay(BaseOverlay):
         self.theme = ThemeManager.get_colors()
         
         # Style Content Box
-        self.content_box.setFixedSize(500, 600)
+        # Make content box responsive
+        scaled_w = UIScaling.scale(500)
+        scaled_h = UIScaling.scale(600)
+        
+        # Ensure it doesn't exceed 90% of screen
+        screen_size = UIScaling.get_screen_size()
+        max_w = int(screen_size.width() * 0.9)
+        max_h = int(screen_size.height() * 0.9)
+        
+        self.content_box.setMinimumSize(UIScaling.scale(300), UIScaling.scale(300))
+        self.content_box.setMaximumSize(min(scaled_w, max_w), min(scaled_h, max_h))
+        self.content_box.resize(min(scaled_w, max_w), min(scaled_h, max_h))
+
         self.content_box.setStyleSheet(f"""
             QFrame {{
                 background-color: {self.theme['bg_panel']}; 
-                border-radius: 15px;
+                border-radius: {UIScaling.scale(15)}px;
             }}
         """)
         
@@ -47,12 +60,15 @@ class PresetProfileOverlay(BaseOverlay):
         # Header
         header = QHBoxLayout()
         btn_back = QPushButton("❮")
-        btn_back.setFixedSize(60, 60)
-        btn_back.setStyleSheet(f"border: none; font-size: 24px; font-weight: bold; color: {self.theme['text_main']};")
+        btn_back_size = UIScaling.scale(60)
+        btn_back_font_size = UIScaling.scale_font(24)
+        btn_back.setFixedSize(btn_back_size, btn_back_size)
+        btn_back.setStyleSheet(f"border: none; font-size: {btn_back_font_size}px; font-weight: bold; color: {self.theme['text_main']};")
         btn_back.clicked.connect(self.close_overlay)
         
         lbl_title = QLabel("Select Preset Profile")
-        lbl_title.setStyleSheet(f"font-size: 20px; font-weight: bold; color: {self.theme['text_main']};")
+        title_font_size = UIScaling.scale_font(20)
+        lbl_title.setStyleSheet(f"font-size: {title_font_size}px; font-weight: bold; color: {self.theme['text_main']};")
         lbl_title.setAlignment(Qt.AlignCenter)
         
         header.addWidget(btn_back)
@@ -82,7 +98,9 @@ class PresetProfileOverlay(BaseOverlay):
         
         # Floating Add Button
         btn_add = QPushButton("+")
-        btn_add.setFixedSize(70, 70)
+        btn_add_size = UIScaling.scale(70)
+        btn_add_font_size = UIScaling.scale_font(30)
+        btn_add.setFixedSize(btn_add_size, btn_add_size)
         # Use inverse colors for floating button? Or standard?
         # Let's keep black/white contrast or theme inverse.
         # If dark mode, maybe White button with Black text? 
@@ -92,8 +110,8 @@ class PresetProfileOverlay(BaseOverlay):
             QPushButton {{
                 background-color: #2196F3;
                 color: white;
-                border-radius: 25px;
-                font-size: 30px;
+                border-radius: {btn_add_size // 2}px;
+                font-size: {btn_add_font_size}px;
                 font-weight: bold;
             }}
             QPushButton:hover {{
@@ -153,13 +171,14 @@ class PresetProfileOverlay(BaseOverlay):
 
     def create_profile_card(self, profile):
         card = QFrame()
+        card_radius = UIScaling.scale(10)
         card.setStyleSheet(f"""
             QFrame {{
                 background-color: {self.theme['bg_card']};
-                border-radius: 10px;
+                border-radius: {card_radius}px;
             }}
         """)
-        card.setFixedHeight(100)
+        card.setFixedHeight(UIScaling.scale(100))
         
         card_layout = QHBoxLayout(card)
         card_layout.setContentsMargins(15, 10, 15, 10)
@@ -169,13 +188,15 @@ class PresetProfileOverlay(BaseOverlay):
         info_layout.setSpacing(2)
         
         name = QLabel(profile.get("name", "Unknown"))
-        name.setStyleSheet(f"font-weight: bold; font-size: 16px; color: {self.theme['text_main']};")
+        name_font_size = UIScaling.scale_font(16)
+        name.setStyleSheet(f"font-weight: bold; font-size: {name_font_size}px; color: {self.theme['text_main']};")
         
         sub = QLabel(profile.get("sub_label", ""))
-        sub.setStyleSheet(f"color: {self.theme['text_main']}; font-size: 14px;")
+        sub_font_size = UIScaling.scale_font(14)
+        sub.setStyleSheet(f"color: {self.theme['text_main']}; font-size: {sub_font_size}px;")
         
         sku = QLabel(profile.get("sku_label", ""))
-        sku.setStyleSheet(f"color: {self.theme['text_main']}; font-size: 14px;")
+        sku.setStyleSheet(f"color: {self.theme['text_main']}; font-size: {sub_font_size}px;")
         
         info_layout.addWidget(name)
         info_layout.addWidget(sub)
@@ -194,13 +215,15 @@ class PresetProfileOverlay(BaseOverlay):
         actions_layout.addStretch()
         
         btn_edit = QPushButton("✏️")
-        btn_edit.setFixedSize(50, 50)
-        btn_edit.setStyleSheet(f"border: none; font-size: 24px; color: {self.theme['text_main']};")
+        btn_edit_size = UIScaling.scale(50)
+        btn_edit_font_size = UIScaling.scale_font(24)
+        btn_edit.setFixedSize(btn_edit_size, btn_edit_size)
+        btn_edit.setStyleSheet(f"border: none; font-size: {btn_edit_font_size}px; color: {self.theme['text_main']};")
         btn_edit.clicked.connect(lambda _, p=profile: self.edit_profile(p))
         
         btn_del = QPushButton("🗑️")
-        btn_del.setFixedSize(50, 50)
-        btn_del.setStyleSheet(f"border: none; font-size: 24px; color: {self.theme['text_main']};")
+        btn_del.setFixedSize(btn_edit_size, btn_edit_size)
+        btn_del.setStyleSheet(f"border: none; font-size: {btn_edit_font_size}px; color: {self.theme['text_main']};")
         btn_del.clicked.connect(lambda _, p=profile: self.delete_profile(p))
         
         actions_layout.addWidget(btn_edit)

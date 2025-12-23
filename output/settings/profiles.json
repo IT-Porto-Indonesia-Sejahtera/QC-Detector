@@ -4,7 +4,7 @@
         "name": "Shift 2",
         "sub_label": "Team B",
         "sku_label": "Testing Data",
-        "last_updated": "15/12/2025, 13:00:00",
+        "last_updated": "22/12/2025, 09:56:00",
         "presets": [
             {
                 "sku": "E-0123M",
@@ -47,6 +47,71 @@
                 "color_idx": 1
             },
             {
+                "sku": "E-9008L",
+                "size": "36",
+                "color_idx": 2
+            },
+            {
+                "sku": "E-9008L",
+                "size": "37",
+                "color_idx": 2
+            },
+            {
+                "sku": "E-9008L",
+                "size": "38",
+                "color_idx": 2
+            },
+            {
+                "sku": "E-9008L",
+                "size": "39",
+                "color_idx": 2
+            },
+            {
+                "sku": "E-9008L",
+                "size": "40",
+                "color_idx": 2
+            },
+            {
+                "sku": "E-9008L",
+                "size": "41",
+                "color_idx": 2
+            },
+            {
+                "sku": "X-5000-Pro",
+                "size": "XS",
+                "color_idx": 3
+            },
+            {
+                "sku": "X-5000-Pro",
+                "size": "S",
+                "color_idx": 3
+            },
+            {
+                "sku": "X-5000-Pro",
+                "size": "M",
+                "color_idx": 3
+            },
+            {
+                "sku": "X-5000-Pro",
+                "size": "L",
+                "color_idx": 3
+            },
+            {
+                "sku": "X-5000-Pro",
+                "size": "XL",
+                "color_idx": 3
+            },
+            {
+                "sku": "X-5000-Pro",
+                "size": "XXL",
+                "color_idx": 3
+            },
+            {
+                "sku": "A-1001X",
+                "size": "37",
+                "color_idx": 2
+            },
+            {
                 "sku": "A-1001X",
                 "size": "38",
                 "color_idx": 2
@@ -62,39 +127,14 @@
                 "color_idx": 2
             },
             {
-                "sku": "B-2020Y",
-                "size": "S",
-                "color_idx": 3
-            },
-            {
-                "sku": "B-2020Y",
-                "size": "M",
-                "color_idx": 3
-            },
-            {
-                "sku": "B-2020Y",
-                "size": "L",
-                "color_idx": 3
-            },
-            {
-                "sku": "B-2020Y",
-                "size": "XL",
-                "color_idx": 3
-            },
-            {
-                "sku": "C-3030Z",
-                "size": "40",
-                "color_idx": 4
-            },
-            {
-                "sku": "C-3030Z",
+                "sku": "A-1001X",
                 "size": "41",
-                "color_idx": 4
+                "color_idx": 2
             },
             {
-                "sku": "C-3030Z",
+                "sku": "A-1001X",
                 "size": "42",
-                "color_idx": 4
+                "color_idx": 2
             }
         ]
     }
