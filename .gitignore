@@ -26,6 +26,8 @@ env/
 # macOS
 .DS_Store
 
+.env
+
 # Logs
 *.log
 /model/__pycache__
