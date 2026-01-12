@@ -114,11 +114,6 @@ class ProfileEditorOverlay(BaseOverlay):
                 height: 0px;
             }}
             
-            QDateEdit::drop-down::after {{
-                content: "📅";
-                font-size: {UIScaling.scale_font(16)}px;
-            }}
-            
             /* ComboBox Dropdown Button */
             QComboBox::drop-down {{
                 subcontrol-origin: padding;
@@ -440,7 +435,7 @@ class ProfileEditorOverlay(BaseOverlay):
         for i, data in enumerate(selected):
             if i < 4:
                 self.sku_rows[i]["data"] = data
-                self.sku_rows[i]["sku_val"].setText(str(data.get("coeff", "")))
+                self.sku_rows[i]["sku_val"].setText(str(data.get("code", "")))
                 self.sku_rows[i]["team_cmb"].setCurrentText(data.get("team", ""))
                 self.sku_rows[i]["img"].setStyleSheet("background-color: #2196F3; border-radius: 8px;")
 
@@ -457,7 +452,7 @@ class ProfileEditorOverlay(BaseOverlay):
         index = self.pending_index
         row = self.sku_rows[index]
         row["data"] = sku_data
-        row["sku_val"].setText(str(sku_data.get("coeff", "")))
+        row["sku_val"].setText(str(sku_data.get("code", "")))
         row["img"].setStyleSheet("background-color: #2196F3; border-radius: 8px;")
 
     def on_save(self):

@@ -732,6 +732,9 @@ class LiveCameraScreen(QWidget):
             
             # Add Group Container to Parent, with stretch=1 (Equal height for all groups)
             parent_layout.addWidget(group_container, stretch=1)
+            
+        # Add stretch at end to push everything up
+        parent_layout.addStretch()
 
     def on_preset_clicked(self, idx):
         if idx < 0 or idx >= len(self.presets):

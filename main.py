@@ -1,8 +1,34 @@
 import os
+import sys
+import atexit
+import signal
 from datetime import datetime
 from model.measurement import measure_sandals
 import project_utilities as putils
 import app.main_windows as app  # import the PyQt app
+from backend.DB import init_db, close_pool
+
+def cleanup():
+    """Cleanup function to close database connections."""
+    print("\n🔄 Closing database connections...")
+    close_pool()
+    print("✓ Cleanup complete")
+
+def signal_handler(signum, frame):
+    """Handle termination signals gracefully."""
+    signal_name = signal.Signals(signum).name
+    print(f"\n⚠ Received {signal_name}, shutting down...")
+    cleanup()
+    sys.exit(0)
+
+def init_database():
+    """Initialize the database connection pool."""
+    try:
+        init_db()
+        print("✓ Database connection pool initialized")
+    except Exception as e:
+        print(f"⚠ Database connection failed: {e}")
+        print("  App will continue without database functionality")
 
 def run_cli_mode():
     """Run measurement in command-line mode."""
@@ -30,6 +56,16 @@ def run_ui_mode():
     app.run_app()
 
 if __name__ == "__main__":
+    # Register signal handlers for graceful shutdown
+    signal.signal(signal.SIGINT, signal_handler)   # Ctrl+C
+    signal.signal(signal.SIGTERM, signal_handler)  # kill command
+    
+    # Register cleanup function for normal exit
+    atexit.register(cleanup)
+    
+    # Initialize database connection pool
+    init_database()
+    
     MODE = "ui"
     if MODE == "ui":
         run_ui_mode()

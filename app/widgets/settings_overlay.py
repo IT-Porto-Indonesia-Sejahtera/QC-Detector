@@ -1,10 +1,11 @@
 import os
+import json
 import threading
 from datetime import datetime
 import cv2
 from PySide6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QLineEdit,
-    QComboBox, QFrame, QSizePolicy, QScrollArea, QWidget
+    QComboBox, QFrame, QSizePolicy, QScrollArea, QWidget, QPlainTextEdit
 )
 from PySide6.QtCore import Qt, Signal, QTimer, QThread
 from PySide6.QtGui import QFont, QImage, QPixmap
@@ -14,6 +15,8 @@ from app.utils.ip_camera_discovery import get_discovery, DiscoveredCamera
 from project_utilities.json_utility import JsonUtility
 from app.utils.capture_thread import VideoCaptureThread
 from app.utils.ui_scaling import UIScaling
+from backend.get_product_sku import ProductSKUWorker
+from app.utils import fetch_logger
 
 class SettingsOverlay(BaseOverlay):
     """Settings overlay for application configuration"""
@@ -480,8 +483,22 @@ class SettingsOverlay(BaseOverlay):
         info_layout.addLayout(status_row)
         
         last_fetch = self.settings.get("last_fetched", "Never")
-        fetch_row = self.create_info_row(f"Last Updated: {last_fetch}", "", button_text="Refresh Now")
+        self.last_fetch_label = QLabel(f"Last Updated: {last_fetch}")
+        lbl_font_size = UIScaling.scale_font(13)
+        self.last_fetch_label.setStyleSheet(f"color: {self.theme['text_main']}; font-size: {lbl_font_size}px; font-weight: bold;")
+        
+        self.btn_fetch = QPushButton("Refresh Now")
+        self.btn_fetch.setStyleSheet(self.btn_secondary_style)
+        self.btn_fetch.clicked.connect(self.start_fetch_sku)
+        
+        fetch_row = QHBoxLayout()
+        fetch_row.setContentsMargins(5, 5, 5, 5)
+        fetch_row.addWidget(self.last_fetch_label, 1)
+        fetch_row.addWidget(self.btn_fetch)
         info_layout.addLayout(fetch_row)
+        
+        # Worker reference
+        self.sku_worker = None
 
         right_col.addWidget(info_card)
         
@@ -503,6 +520,49 @@ class SettingsOverlay(BaseOverlay):
         hw_layout.addLayout(hw_regs)
         
         right_col.addWidget(hw_card)
+        
+        # Fetch Log Viewer Card
+        log_card, log_layout = self.create_card("Fetch Activity Log")
+        
+        # Log viewer text area
+        self.log_viewer = QPlainTextEdit()
+        self.log_viewer.setReadOnly(True)
+        self.log_viewer.setFixedHeight(UIScaling.scale(120))
+        log_font_size = UIScaling.scale_font(11)
+        self.log_viewer.setStyleSheet(f"""
+            QPlainTextEdit {{
+                background-color: #1E1E1E;
+                color: #D4D4D4;
+                border: 1px solid {self.theme['border']};
+                border-radius: {UIScaling.scale(6)}px;
+                font-family: 'Menlo', 'Monaco', 'Consolas', monospace;
+                font-size: {log_font_size}px;
+                padding: {UIScaling.scale(8)}px;
+            }}
+        """)
+        log_layout.addWidget(self.log_viewer)
+        
+        # Log controls row
+        log_controls = QHBoxLayout()
+        
+        self.log_stats_label = QLabel("")
+        stats_font_size = UIScaling.scale_font(11)
+        self.log_stats_label.setStyleSheet(f"color: {self.theme['text_sub']}; font-size: {stats_font_size}px;")
+        log_controls.addWidget(self.log_stats_label, 1)
+        
+        btn_refresh_log = QPushButton("↻ Refresh")
+        btn_refresh_log.setStyleSheet(self.btn_secondary_style)
+        btn_refresh_log.clicked.connect(self.refresh_log_viewer)
+        log_controls.addWidget(btn_refresh_log)
+        
+        btn_clear_log = QPushButton("🗑 Clear Log")
+        btn_clear_log.setStyleSheet(self.btn_secondary_style)
+        btn_clear_log.clicked.connect(self.clear_fetch_log)
+        log_controls.addWidget(btn_clear_log)
+        
+        log_layout.addLayout(log_controls)
+        
+        right_col.addWidget(log_card)
         right_col.addStretch()
 
         columns.addLayout(left_col, 1)
@@ -513,6 +573,9 @@ class SettingsOverlay(BaseOverlay):
         self.update_preset_combo()
         curr_idx = self.settings.get("camera_index", 0)
         self.set_camera_ui_state(curr_idx)
+        
+        # Load existing logs
+        self.refresh_log_viewer()
 
     def create_card(self, title, is_sub_card=False):
         card = QFrame()
@@ -936,3 +999,151 @@ class SettingsOverlay(BaseOverlay):
         
         self.settings_saved.emit(self.settings)
         self.close_overlay()
+
+    # -------------------------------------------------------------------------
+    # SKU Fetch Logic
+    # -------------------------------------------------------------------------
+    
+    def start_fetch_sku(self):
+        """Start fetching SKU data from database"""
+        if self.sku_worker is not None and self.sku_worker.isRunning():
+            return  # Already fetching
+        
+        # Update UI to loading state
+        self.btn_fetch.setText("⏳ Fetching...")
+        self.btn_fetch.setEnabled(False)
+        self.btn_fetch.setStyleSheet(f"""
+            QPushButton {{
+                background-color: #E0E0E0;
+                border-radius: {UIScaling.scale(8)}px;
+                color: #666666;
+                font-size: {UIScaling.scale_font(14)}px;
+                font-weight: bold;
+                padding: {UIScaling.scale(8)}px {UIScaling.scale(15)}px;
+            }}
+        """)
+        
+        # Start worker thread
+        self.sku_worker = ProductSKUWorker()
+        self.sku_worker.finished.connect(self.on_fetch_complete)
+        self.sku_worker.error.connect(self.on_fetch_error)
+        self.sku_worker.start()
+    
+    def on_fetch_complete(self, products):
+        """Handle successful SKU fetch"""
+        result_file = os.path.join("output", "settings", "result.json")
+        
+        # Check if we got actual results or empty (possibly due to connection failure)
+        if not products:
+            # Don't overwrite existing result.json with empty data
+            print("[Settings] Fetch returned empty - likely connection failed. Keeping existing data.")
+            self.btn_fetch.setText("⚠ No Data")
+            self.btn_fetch.setEnabled(True)
+            self.btn_fetch.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: #FFF3E0;
+                    border-radius: {UIScaling.scale(8)}px;
+                    color: #E65100;
+                    font-size: {UIScaling.scale_font(14)}px;
+                    font-weight: bold;
+                    padding: {UIScaling.scale(8)}px {UIScaling.scale(15)}px;
+                }}
+                QPushButton:hover {{
+                    background-color: #FFE0B2;
+                }}
+            """)
+            self.settings["fetch_status"] = "empty - connection may have failed"
+            # Log warning
+            fetch_logger.log_warning("Fetch returned 0 products - connection may have failed")
+            self.refresh_log_viewer()
+            # Reset button after delay
+            QTimer.singleShot(3000, lambda: (
+                self.btn_fetch.setText("Refresh Now"),
+                self.btn_fetch.setStyleSheet(self.btn_secondary_style)
+            ))
+            return
+        
+        # Save result to file for debugging
+        try:
+            with open(result_file, "w", encoding="utf-8") as f:
+                json.dump(products, f, ensure_ascii=False, indent=2)
+            print(f"[Settings] Fetched {len(products)} SKUs, saved to {result_file}")
+        except Exception as e:
+            print(f"[Settings] Error saving result.json: {e}")
+        
+        # Update settings with fetch status
+        now = datetime.now().strftime("%d/%m/%Y %H:%M")
+        self.settings["last_fetched"] = now
+        self.settings["fetch_status"] = "success"
+        
+        # Update UI
+        self.last_fetch_label.setText(f"Last Updated: {now}")
+        self.btn_fetch.setText(f"✓ {len(products)} SKUs")
+        self.btn_fetch.setEnabled(True)
+        self.btn_fetch.setStyleSheet(self.btn_secondary_style)
+        
+        # Log success
+        fetch_logger.log_success(f"Fetched {len(products)} SKUs successfully")
+        self.refresh_log_viewer()
+        
+        # Brief success indication
+        QTimer.singleShot(2000, lambda: self.btn_fetch.setText("Refresh Now"))
+    
+    def on_fetch_error(self, error_msg):
+        """Handle SKU fetch error"""
+        print(f"[Settings] Fetch error: {error_msg}")
+        
+        # Update settings
+        self.settings["fetch_status"] = f"error: {error_msg}"
+        
+        # Update UI
+        self.btn_fetch.setText("⚠ Retry")
+        self.btn_fetch.setEnabled(True)
+        self.btn_fetch.setStyleSheet(f"""
+            QPushButton {{
+                background-color: #FFEBEE;
+                border-radius: {UIScaling.scale(8)}px;
+                color: #D32F2F;
+                font-size: {UIScaling.scale_font(14)}px;
+                font-weight: bold;
+                padding: {UIScaling.scale(8)}px {UIScaling.scale(15)}px;
+            }}
+            QPushButton:hover {{
+                background-color: #FFCDD2;
+            }}
+        """)
+        
+        # Log error
+        fetch_logger.log_error(f"Fetch failed: {error_msg}")
+        self.refresh_log_viewer()
+
+    # -------------------------------------------------------------------------
+    # Log Viewer Methods
+    # -------------------------------------------------------------------------
+    
+    def refresh_log_viewer(self):
+        """Refresh the log viewer content"""
+        try:
+            log_content = fetch_logger.get_logs()
+            self.log_viewer.setPlainText(log_content)
+            
+            # Scroll to bottom to show latest entries
+            scrollbar = self.log_viewer.verticalScrollBar()
+            scrollbar.setValue(scrollbar.maximum())
+            
+            # Update stats
+            stats = fetch_logger.get_log_stats()
+            self.log_stats_label.setText(
+                f"{stats['total_entries']} entries | "
+                f"{stats['success_count']} success | "
+                f"{stats['error_count']} errors"
+            )
+        except Exception as e:
+            self.log_viewer.setPlainText(f"Error loading logs: {e}")
+    
+    def clear_fetch_log(self):
+        """Clear all log entries"""
+        if fetch_logger.clear_logs():
+            fetch_logger.log_info("Log cleared by user")
+            self.refresh_log_viewer()
+
