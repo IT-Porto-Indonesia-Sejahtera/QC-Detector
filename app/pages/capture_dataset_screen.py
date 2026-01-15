@@ -249,13 +249,22 @@ class CaptureDatasetScreen(QWidget):
 
     def showEvent(self, event):
         """Refresh camera list and start."""
+        # Reload settings to get latest camera_index
+        self.settings = JsonUtility.load_from_json(os.path.join("output", "settings", "app_settings.json")) or {}
+        
         current_cam = self.cam_select.currentText()
         self.cam_select.blockSignals(True)
         self.cam_select.clear()
         self.cam_select.addItems(self.detect_cameras())
         self.cam_select.blockSignals(False)
         
-        index = self.cam_select.findText(current_cam)
+        # Check if camera_index is set to "ip" to auto-select IP Camera
+        camera_index = self.settings.get("camera_index", 0)
+        if camera_index == "ip" or camera_index == "IP Camera":
+            index = self.cam_select.findText("IP Camera")
+        else:
+            index = self.cam_select.findText(current_cam)
+            
         if index >= 0:
             self.cam_select.setCurrentIndex(index)
         

@@ -1,5 +1,5 @@
 {
-    "camera_index": 0,
+    "camera_index": "ip",
     "mm_per_px": 0.2123459,
     "sensor_delay": 0.2123459,
     "fetch_status": "success",
@@ -21,7 +21,7 @@
             "protocol": "rtsp",
             "address": "192.168.1.64",
             "port": "554",
-            "path": "",
+            "path": "/Streaming/Channels/101",
             "username": "admin",
             "password": "Porto.cctv",
             "transport": "tcp"
