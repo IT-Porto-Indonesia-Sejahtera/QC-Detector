@@ -60,30 +60,30 @@ def measure_live_sandals(input_data, mm_per_px=None, draw_output=True, save_out=
         cv2.drawContours(out, [cnt], -1, (255, 255, 0), 2)
         cv2.drawContours(out, [box], 0, (0, 255, 0), 2)
 
-        # Put text near box
+        # Put text at TOP-LEFT of image (not near the box)
         if draw_output:
+            # Fixed position at top-left of frame
+            x, y = 20, 35
 
-            # top-left corner of the box
-            x, y = box[0]
+            # Draw background for readability (bigger for more info)
+            cv2.rectangle(out, (10, 10), (280, 130), (0, 0, 0), -1)
 
-            # Draw background for readability
-            cv2.rectangle(out, (x, y - 60), (x + 200, y), (0, 0, 0), -1)
+            # Draw detailed measurement text
+            cv2.putText(out, f"Length: {real_length_mm:.1f} mm ({px_length:.0f} px)",
+                        (x, y), cv2.FONT_HERSHEY_SIMPLEX,
+                        0.55, (0, 255, 255), 2)
 
-            # Draw measurement text
-            cv2.putText(out, f"L: {real_length_cm:.1f} cm",
-                        (x + 5, y - 40), cv2.FONT_HERSHEY_SIMPLEX,
-                        0.6, (0, 255, 255), 2)
-
-            cv2.putText(out, f"W: {real_width_cm:.1f} cm",
-                        (x + 5, y - 18), cv2.FONT_HERSHEY_SIMPLEX,
-                        0.6, (0, 200, 255), 2)
-
-            # PASS/FAIL text
-            color = (0, 255, 0) if pass_fail == "PASS" else (0, 0, 255)
-            cv2.putText(out, pass_fail,
-                        (x + 120, y - 25),
-                        cv2.FONT_HERSHEY_SIMPLEX,
-                        0.8, color, 2)
+            cv2.putText(out, f"Width:  {real_width_mm:.1f} mm ({px_width:.0f} px)",
+                        (x, y + 25), cv2.FONT_HERSHEY_SIMPLEX,
+                        0.55, (0, 200, 255), 2)
+            
+            cv2.putText(out, f"Scale: {mm_per_px:.6f} mm/px",
+                        (x, y + 50), cv2.FONT_HERSHEY_SIMPLEX,
+                        0.5, (200, 200, 200), 1)
+            
+            cv2.putText(out, f"L: {real_length_cm:.2f} cm  W: {real_width_cm:.2f} cm",
+                        (x, y + 75), cv2.FONT_HERSHEY_SIMPLEX,
+                        0.5, (150, 255, 150), 1)
 
         # Add to results dict
         results.append({

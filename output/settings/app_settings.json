@@ -1,9 +1,9 @@
 {
     "camera_index": "ip",
-    "mm_per_px": 0.2123459,
+    "mm_per_px": 0.44292662734140537,
     "sensor_delay": 0.2123459,
     "fetch_status": "success",
-    "layout_mode": "classic",
+    "layout_mode": "minimal",
     "last_fetched": "06/01/2026 17:04",
     "paths": {
         "profile": "C://User/test/asd/",

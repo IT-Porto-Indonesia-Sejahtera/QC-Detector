@@ -82,7 +82,7 @@ class GeneralSettingsPage(QWidget):
         p_layout.addWidget(self.create_styled_label("Resolution (mm/px):"))
         self.mm_px = QLineEdit(); self.style_input(self.mm_px); p_layout.addWidget(self.mm_px)
         p_layout.addWidget(self.create_styled_label("Layout Mode:"))
-        self.lay_mode = QComboBox(); self.lay_mode.addItems(["Classic", "Split"]); self.style_input(self.lay_mode); p_layout.addWidget(self.lay_mode)
+        self.lay_mode = QComboBox(); self.lay_mode.addItems(["Classic", "Split", "Minimal"]); self.style_input(self.lay_mode); p_layout.addWidget(self.lay_mode)
         right.addWidget(p_card)
         
         # Auto Calibration Card
@@ -201,7 +201,11 @@ class GeneralSettingsPage(QWidget):
     def load_settings(self):
         s = JsonUtility.load_from_json(SETTINGS_FILE) or {}
         self.mm_px.setText(str(s.get("mm_per_px", 0.21)))
-        self.lay_mode.setCurrentIndex(1 if s.get("layout_mode") == "split" else 0)
+        # Layout mode: 0=Classic, 1=Split, 2=Minimal
+        layout_mode = s.get("layout_mode", "classic")
+        if layout_mode == "split": self.lay_mode.setCurrentIndex(1)
+        elif layout_mode == "minimal": self.lay_mode.setCurrentIndex(2)
+        else: self.lay_mode.setCurrentIndex(0)
         self.s_port.setText(s.get("sensor_port", "")); self.p_port.setText(s.get("plc_port", ""))
         self.p_tri.setText(str(s.get("plc_trigger_reg", 12))); self.p_res.setText(str(s.get("plc_result_reg", 13)))
         self.ip_presets = s.get("ip_camera_presets", [])
@@ -252,7 +256,9 @@ class GeneralSettingsPage(QWidget):
         s = JsonUtility.load_from_json(SETTINGS_FILE) or {}
         try: s["mm_per_px"] = float(self.mm_px.text())
         except: pass
-        s["layout_mode"] = "split" if self.lay_mode.currentIndex() == 1 else "classic"
+        # Layout mode: 0=Classic, 1=Split, 2=Minimal
+        layout_idx = self.lay_mode.currentIndex()
+        s["layout_mode"] = ["classic", "split", "minimal"][layout_idx]
         cam_data = self.camera_combo.currentData()
         if isinstance(cam_data, str) and cam_data.isdigit():
             s["camera_index"] = int(cam_data)

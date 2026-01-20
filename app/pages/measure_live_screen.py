@@ -201,6 +201,8 @@ class LiveCameraScreen(QWidget):
         
         if self.layout_mode == "classic":
             self.setup_classic_layout()
+        elif self.layout_mode == "minimal":
+            self.setup_minimal_layout()
         else:
             self.setup_split_layout()
             
@@ -375,6 +377,50 @@ class LiveCameraScreen(QWidget):
             self.ip_presets = []
             self.active_ip_preset_id = None
             self.camera_crop = {}
+
+    def setup_minimal_layout(self):
+        """Minimal Layout: Full-screen preview with no buttons, just the result."""
+        main_layout = QVBoxLayout()
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
+        self.setLayout(main_layout)
+
+        # Full-screen Preview Label
+        self.preview_label = QLabel("Waiting for Capture...")
+        self.preview_label.setAlignment(Qt.AlignCenter)
+        preview_font_size = UIScaling.scale_font(48)
+        self.preview_label.setStyleSheet(f"""
+            background-color: #1C1C1E; 
+            color: #666666; 
+            font-weight: bold; 
+            font-size: {preview_font_size}px;
+        """)
+        self.preview_label.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Ignored)
+        main_layout.addWidget(self.preview_label, stretch=1)
+        
+        # Hidden info bar (needed for compatibility but not visible)
+        self.info_bar = QLabel("")
+        self.info_bar.setVisible(False)
+        main_layout.addWidget(self.info_bar)
+        
+        # Hidden counters/details (needed for compatibility)
+        self.lbl_good = QLabel("0"); self.lbl_good.setVisible(False)
+        self.lbl_bs = QLabel("0"); self.lbl_bs.setVisible(False)
+        self.lbl_big_result = QLabel("-"); self.lbl_big_result.setVisible(False)
+        self.val_detail_sku = QLabel("-"); self.val_detail_sku.setVisible(False)
+        self.val_detail_len = QLabel("-"); self.val_detail_len.setVisible(False)
+        self.val_detail_wid = QLabel("-"); self.val_detail_wid.setVisible(False)
+        self.val_detail_res = QLabel("-"); self.val_detail_res.setVisible(False)
+        
+        # Still create dummy left/right panels for compatibility with render_presets
+        self.left_panel = QFrame(); self.left_panel.setVisible(False)
+        self.left_presets_container = QWidget()
+        self.left_presets_layout = QVBoxLayout(self.left_presets_container)
+        self.right_panel = QFrame(); self.right_panel.setVisible(False)
+        self.right_presets_container = QWidget()
+        self.right_presets_layout = QVBoxLayout(self.right_presets_container)
+        self.lbl_left_team = QLabel("")
+        self.lbl_right_team = QLabel("")
 
     def setup_classic_layout(self):
         # Classic Layout: Left (Presets Grid) | Right (Preview/Stats)
@@ -773,16 +819,23 @@ class LiveCameraScreen(QWidget):
         # Display Results
         if results:
             r = results[0]
+            px_length = r.get("px_length", 0)
+            px_width = r.get("px_width", 0)
             length_mm = r.get("real_length_mm", 0)
             width_mm = r.get("real_width_mm", 0) # Assumed exist
             # If not in dict, calc from cm
             if not width_mm: width_mm = r.get("real_width_cm", 0) * 10
+            
+            # Debug output for pixel measurements
+            print(f"[CAPTURE] Pixel Length: {px_length:.2f} px | Pixel Width: {px_width:.2f} px")
+            print(f"[CAPTURE] mm/px: {self.mm_per_px:.6f} | Real Length: {length_mm:.2f} mm | Real Width: {width_mm:.2f} mm")
             
             pf = r.get("pass_fail", "FAIL")
             
             self.val_detail_len.setText(f"{length_mm:.2f} mm")
             self.val_detail_wid.setText(f"{width_mm:.2f} mm")
             self.val_detail_res.setText(pf)
+
             
             # BIG Style: White BG, Dark Text, Colored Background
             # Content: SIZE on top (Big), STATUS on bottom (Smaller)
@@ -877,13 +930,36 @@ class LiveCameraScreen(QWidget):
     # ------------------------------------------------------------------
     def showEvent(self, event):
         # Reload Data when showing screen (e.g. returning from Settings Page)
+        old_layout_mode = getattr(self, 'layout_mode', None)
         self.load_settings()
         self.load_active_profile()
+        
+        # Check if layout mode changed - if so, rebuild the entire UI
+        if old_layout_mode is not None and old_layout_mode != self.layout_mode:
+            self._rebuild_ui()
+        
         self.render_presets()
         self.update_info_bar()
         
         self.start_camera()
         super().showEvent(event)
+
+    def _rebuild_ui(self):
+        """Clear and rebuild the entire UI for a new layout mode."""
+        # Clear existing layout
+        if self.layout():
+            old_layout = self.layout()
+            while old_layout.count():
+                item = old_layout.takeAt(0)
+                widget = item.widget()
+                if widget:
+                    widget.setParent(None)
+                    widget.deleteLater()
+            QWidget().setLayout(old_layout)  # Remove old layout from self
+        
+        # Rebuild UI with new layout mode
+        self.init_ui()
+        
         
     def hideEvent(self, event):
         self.stop_camera()
