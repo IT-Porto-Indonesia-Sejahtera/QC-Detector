@@ -12,6 +12,8 @@ from app.utils.theme_manager import ThemeManager
 from project_utilities.json_utility import JsonUtility
 from app.utils.capture_thread import VideoCaptureThread
 from app.utils.ui_scaling import UIScaling
+from backend.aruco_utils import detect_aruco_marker
+from app.widgets.aruco_calibration_dialog import ArucoCalibrationDialog
 
 SETTINGS_FILE = os.path.join("output", "settings", "app_settings.json")
 
@@ -77,20 +79,55 @@ class GeneralSettingsPage(QWidget):
         # --- RIGHT: Params & HW ---
         right = QVBoxLayout(); right.setSpacing(20)
         p_card, p_layout = self.create_card("Application Parameters")
-        self.mm_px = QLineEdit(); self.style_input(self.mm_px); p_layout.addWidget(QLabel("MM per Pixel:")); p_layout.addWidget(self.mm_px)
-        self.lay_mode = QComboBox(); self.lay_mode.addItems(["Classic", "Split"]); self.style_input(self.lay_mode); p_layout.addWidget(QLabel("Layout Mode:")); p_layout.addWidget(self.lay_mode)
+        p_layout.addWidget(self.create_styled_label("Resolution (mm/px):"))
+        self.mm_px = QLineEdit(); self.style_input(self.mm_px); p_layout.addWidget(self.mm_px)
+        p_layout.addWidget(self.create_styled_label("Layout Mode:"))
+        self.lay_mode = QComboBox(); self.lay_mode.addItems(["Classic", "Split"]); self.style_input(self.lay_mode); p_layout.addWidget(self.lay_mode)
         right.addWidget(p_card)
         
+        # Auto Calibration Card
+        aruco_card, aruco_layout = self.create_card("Auto Calibration System")
+        aruco_layout.addWidget(self.create_styled_label("ArUco Marker Size (mm):"))
+        self.marker_size = QLineEdit("50.0"); self.style_input(self.marker_size); aruco_layout.addWidget(self.marker_size)
+        self.btn_calibrate = QPushButton("Run Auto Calibration"); self.style_button(self.btn_calibrate); self.btn_calibrate.setStyleSheet(self.btn_calibrate.styleSheet() + "background-color: #9C27B0; color: white;"); self.btn_calibrate.clicked.connect(self.run_auto_calibration); aruco_layout.addWidget(self.btn_calibrate)
+        self.calibration_status = QLabel(""); self.calibration_status.setStyleSheet("color: #666; font-size: 11px; background: transparent; border: none;"); aruco_layout.addWidget(self.calibration_status)
+        right.addWidget(aruco_card)
+        
+        # Camera Crop/Zoom Card
+        crop_card, crop_layout = self.create_card("Camera Region of Interest")
+        crop_layout.addWidget(self.create_styled_label("Crop Left (%):"))
+        self.crop_left = QLineEdit("0"); self.style_input(self.crop_left); crop_layout.addWidget(self.crop_left)
+        crop_layout.addWidget(self.create_styled_label("Crop Right (%):"))
+        self.crop_right = QLineEdit("0"); self.style_input(self.crop_right); crop_layout.addWidget(self.crop_right)
+        crop_layout.addWidget(self.create_styled_label("Crop Top (%):"))
+        self.crop_top = QLineEdit("0"); self.style_input(self.crop_top); crop_layout.addWidget(self.crop_top)
+        crop_layout.addWidget(self.create_styled_label("Crop Bottom (%):"))
+        self.crop_bottom = QLineEdit("0"); self.style_input(self.crop_bottom); crop_layout.addWidget(self.crop_bottom)
+        right.addWidget(crop_card)
+        
         hw_card, hw_layout = self.create_card("Hardware Integration")
-        self.s_port = QLineEdit(); self.style_input(self.s_port); hw_layout.addWidget(QLabel("Sensor Serial Port:")); hw_layout.addWidget(self.s_port)
-        self.p_port = QLineEdit(); self.style_input(self.p_port); hw_layout.addWidget(QLabel("PLC Modbus Port:")); hw_layout.addWidget(self.p_port)
-        h_regs = QHBoxLayout(); self.p_tri = QLineEdit(); self.style_input(self.p_tri); self.p_res = QLineEdit(); self.style_input(self.p_res)
-        h_regs.addWidget(QLabel("Trig Reg:")); h_regs.addWidget(self.p_tri); h_regs.addWidget(QLabel("Res Reg:")); h_regs.addWidget(self.p_res); hw_layout.addLayout(h_regs)
+        hw_layout.addWidget(self.create_styled_label("Sensor Serial Port:"))
+        self.s_port = QLineEdit(); self.style_input(self.s_port); hw_layout.addWidget(self.s_port)
+        hw_layout.addWidget(self.create_styled_label("PLC Modbus Port:"))
+        self.p_port = QLineEdit(); self.style_input(self.p_port); hw_layout.addWidget(self.p_port)
+        h_regs = QHBoxLayout()
+        v_trig = QVBoxLayout(); v_trig.addWidget(self.create_styled_label("Trig Reg:")); self.p_tri = QLineEdit(); self.style_input(self.p_tri); v_trig.addWidget(self.p_tri)
+        v_res = QVBoxLayout(); v_res.addWidget(self.create_styled_label("Res Reg:")); self.p_res = QLineEdit(); self.style_input(self.p_res); v_res.addWidget(self.p_res)
+        h_regs.addLayout(v_trig); h_regs.addLayout(v_res); hw_layout.addLayout(h_regs)
         right.addWidget(hw_card)
+        
+        # Developer Tools Card (Hidden Features)
+        dev_card, dev_layout = self.create_card("Developer Tools")
+        btn_dataset = QPushButton("📷  Capture Dataset"); self.style_button(btn_dataset)
+        btn_dataset.clicked.connect(self.go_to_dataset); dev_layout.addWidget(btn_dataset)
+        btn_photo = QPushButton("🖼️  Measure by Photo"); self.style_button(btn_photo)
+        btn_photo.clicked.connect(self.go_to_photo); dev_layout.addWidget(btn_photo)
+        right.addWidget(dev_card)
         
         btn_save = QPushButton("Save System Settings"); btn_save.setFixedHeight(UIScaling.scale(50)); self.style_button(btn_save, True); btn_save.clicked.connect(self.save_settings)
         right.addWidget(btn_save); right.addStretch()
         scroll_layout.addLayout(right, 1)
+
         
         scroll.setWidget(scroll_content); layout.addWidget(scroll)
 
@@ -115,6 +152,11 @@ class GeneralSettingsPage(QWidget):
         lbl.setStyleSheet("color: #007AFF; font-weight: bold; font-size: 11px; letter-spacing: 0.5px; border: none !important; background: transparent !important;")
         l.addWidget(lbl)
         return card, l
+
+    def create_styled_label(self, text):
+        lbl = QLabel(text)
+        lbl.setStyleSheet("color: #1C1C1E; font-weight: bold; font-size: 13px; background: transparent; border: none;")
+        return lbl
 
     def style_button(self, btn, primary=False):
         bg = "#007AFF" if primary else "#E8E8ED"
@@ -163,6 +205,13 @@ class GeneralSettingsPage(QWidget):
         self.s_port.setText(s.get("sensor_port", "")); self.p_port.setText(s.get("plc_port", ""))
         self.p_tri.setText(str(s.get("plc_trigger_reg", 12))); self.p_res.setText(str(s.get("plc_result_reg", 13)))
         self.ip_presets = s.get("ip_camera_presets", [])
+        self.marker_size.setText(str(s.get("aruco_marker_size", 50.0)))
+        # Load crop settings
+        crop = s.get("camera_crop", {})
+        self.crop_left.setText(str(crop.get("left", 0)))
+        self.crop_right.setText(str(crop.get("right", 0)))
+        self.crop_top.setText(str(crop.get("top", 0)))
+        self.crop_bottom.setText(str(crop.get("bottom", 0)))
         self.update_preset_combo()
         cam_idx = s.get("camera_index", 0)
         if cam_idx == "ip": 
@@ -219,6 +268,16 @@ class GeneralSettingsPage(QWidget):
                 p.update({"address": self.ip_addr.text(), "port": self.port.text(), "path": self.path.text(), "username": self.user.text(), "password": self.passwd.text(), "protocol": self.proto.currentText()})
                 s["active_ip_preset_id"] = pid
         s["ip_camera_presets"] = self.ip_presets
+        # Save ArUco marker size
+        try: s["aruco_marker_size"] = float(self.marker_size.text())
+        except: pass
+        # Save crop settings
+        s["camera_crop"] = {
+            "left": int(self.crop_left.text() or 0),
+            "right": int(self.crop_right.text() or 0),
+            "top": int(self.crop_top.text() or 0),
+            "bottom": int(self.crop_bottom.text() or 0)
+        }
         JsonUtility.save_to_json(SETTINGS_FILE, s)
         QMessageBox.information(self, "Success", "Settings saved!")
         
@@ -262,5 +321,69 @@ class GeneralSettingsPage(QWidget):
                      self.camera_combo.insertItem(0, f"USB Camera {i}", i)
                  cap.release()
 
+    def go_to_dataset(self):
+        self.stop_preview()
+        if self.controller:
+            self.controller.go_to_dataset()
+
+    def go_to_photo(self):
+        self.stop_preview()
+        if self.controller:
+            self.controller.go_to_photo()
+
     def refresh_data(self):
         self.load_settings()
+
+    def run_auto_calibration(self):
+        """Run ArUco-based auto calibration for mm/px"""
+        if self.cap_thread is None or not self.cap_thread.isRunning():
+            self.calibration_status.setText("Error: Start camera first")
+            self.calibration_status.setStyleSheet("color: #D32F2F; font-weight: bold;")
+            return
+        
+        try:
+            marker_size_mm = float(self.marker_size.text())
+            if marker_size_mm <= 0: raise ValueError
+        except ValueError:
+            self.calibration_status.setText("Error: Invalid marker size")
+            self.calibration_status.setStyleSheet("color: #D32F2F; font-weight: bold;")
+            return
+        
+        frame = getattr(self.cap_thread, 'last_frame', None)
+        if frame is None:
+            self.calibration_status.setText("Error: No frame from camera")
+            self.calibration_status.setStyleSheet("color: #D32F2F; font-weight: bold;")
+            return
+        
+        self.btn_calibrate.setEnabled(False)
+        self.btn_calibrate.setText("Detecting...")
+        
+        success, result = detect_aruco_marker(frame, marker_size_mm)
+        
+        if not success:
+            self.calibration_status.setText(f"Error: {result['error']}")
+            self.calibration_status.setStyleSheet("color: #D32F2F; font-weight: bold;")
+            self.btn_calibrate.setEnabled(True)
+            self.btn_calibrate.setText("Run Auto Calibration")
+            return
+        
+        self.calibration_status.setText("Marker detected!")
+        self.calibration_status.setStyleSheet("color: #4CAF50; font-weight: bold;")
+        
+        try:
+            current_mmpx = float(self.mm_px.text() or 0.21)
+        except:
+            current_mmpx = 0.21
+        
+        dialog = ArucoCalibrationDialog(self, result, current_mmpx)
+        if dialog.exec():
+            new_mmpx = dialog.get_result()
+            self.mm_px.setText(f"{new_mmpx:.8f}")
+            self.calibration_status.setText(f"Calibrated: {new_mmpx:.6f} mm/px")
+            self.calibration_status.setStyleSheet("color: #4CAF50; font-weight: bold;")
+        else:
+            self.calibration_status.setText("Cancelled")
+            self.calibration_status.setStyleSheet("color: #666;")
+        
+        self.btn_calibrate.setEnabled(True)
+        self.btn_calibrate.setText("Run Auto Calibration")

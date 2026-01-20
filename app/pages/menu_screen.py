@@ -88,4 +88,3 @@ class MenuScreen(QWidget):
         from app.widgets.password_dialog import PasswordDialog
         if PasswordDialog.authenticate(self, password_type="settings"):
             self.parent.go_to_settings()
-```

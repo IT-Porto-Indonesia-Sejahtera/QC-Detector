@@ -8,12 +8,34 @@ class VideoCaptureThread(QThread):
     connection_failed = Signal(str)
     connection_lost = Signal()
 
-    def __init__(self, source, is_ip=False):
+    def __init__(self, source, is_ip=False, crop_params=None):
         super().__init__()
         self.source = source
         self.is_ip = is_ip
         self.running = True
         self.cap = None
+        self.last_frame = None  # Store for calibration access
+        # Crop params: {"left": 0, "right": 0, "top": 0, "bottom": 0} in percent
+        self.crop_params = crop_params or {}
+
+    def apply_crop(self, frame):
+        """Apply percentage-based cropping to the frame"""
+        if not self.crop_params:
+            return frame
+        h, w = frame.shape[:2]
+        left_pct = max(0, min(self.crop_params.get("left", 0), 49))
+        right_pct = max(0, min(self.crop_params.get("right", 0), 49))
+        top_pct = max(0, min(self.crop_params.get("top", 0), 49))
+        bottom_pct = max(0, min(self.crop_params.get("bottom", 0), 49))
+        
+        x1 = int(w * left_pct / 100)
+        x2 = w - int(w * right_pct / 100)
+        y1 = int(h * top_pct / 100)
+        y2 = h - int(h * bottom_pct / 100)
+        
+        if x1 >= x2 or y1 >= y2:
+            return frame  # Invalid crop, return original
+        return frame[y1:y2, x1:x2]
 
     def run(self):
         try:
@@ -27,9 +49,6 @@ class VideoCaptureThread(QThread):
                 frame = None
                 
                 if self.is_ip:
-                    # Attempt to grab/retrieve
-                    # Improved catch-up logic: simply read once for now to ensure stability
-                    # (The previous logic was equivalent to read() anyhow)
                     if self.cap.grab():
                         ret, frame = self.cap.retrieve()
                 else:
@@ -38,6 +57,8 @@ class VideoCaptureThread(QThread):
                 if not self.running: break
 
                 if ret:
+                    frame = self.apply_crop(frame)
+                    self.last_frame = frame  # Store for calibration
                     self.frame_ready.emit(frame)
                 else:
                     self.connection_lost.emit()
@@ -54,7 +75,6 @@ class VideoCaptureThread(QThread):
 
     def stop(self):
         self.running = False
-        self.quit() # Ask thread to exit event loop
-        # Wait up to 500ms (was 2000) for the thread to finish, then proceed to prevent UI freeze
+        self.quit()
         if not self.wait(500):
-            print("[CaptureThread] Warning: Thread did not stop gracefully (timeout). Proceeding anyway.")
+            print("[CaptureThread] Warning: Thread did not stop gracefully (timeout).")

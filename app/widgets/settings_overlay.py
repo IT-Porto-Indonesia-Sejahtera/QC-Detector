@@ -17,6 +17,8 @@ from app.utils.capture_thread import VideoCaptureThread
 from app.utils.ui_scaling import UIScaling
 from backend.get_product_sku import ProductSKUWorker
 from app.utils import fetch_logger
+from backend.aruco_utils import detect_aruco_marker
+from app.widgets.aruco_calibration_dialog import ArucoCalibrationDialog
 
 class SettingsOverlay(BaseOverlay):
     """Settings overlay for application configuration"""
@@ -426,6 +428,33 @@ class SettingsOverlay(BaseOverlay):
         ip_layout.addWidget(self.connection_status)
 
         left_col.addWidget(self.ip_camera_section)
+        
+        # --- NEW: Auto Calibration System ---
+        aruco_card, aruco_layout = self.create_card("Auto Calibration System")
+        
+        marker_size_row, self.marker_size_input = self.create_input_row(
+            "Marker Size (mm)", 
+            str(self.settings.get("aruco_marker_size", 50.0)),
+            help_text="Physical width of the ArUco marker"
+        )
+        aruco_layout.addLayout(marker_size_row)
+        
+        self.btn_run_calibration = QPushButton("Run Auto Calibration")
+        self.btn_run_calibration.setFixedHeight(UIScaling.scale(45))
+        self.btn_run_calibration.setStyleSheet(f"""
+            QPushButton {{
+                background-color: #9C27B0;
+                color: white;
+                border-radius: {UIScaling.scale(10)}px;
+                font-weight: bold;
+                font-size: {UIScaling.scale_font(14)}px;
+            }}
+            QPushButton:hover {{ background-color: #7B1FA2; }}
+        """)
+        self.btn_run_calibration.clicked.connect(self.run_auto_calibration)
+        aruco_layout.addWidget(self.btn_run_calibration)
+        
+        left_col.addWidget(aruco_card)
         left_col.addStretch()
 
         # --- RIGHT COLUMN: Parameters & Paths ---
@@ -970,6 +999,7 @@ class SettingsOverlay(BaseOverlay):
         else:
             self.settings["camera_index"] = source
             
+        self.settings["aruco_marker_size"] = float(self.marker_size_input.text() or 50.0)
         self.settings["mm_per_px"] = float(self.mmpx_input.text() or 0.21)
         self.settings["sensor_delay"] = float(self.delay_input.text() or 0.2)
         
@@ -1146,4 +1176,69 @@ class SettingsOverlay(BaseOverlay):
         if fetch_logger.clear_logs():
             fetch_logger.log_info("Log cleared by user")
             self.refresh_log_viewer()
+
+    # -------------------------------------------------------------------------
+    # Auto Calibration Logic
+    # -------------------------------------------------------------------------
+
+    def run_auto_calibration(self):
+        """Capture frame and run ArUco detection for auto mm/px calibration"""
+        # 1. Validation: Is camera active?
+        if self.cap_thread is None or not self.cap_thread.isRunning():
+            self.connection_status.setText("Error: Camera must be active (Start Test Feed first)")
+            self.connection_status.setStyleSheet("color: #D32F2F; font-weight: bold;")
+            return
+
+        # 2. Get Marker Size
+        try:
+            marker_size = float(self.marker_size_input.text())
+            if marker_size <= 0: raise ValueError
+        except ValueError:
+            self.connection_status.setText("Error: Invalid Marker Size")
+            self.connection_status.setStyleSheet("color: #D32F2F; font-weight: bold;")
+            return
+
+        # 3. Capture Frame
+        # We need to get the latest frame from the capture thread
+        frame = getattr(self.cap_thread, 'last_frame', None)
+        if frame is None:
+            self.connection_status.setText("Error: No frame captured from camera")
+            self.connection_status.setStyleSheet("color: #D32F2F; font-weight: bold;")
+            return
+
+        # 4. Detect Marker
+        self.btn_run_calibration.setEnabled(False)
+        self.btn_run_calibration.setText("Detecting...")
+        
+        success, result = detect_aruco_marker(frame, marker_size)
+        
+        if not success:
+            self.connection_status.setText(f"Error: {result['error']}")
+            self.connection_status.setStyleSheet("color: #D32F2F; font-weight: bold;")
+            self.btn_run_calibration.setEnabled(True)
+            self.btn_run_calibration.setText("Run Auto Calibration")
+            return
+
+        # 5. Success - Show Confirmation Dialog
+        self.connection_status.setText("Marker detected!")
+        self.connection_status.setStyleSheet("color: #4CAF50; font-weight: bold;")
+        
+        try:
+            current_mmpx = float(self.mmpx_input.text() or 0.21)
+        except:
+            current_mmpx = 0.21
+
+        dialog = ArucoCalibrationDialog(self, result, current_mmpx)
+        if dialog.exec():
+            # User accepted
+            new_mmpx = dialog.get_result()
+            self.mmpx_input.setText(f"{new_mmpx:.8f}")
+            self.connection_status.setText(f"Calibrated: {new_mmpx:.6f} mm/px applied")
+            self.connection_status.setStyleSheet("color: #4CAF50; font-weight: bold;")
+        else:
+            self.connection_status.setText("Calibration cancelled by user")
+            self.connection_status.setStyleSheet("color: #666666;")
+
+        self.btn_run_calibration.setEnabled(True)
+        self.btn_run_calibration.setText("Run Auto Calibration")
 

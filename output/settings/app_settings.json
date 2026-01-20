@@ -1,5 +1,5 @@
 {
-    "camera_index": 0,
+    "camera_index": "ip",
     "mm_per_px": 0.2123459,
     "sensor_delay": 0.2123459,
     "fetch_status": "success",
@@ -31,5 +31,12 @@
     "sensor_port": "",
     "plc_port": "",
     "plc_trigger_reg": 12,
-    "plc_result_reg": 13
+    "plc_result_reg": 13,
+    "aruco_marker_size": 50.0,
+    "camera_crop": {
+        "left": 37,
+        "right": 20,
+        "top": 31,
+        "bottom": 18
+    }
 }
