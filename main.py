@@ -10,14 +10,14 @@ from backend.DB import init_db, close_pool
 
 def cleanup():
     """Cleanup function to close database connections."""
-    print("\n🔄 Closing database connections...")
+    print("\n[CLEANUP] Closing database connections...")
     close_pool()
-    print("✓ Cleanup complete")
+    print("[CLEANUP] Cleanup complete")
 
 def signal_handler(signum, frame):
     """Handle termination signals gracefully."""
     signal_name = signal.Signals(signum).name
-    print(f"\n⚠ Received {signal_name}, shutting down...")
+    print(f"\n[SIGNAL] Received {signal_name}, shutting down...")
     cleanup()
     sys.exit(0)
 
@@ -25,9 +25,9 @@ def init_database():
     """Initialize the database connection pool."""
     try:
         init_db()
-        print("✓ Database connection pool initialized")
+        print("[DB] Database connection pool initialized")
     except Exception as e:
-        print(f"⚠ Database connection failed: {e}")
+        print(f"[DB] Database connection failed: {e}")
         print("  App will continue without database functionality")
 
 def run_cli_mode():
