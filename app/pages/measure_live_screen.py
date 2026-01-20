@@ -161,13 +161,11 @@ class LiveCameraScreen(QWidget):
         
         if not PasswordDialog.authenticate(self):
             return  # Password incorrect or cancelled
-        
-        # Instantiate overlay with 'self' as parent so it covers this screen
-        overlay = PresetProfileOverlay(self)
-        overlay.profile_selected.connect(self.on_profile_selected)
-        # No exec(), just let it exist. It manages its own show/close.
-    
-    
+            
+        # Navigate to Profiles Page
+        if self.parent_widget:
+            self.parent_widget.go_to_profiles(from_live=True)
+
     def on_switch_sides(self):
         # Toggle side preference
         if self.team_layout_order == "A_LEFT":
@@ -180,17 +178,22 @@ class LiveCameraScreen(QWidget):
         self.render_presets()
     
     def on_profile_selected(self, profile_data):
-        # Update active profile when selected from dialog
-        self.active_profile_id = profile_data.get("id")
-        self.active_profile_data = profile_data
-        self.presets = profile_data.get("presets", DEFAULT_PRESETS)
+        # Update active profile - logic might need update if active profile changes externally
+        # But since we go to a page and come back, we should reload in showEvent or manually
+        pass 
+
+    # ... (skipping some methods not shown here, will target show_settings_menu below)
+
+    def show_settings_menu(self):
+        # Check settings password first
+        from app.widgets.password_dialog import PasswordDialog
         
-        # Save the active profile ID
-        self.save_settings()
+        if not PasswordDialog.authenticate(self, password_type="settings"):
+            return  # Password incorrect or cancelled
         
-        # Update UI
-        self.update_info_bar()
-        self.render_presets()
+        # Navigate to General Settings Page
+        if self.parent_widget:
+            self.parent_widget.go_to_settings(from_live=True)
 
     def init_ui(self):
         # Use theme variables
@@ -870,6 +873,12 @@ class LiveCameraScreen(QWidget):
     # Lifecycle
     # ------------------------------------------------------------------
     def showEvent(self, event):
+        # Reload Data when showing screen (e.g. returning from Settings Page)
+        self.load_settings()
+        self.load_active_profile()
+        self.render_presets()
+        self.update_info_bar()
+        
         self.start_camera()
         super().showEvent(event)
         
@@ -920,8 +929,6 @@ class LiveCameraScreen(QWidget):
         self.preview_label.setText(f"Camera error.\nCheck settings.")
         self.preview_label.setStyleSheet(f"background-color: #FFF2F2; color: #D32F2F; border-radius: {error_radius}px; font-weight: bold; font-size: {error_font_size}px;")
 
-
-
     def stop_camera(self):
         if self.cap_thread:
             self.cap_thread.stop()
@@ -933,8 +940,9 @@ class LiveCameraScreen(QWidget):
                 self.cap_thread.setParent(None)
                 # Keep reference globally
                 _zombie_threads.append(self.cap_thread)
-            else:
-                self.cap_thread = None
+            
+            # ALWAYS nullify local reference so start_camera can create a fresh one
+            self.cap_thread = None
         else:
             self.cap_thread = None
         
@@ -950,32 +958,12 @@ class LiveCameraScreen(QWidget):
             self.parent_widget.go_back()
             
     # ------------------------------------------------------------------
-    # Settings Menu
+    # Settings Menu (REMOVED - Managed via Settings Page)
     # ------------------------------------------------------------------
     def create_settings_menu(self):
-        self.settings_menu = QMenu(self)
-        
-        # Helper to create input fields in menu
-        self.mm_input = QLineEdit()
-        self.mm_input.setText(str(self.mm_per_px))
-        self.mm_input.setPlaceholderText("MM per Pixel")
-        self.mm_input.textChanged.connect(self.on_mm_changed)
-        
-        mm_action = QWidgetAction(self)
-        mm_action.setDefaultWidget(self.mm_input)
-        
-        self.settings_menu.addAction("MM per Pixel:")
-        self.settings_menu.addAction(mm_action)
-        self.settings_menu.addSeparator()
-
-        # Layout Mode Switch
-        current_layout_name = "Classic" if self.layout_mode == "split" else "Split" # Toggle text
-        self.settings_menu.addAction(f"Switch to {current_layout_name} Layout", self.toggle_layout_mode)
-        self.settings_menu.addSeparator()
-        
-        # Trigger Capture manually
-        self.settings_menu.addAction("Refocus / Resume Live", self.resume_live)
-        self.settings_menu.addAction("Capture Frame", self.capture_frame)
+        # Kept as placeholder or removed if unused. 
+        # Since logic was redirected, we can leave empty or minimal.
+        pass
 
     def toggle_layout_mode(self):
         new_mode = "classic" if self.layout_mode == "split" else "split"
@@ -992,40 +980,9 @@ class LiveCameraScreen(QWidget):
         # Re-initialize UI
         self.init_ui()
         
-    def show_settings_menu(self):
-        # Check settings password first
-        from app.widgets.password_dialog import PasswordDialog
-        
-        if not PasswordDialog.authenticate(self, password_type="settings"):
-            return  # Password incorrect or cancelled
-        
-        # Stop camera so Settings Overlay can detect it
-        self.stop_camera()
-        
-        # Show settings overlay
-        from app.widgets.settings_overlay import SettingsOverlay
-        overlay = SettingsOverlay(self)
-        overlay.settings_saved.connect(self.on_settings_saved)
-        
-        # Restart camera when overlay closes
-        overlay.closed.connect(self.start_camera)
+    # show_settings_menu REMOVED - using implementation at top of file
     
-    def on_settings_saved(self, settings):
-        """Handle settings saved from overlay"""
-        # Store old mode to check for changes
-        old_mode = self.layout_mode
-        
-        # Reload all settings from file to get the complete updated state
-        self.load_settings()
-        
-        # If layout mode changed, reload the UI
-        if self.layout_mode != old_mode:
-            print(f"[Live] Layout changed from {old_mode} to {self.layout_mode}. Reloading UI...")
-            self.reload_ui()
-        
-        # Note: Camera will be restarted via the closed signal connection
-        # But if on_settings_saved is called before closed, we need to ensure camera restarts
-        # The stop_camera is already called in show_settings_menu before overlay opens
+    # on_settings_saved REMOVED - page handles saving to file
         
     def on_mm_changed(self, text):
         try:
