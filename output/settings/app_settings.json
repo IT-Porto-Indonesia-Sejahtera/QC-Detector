@@ -29,7 +29,7 @@
     ],
     "active_ip_preset_id": "ip-preset-1",
     "sensor_port": "",
-    "plc_port": "",
+    "plc_port": "/dev/cu.usbserial-14120",
     "plc_trigger_reg": 12,
     "plc_result_reg": 13,
     "aruco_marker_size": 50.0,
@@ -49,5 +49,6 @@
         "fy": 0.0,
         "cx": 0.0,
         "cy": 0.0
-    }
+    },
+    "dataset_save_measurements": true
 }

@@ -381,11 +381,19 @@ class LiveCameraScreen(QWidget):
             self.lens_distortion = {}
 
     def setup_minimal_layout(self):
-        """Minimal Layout: Full-screen preview with no buttons, just the result."""
-        main_layout = QVBoxLayout()
-        main_layout.setContentsMargins(0, 0, 0, 0)
-        main_layout.setSpacing(0)
-        self.setLayout(main_layout)
+        """Minimal Layout: Full-screen preview with overlay controls."""
+        from PySide6.QtWidgets import QStackedLayout
+        
+        # Use Stacked Layout for Overlay
+        stack = QStackedLayout()
+        stack.setStackingMode(QStackedLayout.StackAll)
+        self.setLayout(stack)
+
+        # --- Layer 1: Content (Preview & Hidden Stuff) ---
+        content_widget = QWidget()
+        content_layout = QVBoxLayout(content_widget)
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setSpacing(0)
 
         # Full-screen Preview Label
         self.preview_label = QLabel("Waiting for Capture...")
@@ -398,12 +406,12 @@ class LiveCameraScreen(QWidget):
             font-size: {preview_font_size}px;
         """)
         self.preview_label.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Ignored)
-        main_layout.addWidget(self.preview_label, stretch=1)
+        content_layout.addWidget(self.preview_label, 1)
         
-        # Hidden info bar (needed for compatibility but not visible)
+        # Hidden info bar (needed for compatibility)
         self.info_bar = QLabel("")
         self.info_bar.setVisible(False)
-        main_layout.addWidget(self.info_bar)
+        content_layout.addWidget(self.info_bar)
         
         # Hidden counters/details (needed for compatibility)
         self.lbl_good = QLabel("0"); self.lbl_good.setVisible(False)
@@ -414,7 +422,7 @@ class LiveCameraScreen(QWidget):
         self.val_detail_wid = QLabel("-"); self.val_detail_wid.setVisible(False)
         self.val_detail_res = QLabel("-"); self.val_detail_res.setVisible(False)
         
-        # Still create dummy left/right panels for compatibility with render_presets
+        # Dummy hidden panels
         self.left_panel = QFrame(); self.left_panel.setVisible(False)
         self.left_presets_container = QWidget()
         self.left_presets_layout = QVBoxLayout(self.left_presets_container)
@@ -423,6 +431,58 @@ class LiveCameraScreen(QWidget):
         self.right_presets_layout = QVBoxLayout(self.right_presets_container)
         self.lbl_left_team = QLabel("")
         self.lbl_right_team = QLabel("")
+        
+        stack.addWidget(content_widget)
+        
+        # --- Layer 2: Overlay Controls ---
+        overlay_widget = QWidget()
+        overlay_widget.setStyleSheet("background: transparent;")
+        overlay_layout = QVBoxLayout(overlay_widget)
+        overlay_layout.setContentsMargins(15, 15, 15, 15)
+        
+        # Top Bar
+        top_bar = QHBoxLayout()
+        
+        # Button Style (More visible)
+        btn_size = UIScaling.scale(55)
+        btn_font = UIScaling.scale_font(28)
+        btn_style = f"""
+            QPushButton {{
+                background-color: rgba(30, 30, 30, 0.6);
+                color: white;
+                border-radius: {btn_size//2}px;
+                font-size: {btn_font}px;
+                border: 2px solid rgba(255, 255, 255, 0.4);
+            }}
+            QPushButton:hover {{
+                background-color: rgba(0, 122, 255, 0.8);
+                border: 2px solid white;
+            }}
+        """
+        
+        btn_back = QPushButton("←")
+        btn_back.setFixedSize(btn_size, btn_size)
+        btn_back.setStyleSheet(btn_style)
+        btn_back.setCursor(Qt.PointingHandCursor)
+        btn_back.setToolTip("Back to Menu")
+        btn_back.clicked.connect(self.go_back)
+        
+        btn_settings = QPushButton("⚙️")
+        btn_settings.setFixedSize(btn_size, btn_size)
+        btn_settings.setStyleSheet(btn_style)
+        btn_settings.setCursor(Qt.PointingHandCursor)
+        btn_settings.setToolTip("Open settings")
+        btn_settings.clicked.connect(self.show_settings_menu)
+        
+        top_bar.addWidget(btn_back)
+        top_bar.addStretch()
+        top_bar.addWidget(btn_settings)
+        
+        overlay_layout.addLayout(top_bar)
+        overlay_layout.addStretch() # Push everything up
+        
+        stack.addWidget(overlay_widget)
+        stack.setCurrentIndex(1) # CRITICAL: Put the overlay on top interaction-wise
 
     def setup_classic_layout(self):
         # Classic Layout: Left (Presets Grid) | Right (Preview/Stats)
@@ -624,6 +684,9 @@ class LiveCameraScreen(QWidget):
 
     def render_presets(self):
         # Handle Layout Modes
+        if self.layout_mode == "minimal":
+            return # Minimal mode has no presets to render
+            
         if self.layout_mode == "classic":
             # CLASSIC MODE: All presets in left panel, but split by Team A (Left) and B (Right)
             if hasattr(self, 'btn_switch'): 
@@ -700,6 +763,8 @@ class LiveCameraScreen(QWidget):
             self._render_presets_auto_fit(presets_right, self.right_presets_layout)
         
     def _clear_layout(self, layout):
+        if not layout:
+            return
         while layout.count():
             item = layout.takeAt(0)
             widget = item.widget()
@@ -1017,6 +1082,13 @@ class LiveCameraScreen(QWidget):
             # If thread is still running (timeout occurred), do NOT destroy it.
             if self.cap_thread.isRunning():
                 print(f"[LiveCamera] Thread {self.cap_thread} is stuck. Detaching and abandoning (zombie)...")
+                # Disconnect signals to prevent ghost data
+                try:
+                    self.cap_thread.frame_ready.disconnect(self.on_frame_received)
+                    self.cap_thread.connection_failed.disconnect(self.on_camera_connection_failed)
+                except Exception:
+                    pass # Helper might have already failed
+                    
                 # Detach from parent (so it's not destroyed when self is destroyed)
                 self.cap_thread.setParent(None)
                 # Keep reference globally

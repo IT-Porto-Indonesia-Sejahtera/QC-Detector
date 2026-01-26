@@ -1,9 +1,5 @@
-"""
-Test script for PLC Modbus connection
-Run this to test the Modbus RTU connection to your PLC
-"""
-
-from input.plc_modbus_trigger import PLCModbusTrigger, ModbusConfig, check_pymodbus_available
+import sys
+import serial.tools.list_ports
 import random
 import time
 
@@ -13,14 +9,33 @@ if not check_pymodbus_available():
     print("Please run: pip install pymodbus")
     exit(1)
 
+def list_serial_ports():
+    ports = serial.tools.list_ports.comports()
+    print("\nAvailable Serial Ports:")
+    if not ports:
+        print("  (None found)")
+    for port, desc, hwid in sorted(ports):
+        print(f"  - {port}: {desc}")
+    print("")
+
+list_serial_ports()
+
 print("=" * 50)
 print("PLC Modbus RTU Test")
 print("=" * 50)
 
 # Configure for Modbus RTU (Serial)
+# Default to first argument if provided
+target_port = "COM7" # Default
+if len(sys.argv) > 1:
+    target_port = sys.argv[1]
+    print(f"Using provided port: {target_port}")
+else:
+    print("TIP: You can run this with a specific port: ./venv/bin/python test_plc_modbus.py /dev/tty.usbserial-XXX")
+
 config = ModbusConfig(
     connection_type="rtu",  # Use RTU for serial connection
-    serial_port="COM7",
+    serial_port=target_port,
     baudrate=9600,
     parity="E",
     stopbits=1,

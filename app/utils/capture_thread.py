@@ -126,16 +126,24 @@ class VideoCaptureThread(QThread):
                 self.connection_failed.emit("Failed to open camera")
                 return
 
-            while self.running:
-                ret = False
-                frame = None
-                
-                if self.is_ip:
-                    if self.cap.grab():
-                        ret, frame = self.cap.retrieve()
-                else:
-                    ret, frame = self.cap.read()
+            # Try to set buffer size to 1 to reduce latency (USB cameras)
+            try:
+                self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+            except Exception:
+                pass
 
+            while self.running:
+                # Buffering fix: Discard stale frames to reduce lag
+                # We grab() multiple times to empty the hardware/software buffer
+                # until retrieve() gives us the latest possible frame.
+                if self.is_ip:
+                    # IP Cameras often need aggressive grabbing
+                    for _ in range(5): self.cap.grab()
+                    ret, frame = self.cap.retrieve()
+                else:
+                    # USB Cameras
+                    ret, frame = self.cap.read()
+                    
                 if not self.running: break
 
                 if ret:
@@ -151,8 +159,8 @@ class VideoCaptureThread(QThread):
                     self.connection_lost.emit()
                     break
                 
-                # Small sleep to prevent maxing CPU
-                self.msleep(10 if not self.is_ip else 1)
+                # Minimum sleep to yield to other threads
+                self.msleep(1)
         except Exception as e:
             print(f"[CaptureThread] Error: {e}")
             self.connection_failed.emit(str(e))

@@ -5,7 +5,7 @@ import numpy as np
 import threading
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QSizePolicy, QFrame, QComboBox
+    QSizePolicy, QFrame, QComboBox, QLineEdit, QFileDialog, QCheckBox
 )
 from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtGui import QPixmap, QImage
@@ -13,6 +13,7 @@ from app.utils.camera_utils import open_video_capture
 from app.utils.capture_thread import VideoCaptureThread
 from project_utilities.json_utility import JsonUtility
 from app.utils.ui_scaling import UIScaling
+from model.measure_live_sandals import measure_live_sandals
 
 # Import PLC Modbus trigger
 try:
@@ -22,6 +23,8 @@ except ImportError:
     PLC_AVAILABLE = False
 
 class CaptureDatasetScreen(QWidget):
+    plc_capture_signal = Signal()
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.parent_widget = parent
@@ -30,8 +33,8 @@ class CaptureDatasetScreen(QWidget):
         # Load settings
         self.settings = JsonUtility.load_from_json(os.path.join("output", "settings", "app_settings.json")) or {}
         
-        # Ensure output directory exists
-        self.output_dir = os.path.join("output", "dataset")
+        # Ensure default output directory exists
+        self.output_dir = self.settings.get("last_dataset_path") or os.path.join("output", "dataset")
         os.makedirs(self.output_dir, exist_ok=True)
 
         # -----------------------------------------------------------------
@@ -103,17 +106,51 @@ class CaptureDatasetScreen(QWidget):
 
         # --- BOTTOM AREA ---
         bottom_container = QFrame()
-        bottom_container.setMinimumHeight(UIScaling.scale(100))
+        bottom_container.setMinimumHeight(UIScaling.scale(140))
         bottom_container.setStyleSheet("background: #1A1A1A; border-radius: 10px;")
         
-        bottom_layout = QHBoxLayout(bottom_container)
-        bottom_layout.setContentsMargins(15, 15, 15, 15)
-        bottom_layout.setSpacing(UIScaling.scale(20))
+        bottom_v_layout = QVBoxLayout(bottom_container)
+        bottom_v_layout.setContentsMargins(15, 15, 15, 15)
+        bottom_v_layout.setSpacing(UIScaling.scale(10))
 
+        # Folder Selection Row
+        folder_layout = QHBoxLayout()
+        self.folder_input = QLineEdit(self.output_dir)
+        self.folder_input.setStyleSheet("background: #333; color: white; border: 1px solid #555; padding: 8px; border-radius: 5px;")
+        self.folder_input.textChanged.connect(self.update_output_dir)
+        
+        self.btn_browse = QPushButton("📁 Browse")
+        self.btn_browse.setStyleSheet("background: #444; color: white; padding: 8px 15px; border-radius: 5px;")
+        self.btn_browse.clicked.connect(self.browse_folder)
+        
+        folder_layout.addWidget(QLabel("Save Folder:"))
+        folder_layout.addWidget(self.folder_input, 1)
+        folder_layout.addWidget(self.btn_browse)
+        bottom_v_layout.addLayout(folder_layout)
+
+        # Save Options Row
+        options_layout = QHBoxLayout()
+        self.chk_measure = QCheckBox("Save Measurement Result (Overlay)")
+        self.chk_measure.setStyleSheet("color: white; font-weight: bold;")
+        self.chk_measure.setChecked(self.settings.get("dataset_save_measurements", False))
+        self.chk_measure.toggled.connect(self.update_save_options)
+        options_layout.addWidget(self.chk_measure)
+        bottom_v_layout.addLayout(options_layout)
+
+        # Capture Control Row
+        control_layout = QHBoxLayout()
+        control_layout.setSpacing(UIScaling.scale(20))
+
+        # PLC Toggle Button
+        self.btn_plc_toggle = QPushButton("PLC Trigger: OFF")
+        self.btn_plc_toggle.setMinimumHeight(UIScaling.scale(50))
+        self.btn_plc_toggle.setStyleSheet("background: #444; color: #888; font-weight: bold; border-radius: 8px;")
+        self.btn_plc_toggle.clicked.connect(self.toggle_plc)
+        
         # Capture Button
-        self.capture_btn = QPushButton("📸 Capture Image")
-        self.capture_btn.setMinimumHeight(UIScaling.scale(60))
-        capture_btn_font_size = UIScaling.scale_font(20)
+        self.capture_btn = QPushButton("📸 Capture Image (Manual)")
+        self.capture_btn.setMinimumHeight(UIScaling.scale(50))
+        capture_btn_font_size = UIScaling.scale_font(18)
         self.capture_btn.setStyleSheet(f"""
             QPushButton {{
                 background: #007AFF;
@@ -127,7 +164,9 @@ class CaptureDatasetScreen(QWidget):
         """)
         self.capture_btn.clicked.connect(self.capture_image)
         
-        bottom_layout.addWidget(self.capture_btn)
+        control_layout.addWidget(self.btn_plc_toggle, 1)
+        control_layout.addWidget(self.capture_btn, 2)
+        bottom_v_layout.addLayout(control_layout)
 
         main_layout.addWidget(bottom_container)
         self.setLayout(main_layout)
@@ -140,13 +179,59 @@ class CaptureDatasetScreen(QWidget):
         # PLC Modbus Trigger
         # -----------------------------------------------------------------
         self.plc_trigger = None
-        self.plc_status_label = QLabel("PLC: Not connected")
+        self.plc_running = False
+        self.plc_status_label = QLabel("PLC: Disconnected")
         plc_status_font_size = UIScaling.scale_font(12)
         self.plc_status_label.setStyleSheet(f"color: #888; font-size: {plc_status_font_size}px;")
         top_bar.addWidget(self.plc_status_label)
         
+        # Connect signal for thread-safe capture
+        self.plc_capture_signal.connect(self.capture_image)
+        
         self._init_plc_trigger()
-    
+
+    def browse_folder(self):
+        path = QFileDialog.getExistingDirectory(self, "Select Save Directory", self.output_dir)
+        if path:
+            self.folder_input.setText(path)
+            self.output_dir = path
+            # Save to settings for persistence
+            self.settings["last_dataset_path"] = path
+            JsonUtility.save_to_json(os.path.join("output", "settings", "app_settings.json"), self.settings)
+
+    def update_output_dir(self, text):
+        self.output_dir = text
+
+    def toggle_plc(self):
+        if not PLC_AVAILABLE:
+            return
+            
+        if self.plc_running:
+            self.stop_plc()
+        else:
+            self.start_plc()
+
+    def start_plc(self):
+        if not self.plc_trigger:
+            self._init_plc_trigger()
+            
+        if self.plc_trigger:
+            print("[Dataset] Starting PLC Trigger...")
+            self.plc_running = True
+            self.btn_plc_toggle.setText("PLC Trigger: ON")
+            self.btn_plc_toggle.setStyleSheet("background: #2E7D32; color: white; font-weight: bold; border-radius: 8px;")
+            threading.Thread(target=self.plc_trigger.start, daemon=True).start()
+
+    def stop_plc(self):
+        if self.plc_trigger:
+            print("[Dataset] Stopping PLC Trigger...")
+            self.plc_trigger.stop()
+            self.plc_running = False
+            self.btn_plc_toggle.setText("PLC Trigger: OFF")
+            self.btn_plc_toggle.setStyleSheet("background: #444; color: #888; font-weight: bold; border-radius: 8px;")
+            self.plc_status_label.setText("PLC: Disconnected")
+            self.plc_status_label.setStyleSheet("color: #888; font-size: 12px;")
+
     def _init_plc_trigger(self):
         """Initialize PLC Modbus trigger"""
         if not PLC_AVAILABLE:
@@ -179,9 +264,9 @@ class CaptureDatasetScreen(QWidget):
             self.plc_status_label.setText(f"PLC: Init error")
     
     def _on_plc_trigger(self):
-        """Called when PLC trigger fires"""
-        print("[PLC] TRIGGER FIRED! Capturing image...")
-        QTimer.singleShot(0, self.capture_image)
+        """Called when PLC trigger fires (background thread)"""
+        print("[PLC] TRIGGER FIRED! Emitting capture signal...")
+        self.plc_capture_signal.emit()
     
     def _on_plc_value_update(self, value):
         pass
@@ -254,8 +339,11 @@ class CaptureDatasetScreen(QWidget):
 
     def showEvent(self, event):
         """Refresh camera list and start."""
-        # Reload settings to get latest camera_index
+        # Reload settings to get latest camera_index and folder
         self.settings = JsonUtility.load_from_json(os.path.join("output", "settings", "app_settings.json")) or {}
+        
+        # Update folder
+        self.folder_input.setText(self.output_dir)
         
         current_cam = self.cam_select.currentText()
         self.cam_select.blockSignals(True)
@@ -281,8 +369,7 @@ class CaptureDatasetScreen(QWidget):
             self.cap_thread.stop()
             self.cap_thread = None
         
-        if self.plc_trigger:
-            self.plc_trigger.stop()
+        self.stop_plc()
 
     def hideEvent(self, event):
         self.stop_camera()
@@ -301,7 +388,7 @@ class CaptureDatasetScreen(QWidget):
         if img is None: return QPixmap()
         try:
             img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-            h, w, _ = img_rgb.shape
+            h, w, ch = img_rgb.shape
             scale = min(max(1e-6, target_width / w), max(1e-6, target_height / h))
             new_w, new_h = int(w * scale), int(h * scale)
             if new_w == 0 or new_h == 0: return QPixmap()
@@ -311,11 +398,48 @@ class CaptureDatasetScreen(QWidget):
         except Exception:
             return QPixmap()
 
+    def update_save_options(self, checked):
+        self.settings["dataset_save_measurements"] = checked
+        JsonUtility.save_to_json(os.path.join("output", "settings", "app_settings.json"), self.settings)
+
     def capture_image(self):
-        if self.live_frame is None: return
-        timestamp = int(time.time() * 1000)
-        filename = f"dataset_{timestamp}.jpg"
-        filepath = os.path.join(self.output_dir, filename)
-        cv2.imwrite(filepath, self.live_frame)
-        self.capture_btn.setText("Saved!")
-        QTimer.singleShot(1000, lambda: self.capture_btn.setText("📸 Capture Image"))
+        print("[Dataset] capture_image method called")
+        if self.live_frame is None: 
+            print("[Dataset] No frame available yet")
+            return
+        
+        try:
+            # Ensure dir exists (it might have been typed manually)
+            save_path = self.output_dir.strip()
+            if not save_path:
+                save_path = os.path.join("output", "dataset")
+                
+            abs_dir = os.path.abspath(save_path)
+            os.makedirs(abs_dir, exist_ok=True)
+
+            timestamp = int(time.time() * 1000)
+            filename = f"dataset_{timestamp}.jpg"
+            filepath = os.path.join(abs_dir, filename)
+            
+            # Decide what to save (Raw or Processed)
+            frame_to_save = self.live_frame
+            if self.chk_measure.isChecked():
+                # Run measurement logic
+                mmpx = self.settings.get("mm_per_px", 0.21)
+                print(f"[Dataset] Running measurement overlay (mmpx: {mmpx})...")
+                results, processed = measure_live_sandals(self.live_frame, mm_per_px=mmpx)
+                frame_to_save = processed
+
+            success = cv2.imwrite(filepath, frame_to_save)
+            if success:
+                print(f"[Dataset] SUCCESS! Saved to: {filepath}")
+                self.capture_btn.setText("Saved!")
+                QTimer.singleShot(1500, lambda: self.capture_btn.setText("📸 Capture Image (Manual)"))
+            else:
+                print(f"[Dataset] FAILED to write file: {filepath}")
+                self.capture_btn.setText("Write Failed!")
+        except Exception as e:
+            print(f"[Dataset] CRITICAL ERROR during capture: {e}")
+            import traceback
+            traceback.print_exc()
+            self.capture_btn.setText("System Error!")
