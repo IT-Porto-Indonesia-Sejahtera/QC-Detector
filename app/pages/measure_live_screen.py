@@ -369,6 +369,7 @@ class LiveCameraScreen(QWidget):
             self.active_ip_preset_id = self.settings.get("active_ip_preset_id", None)
             # Camera crop settings
             self.camera_crop = self.settings.get("camera_crop", {})
+            self.lens_distortion = self.settings.get("lens_distortion", {})
         else:
             self.mm_per_px = 0.215984148
             self.camera_index = 0
@@ -377,6 +378,7 @@ class LiveCameraScreen(QWidget):
             self.ip_presets = []
             self.active_ip_preset_id = None
             self.camera_crop = {}
+            self.lens_distortion = {}
 
     def setup_minimal_layout(self):
         """Minimal Layout: Full-screen preview with no buttons, just the result."""
@@ -988,7 +990,7 @@ class LiveCameraScreen(QWidget):
             is_ip = not isinstance(source, int)
             
             # Start background capture with crop params
-            self.cap_thread = VideoCaptureThread(source, is_ip, self.camera_crop)
+            self.cap_thread = VideoCaptureThread(source, is_ip, crop_params=self.camera_crop, distortion_params=self.lens_distortion)
             self.cap_thread.frame_ready.connect(self.on_frame_received)
             self.cap_thread.connection_failed.connect(self.on_camera_connection_failed)
             self.cap_thread.start()

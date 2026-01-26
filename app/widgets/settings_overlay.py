@@ -925,7 +925,9 @@ class SettingsOverlay(BaseOverlay):
         self.preview_box.setStyleSheet(f"background-color: #2D2D2D; border-radius: 10px; color: {self.theme['text_sub']}; font-size: 14px;")
 
         # Start background capture
-        self.cap_thread = VideoCaptureThread(source, is_ip)
+        crop = self.settings.get("camera_crop", {})
+        distortion = self.settings.get("lens_distortion", {})
+        self.cap_thread = VideoCaptureThread(source, is_ip, crop_params=crop, distortion_params=distortion)
         self.cap_thread.frame_ready.connect(self.on_frame_received)
         self.cap_thread.connection_failed.connect(self.on_connection_failed)
         self.cap_thread.connection_lost.connect(self.on_connection_lost)

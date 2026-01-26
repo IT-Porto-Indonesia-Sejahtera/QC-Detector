@@ -30,6 +30,7 @@ class GeneralSettingsPage(QWidget):
         self.load_settings()
 
     def init_ui(self):
+        self.init_complete = False
         self.setStyleSheet("background-color: #F2F2F7;")
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0); layout.setSpacing(0)
@@ -104,6 +105,52 @@ class GeneralSettingsPage(QWidget):
         crop_layout.addWidget(self.create_styled_label("Crop Bottom (%):"))
         self.crop_bottom = QLineEdit("0"); self.style_input(self.crop_bottom); crop_layout.addWidget(self.crop_bottom)
         right.addWidget(crop_card)
+
+        # Lens Distortion Card
+        dist_card, dist_layout = self.create_card("Lens Distortion Correction")
+        
+        # Preset Combo
+        dist_layout.addWidget(self.create_styled_label("Distortion Profile:"))
+        self.dist_preset = QComboBox()
+        self.dist_preset.addItems(["Custom", "No Distortion (Default)", "Mild Barrel (Standard Webcam)", "Medium Barrel (Wide Lens)", "Strong Barrel (Fisheye)"])
+        self.style_input(self.dist_preset)
+        self.dist_preset.currentIndexChanged.connect(self.on_dist_preset_change)
+        dist_layout.addWidget(self.dist_preset)
+        
+        # Coefficients
+        dist_layout.addWidget(self.create_styled_label("Advanced Parameters:"))
+        h_k = QHBoxLayout()
+        v_k1 = QVBoxLayout(); v_k1.addWidget(self.create_styled_label("k1 (Main Curvature)")); self.k1 = QLineEdit("0.0"); self.style_input(self.k1); v_k1.addWidget(self.k1)
+        v_k2 = QVBoxLayout(); v_k2.addWidget(self.create_styled_label("k2 (Detail)")); self.k2 = QLineEdit("0.0"); self.style_input(self.k2); v_k2.addWidget(self.k2)
+        v_p1 = QVBoxLayout(); v_p1.addWidget(self.create_styled_label("p1 (Tangential)")); self.p1 = QLineEdit("0.0"); self.style_input(self.p1); v_p1.addWidget(self.p1)
+        h_k.addLayout(v_k1); h_k.addLayout(v_k2); h_k.addLayout(v_p1)
+        dist_layout.addLayout(h_k)
+        
+        h_k2 = QHBoxLayout()
+        v_p2 = QVBoxLayout(); v_p2.addWidget(self.create_styled_label("p2 (Tangential)")); self.p2 = QLineEdit("0.0"); self.style_input(self.p2); v_p2.addWidget(self.p2)
+        v_k3 = QVBoxLayout(); v_k3.addWidget(self.create_styled_label("k3 (Higher Order)")); self.k3 = QLineEdit("0.0"); self.style_input(self.k3); v_k3.addWidget(self.k3)
+        h_k2.addLayout(v_p2); h_k2.addLayout(v_k3); h_k2.addStretch()
+        dist_layout.addLayout(h_k2)
+
+        # Camera Matrix
+        dist_layout.addWidget(self.create_styled_label("Camera Matrix (Advanced):"))
+        hbox_cam = QHBoxLayout()
+        self.btn_auto_matrix = QPushButton("Auto-Estimate Matrix")
+        self.style_button(self.btn_auto_matrix)
+        self.btn_auto_matrix.setToolTip("Set to 0.0 to allow auto-estimation based on image size")
+        self.btn_auto_matrix.clicked.connect(self.reset_camera_matrix)
+        hbox_cam.addWidget(self.btn_auto_matrix)
+        dist_layout.addLayout(hbox_cam)
+
+        h_mat = QHBoxLayout()
+        v_fx = QVBoxLayout(); v_fx.addWidget(self.create_styled_label("fx")); self.fx = QLineEdit("0.0"); self.style_input(self.fx); v_fx.addWidget(self.fx)
+        v_fy = QVBoxLayout(); v_fy.addWidget(self.create_styled_label("fy")); self.fy = QLineEdit("0.0"); self.style_input(self.fy); v_fy.addWidget(self.fy)
+        v_cx = QVBoxLayout(); v_cx.addWidget(self.create_styled_label("cx")); self.cx = QLineEdit("0.0"); self.style_input(self.cx); v_cx.addWidget(self.cx)
+        v_cy = QVBoxLayout(); v_cy.addWidget(self.create_styled_label("cy")); self.cy = QLineEdit("0.0"); self.style_input(self.cy); v_cy.addWidget(self.cy)
+        h_mat.addLayout(v_fx); h_mat.addLayout(v_fy); h_mat.addLayout(v_cx); h_mat.addLayout(v_cy)
+        dist_layout.addLayout(h_mat)
+        
+        right.addWidget(dist_card)
         
         hw_card, hw_layout = self.create_card("Hardware Integration")
         hw_layout.addWidget(self.create_styled_label("Sensor Serial Port:"))
@@ -197,6 +244,12 @@ class GeneralSettingsPage(QWidget):
                 border: 0px;
             }}
         """)
+        # Connect to live update handler if not a combo (combos connected separately)
+        if isinstance(widget, QLineEdit):
+            widget.textChanged.connect(self.update_live_params)
+
+
+
 
     def load_settings(self):
         s = JsonUtility.load_from_json(SETTINGS_FILE) or {}
@@ -216,6 +269,19 @@ class GeneralSettingsPage(QWidget):
         self.crop_right.setText(str(crop.get("right", 0)))
         self.crop_top.setText(str(crop.get("top", 0)))
         self.crop_bottom.setText(str(crop.get("bottom", 0)))
+
+        # Load distortion settings
+        dist = s.get("lens_distortion", {})
+        self.k1.setText(str(dist.get("k1", 0.0)))
+        self.k2.setText(str(dist.get("k2", 0.0)))
+        self.p1.setText(str(dist.get("p1", 0.0)))
+        self.p2.setText(str(dist.get("p2", 0.0)))
+        self.k3.setText(str(dist.get("k3", 0.0)))
+        self.fx.setText(str(dist.get("fx", 0.0)))
+        self.fy.setText(str(dist.get("fy", 0.0)))
+        self.cx.setText(str(dist.get("cx", 0.0)))
+        self.cy.setText(str(dist.get("cy", 0.0)))
+
         self.update_preset_combo()
         cam_idx = s.get("camera_index", 0)
         if cam_idx == "ip": 
@@ -232,6 +298,39 @@ class GeneralSettingsPage(QWidget):
             if idx != -1: 
                 self.ip_preset_combo.setCurrentIndex(idx)
                 self.on_ip_preset_change()
+
+        self.init_complete = True
+
+    def update_live_params(self):
+        """Update running capture thread with current UI values"""
+        if not self.cap_thread or not self.cap_thread.isRunning():
+            return
+            
+        try:
+            # Gather crop params
+            crop = {
+                "left": int(self.crop_left.text() or 0),
+                "right": int(self.crop_right.text() or 0),
+                "top": int(self.crop_top.text() or 0),
+                "bottom": int(self.crop_bottom.text() or 0)
+            }
+            
+            # Gather distortion params
+            dist = {
+                "k1": float(self.k1.text() or 0),
+                "k2": float(self.k2.text() or 0),
+                "p1": float(self.p1.text() or 0),
+                "p2": float(self.p2.text() or 0),
+                "k3": float(self.k3.text() or 0),
+                "fx": float(self.fx.text() or 0),
+                "fy": float(self.fy.text() or 0),
+                "cx": float(self.cx.text() or 0),
+                "cy": float(self.cy.text() or 0)
+            }
+            
+            self.cap_thread.update_params(crop_params=crop, distortion_params=dist)
+        except Exception as e:
+            print(f"Error updating live params: {e}")
 
     def update_preset_combo(self):
         self.ip_preset_combo.clear()
@@ -284,6 +383,23 @@ class GeneralSettingsPage(QWidget):
             "top": int(self.crop_top.text() or 0),
             "bottom": int(self.crop_bottom.text() or 0)
         }
+        
+        # Save distortion settings
+        try:
+            s["lens_distortion"] = {
+                "k1": float(self.k1.text() or 0),
+                "k2": float(self.k2.text() or 0),
+                "p1": float(self.p1.text() or 0),
+                "p2": float(self.p2.text() or 0),
+                "k3": float(self.k3.text() or 0),
+                "fx": float(self.fx.text() or 0),
+                "fy": float(self.fy.text() or 0),
+                "cx": float(self.cx.text() or 0),
+                "cy": float(self.cy.text() or 0)
+            }
+        except:
+             pass 
+             
         JsonUtility.save_to_json(SETTINGS_FILE, s)
         QMessageBox.information(self, "Success", "Settings saved!")
         
@@ -302,7 +418,12 @@ class GeneralSettingsPage(QWidget):
             pid = self.ip_preset_combo.currentData()
             source = next((x for x in self.ip_presets if x["id"] == pid), None)
             if not source: return
-        self.cap_thread = VideoCaptureThread(source, is_ip)
+            
+        settings = JsonUtility.load_from_json(SETTINGS_FILE) or {}
+        crop = settings.get("camera_crop", {})
+        distortion = settings.get("lens_distortion", {})
+        
+        self.cap_thread = VideoCaptureThread(source, is_ip, crop_params=crop, distortion_params=distortion)
         self.cap_thread.frame_ready.connect(self.show_frame); self.cap_thread.start()
 
     def stop_preview(self):
@@ -393,3 +514,23 @@ class GeneralSettingsPage(QWidget):
         
         self.btn_calibrate.setEnabled(True)
         self.btn_calibrate.setText("Run Auto Calibration")
+
+    def on_dist_preset_change(self):
+        txt = self.dist_preset.currentText()
+        if "No Distortion" in txt:
+            self.k1.setText("0.0"); self.k2.setText("0.0"); self.p1.setText("0.0"); self.p2.setText("0.0"); self.k3.setText("0.0")
+        elif "Mild Barrel" in txt:
+            self.k1.setText("-0.08"); self.k2.setText("0.0"); self.p1.setText("0.0"); self.p2.setText("0.0"); self.k3.setText("0.0")
+        elif "Medium Barrel" in txt:
+            self.k1.setText("-0.15"); self.k2.setText("0.0"); self.p1.setText("0.0"); self.p2.setText("0.0"); self.k3.setText("0.0")
+        elif "Strong Barrel" in txt:
+            self.k1.setText("-0.35"); self.k2.setText("0.0"); self.p1.setText("0.0"); self.p2.setText("0.0"); self.k3.setText("0.0")
+        elif "Custom" in txt:
+            pass
+            
+        if hasattr(self, 'init_complete') and self.init_complete:
+            self.update_live_params()
+
+    def reset_camera_matrix(self):
+        self.fx.setText("0.0"); self.fy.setText("0.0"); self.cx.setText("0.0"); self.cy.setText("0.0")
+

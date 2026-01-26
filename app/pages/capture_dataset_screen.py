@@ -234,7 +234,12 @@ class CaptureDatasetScreen(QWidget):
             cam_source = 0
 
         is_ip = (cam_text == "IP Camera")
-        self.cap_thread = VideoCaptureThread(cam_source, is_ip)
+        
+        # Load params (ensure fresh)
+        crop = self.settings.get("camera_crop", {})
+        distortion = self.settings.get("lens_distortion", {})
+        
+        self.cap_thread = VideoCaptureThread(cam_source, is_ip, crop_params=crop, distortion_params=distortion)
         self.cap_thread.frame_ready.connect(self.on_frame_received)
         self.cap_thread.start()
         
