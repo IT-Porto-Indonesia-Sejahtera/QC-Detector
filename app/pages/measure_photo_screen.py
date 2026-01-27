@@ -3,7 +3,8 @@ import sys
 import cv2
 from PySide6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-    QPushButton, QScrollArea, QGridLayout, QFrame, QSizePolicy
+    QPushButton, QScrollArea, QGridLayout, QFrame, QSizePolicy,
+    QComboBox
 )
 from PySide6.QtGui import QPixmap, QImage
 from PySide6.QtCore import Qt
@@ -46,6 +47,34 @@ class MeasurePhotoScreen(QWidget):
         left_panel.addStretch()
         left_panel.addWidget(self.image_label, alignment=Qt.AlignCenter)
         left_panel.addStretch()
+
+        # === Detection Method Selector ===
+        method_layout = QHBoxLayout()
+        method_label = QLabel("Detection Method:")
+        method_label.setStyleSheet(f"font-size: {UIScaling.scale_font(14)}px; font-weight: bold; color: #333;")
+        
+        self.method_combo = QComboBox()
+        self.method_combo.addItem("Standard (Contour)", "standard")
+        self.method_combo.addItem("SAM (AI)", "sam")
+        self.method_combo.setMinimumWidth(UIScaling.scale(180))
+        self.method_combo.setStyleSheet(f"""
+            QComboBox {{
+                font-size: {UIScaling.scale_font(14)}px;
+                padding: {UIScaling.scale(8)}px;
+                border: 1px solid #CCCCCC;
+                border-radius: {UIScaling.scale(6)}px;
+                background: white;
+            }}
+            QComboBox:hover {{
+                border: 1px solid #2196F3;
+            }}
+        """)
+        
+        method_layout.addWidget(method_label)
+        method_layout.addWidget(self.method_combo)
+        method_layout.addStretch()
+        left_panel.addLayout(method_layout)
+        left_panel.addSpacing(UIScaling.scale(10))
 
         # === Buttons ===
         button_layout = QHBoxLayout()
@@ -152,15 +181,26 @@ class MeasurePhotoScreen(QWidget):
         output_filename = f"measured_{timestamp}.png"
         output_path = os.path.join(self.output_folder, output_filename)
 
-        print(f"[INFO] Measuring: {self.selected_image_path}")
+        # Get selected detection method
+        method = self.method_combo.currentData()
+        use_sam = (method == "sam")
+        
+        method_name = "SAM (AI)" if use_sam else "Standard"
+        print(f"[INFO] Measuring with {method_name}: {self.selected_image_path}")
+        
         try:
             results, processed_img = measure_sandals(
                 self.selected_image_path,
                 mm_per_px=None,
                 draw_output=False,
-                save_out=output_path
+                save_out=output_path,
+                use_sam=use_sam
             )
 
+            # Show inference time if using SAM
+            if use_sam and results and 'inference_time_ms' in results[0]:
+                print(f"[SAM] Inference time: {results[0]['inference_time_ms']:.1f}ms")
+            
             print("[RESULT]", results)
             pixmap = self.cv2_to_pixmap(processed_img)
             self.display_pixmap_scaled(pixmap)

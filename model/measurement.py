@@ -67,16 +67,51 @@ def auto_select_mask(img):
 
     return mask1
 
-def measure_sandals(path, mm_per_px=None, draw_output=True, save_out=None):
+def measure_sandals(path, mm_per_px=None, draw_output=True, save_out=None, use_sam=False):
+    """
+    Measure object dimensions in an image.
+    
+    Args:
+        path: Path to the image file
+        mm_per_px: Conversion factor from pixels to millimeters
+        draw_output: Whether to draw contours on output image
+        save_out: Path to save the output image
+        use_sam: If True, use FastSAM (AI) for segmentation instead of traditional method
+        
+    Returns:
+        results: List of measurement dictionaries
+        out: Output image with drawn contours
+    """
     img = cv2.imread(path)
     if img is None:
         raise FileNotFoundError(f"Cannot read image: {path}")
 
-    mask = auto_select_mask(img)
-
-    contours = find_largest_contours(mask, num_contours=1)
     out = img.copy()
     results = []
+    inference_time = 0
+    
+    if use_sam:
+        # Use FastSAM for AI-based segmentation
+        try:
+            from .fastsam_inference import segment_image
+            
+            mask, contour, inference_time = segment_image(img)
+            
+            if contour is not None:
+                contours = [contour]
+            else:
+                print("[SAM] No contour found, falling back to standard method")
+                mask = auto_select_mask(img)
+                contours = find_largest_contours(mask, num_contours=1)
+                
+        except ImportError as e:
+            print(f"[SAM] FastSAM not available: {e}, using standard method")
+            mask = auto_select_mask(img)
+            contours = find_largest_contours(mask, num_contours=1)
+    else:
+        # Use traditional contour detection
+        mask = auto_select_mask(img)
+        contours = find_largest_contours(mask, num_contours=1)
 
     for cnt in contours:
         if cv2.contourArea(cnt) < 2000:
@@ -90,15 +125,24 @@ def measure_sandals(path, mm_per_px=None, draw_output=True, save_out=None):
         real_length = px_length * mm_per_px if mm_per_px else None
         real_width  = px_width * mm_per_px if mm_per_px else None
 
-        cv2.drawContours(out, [cnt], -1, (255, 255, 0), 2)
+        # Draw contours - use different color for SAM vs standard
+        if use_sam:
+            cv2.drawContours(out, [cnt], -1, (255, 0, 255), 2)  # Magenta for SAM
+        else:
+            cv2.drawContours(out, [cnt], -1, (255, 255, 0), 2)  # Cyan for standard
         cv2.drawContours(out, [box], 0, (0, 255, 0), 2)
 
-        results.append({
+        result_dict = {
             'px_length': float(px_length),
             'px_width': float(px_width),
             'real_length_mm': float(real_length) if real_length else None,
             'real_width_mm': float(real_width) if real_width else None
-        })
+        }
+        
+        if use_sam and inference_time > 0:
+            result_dict['inference_time_ms'] = inference_time
+            
+        results.append(result_dict)
 
     if save_out:
         ensure_dir(os.path.dirname(save_out))

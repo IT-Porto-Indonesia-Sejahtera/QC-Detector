@@ -16,3 +16,4 @@ shiboken6
 urllib3
 pymodbus
 pyserial
+ultralytics

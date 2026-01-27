@@ -32,3 +32,11 @@ env/
 *.log
 /model/__pycache__
 /model/__pycache__
+# AI Models
+*.pt
+*.pth
+*.onnx
+
+# Output
+output/log_output/
+input/temp_assets/
