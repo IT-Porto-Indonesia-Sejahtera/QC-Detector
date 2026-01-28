@@ -34,8 +34,8 @@
     "plc_result_reg": 13,
     "aruco_marker_size": 50.0,
     "camera_crop": {
-        "left": 26,
-        "right": 26,
+        "left": 36,
+        "right": 36,
         "top": 26,
         "bottom": 26
     },
@@ -50,5 +50,6 @@
         "cx": 0.0,
         "cy": 0.0
     },
-    "dataset_save_measurements": true
+    "dataset_save_measurements": false,
+    "last_dataset_path": "C:/QC Detector/QC-Detector/input/temp_assets"
 }

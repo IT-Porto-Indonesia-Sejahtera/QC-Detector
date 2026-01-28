@@ -118,6 +118,13 @@ class MeasurePhotoScreen(QWidget):
 
     def load_thumbnails(self):
         """Load all images in input folder as thumbnails."""
+        # Clear existing thumbnails first
+        while self.grid_layout.count():
+            item = self.grid_layout.takeAt(0)
+            widget = item.widget()
+            if widget:
+                widget.deleteLater()
+        
         if not os.path.exists(self.image_folder):
             print("[WARN] Input folder not found:", self.image_folder)
             return
@@ -126,6 +133,8 @@ class MeasurePhotoScreen(QWidget):
             f for f in os.listdir(self.image_folder)
             if f.lower().endswith(('.png', '.jpg', '.jpeg'))
         ]
+        
+        print(f"[INFO] Found {len(images)} images in {self.image_folder}")
 
         thumb_size = UIScaling.scale(100)
         for i, img_name in enumerate(images):
@@ -146,6 +155,12 @@ class MeasurePhotoScreen(QWidget):
         pixmap = QPixmap(path)
         self.display_pixmap_scaled(pixmap)
         print(f"[INFO] Selected image: {path}")
+
+    def showEvent(self, event):
+        """Called when the screen becomes visible - reload thumbnails."""
+        super().showEvent(event)
+        print("[INFO] Measure by Photo screen opened - reloading images...")
+        self.load_thumbnails()
 
     def display_pixmap_scaled(self, pixmap):
         """Scale image to fit label while preserving aspect ratio (with padding)."""

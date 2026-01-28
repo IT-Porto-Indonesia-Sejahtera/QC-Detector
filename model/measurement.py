@@ -114,7 +114,10 @@ def measure_sandals(path, mm_per_px=None, draw_output=True, save_out=None, use_s
         contours = find_largest_contours(mask, num_contours=1)
 
     for cnt in contours:
-        if cv2.contourArea(cnt) < 2000:
+        contour_area = cv2.contourArea(cnt)
+        if contour_area < 2000:
+            if use_sam:
+                print(f"[SAM DEBUG] Skipping contour with area {contour_area:.0f}px² (too small)")
             continue
 
         box, w, h, angle = endpoints_via_minrect(cnt)
@@ -124,6 +127,22 @@ def measure_sandals(path, mm_per_px=None, draw_output=True, save_out=None, use_s
 
         real_length = px_length * mm_per_px if mm_per_px else None
         real_width  = px_width * mm_per_px if mm_per_px else None
+
+        # Debug output for SAM
+        if use_sam:
+            x, y, bw, bh = cv2.boundingRect(cnt)
+            print(f"[SAM DEBUG] ═══════════════════════════════════════")
+            print(f"[SAM DEBUG] Detection Method: FastSAM (AI)")
+            print(f"[SAM DEBUG] Contour Area: {contour_area:.0f} px²")
+            print(f"[SAM DEBUG] Bounding Rect: x={x}, y={y}, w={bw}, h={bh}")
+            print(f"[SAM DEBUG] MinAreaRect: w={w:.1f}, h={h:.1f}, angle={angle:.1f}°")
+            print(f"[SAM DEBUG] ───────────────────────────────────────")
+            print(f"[SAM DEBUG] Measured Length: {px_length:.1f} px")
+            print(f"[SAM DEBUG] Measured Width:  {px_width:.1f} px")
+            if mm_per_px:
+                print(f"[SAM DEBUG] Real Length: {real_length:.2f} mm")
+                print(f"[SAM DEBUG] Real Width:  {real_width:.2f} mm")
+            print(f"[SAM DEBUG] ═══════════════════════════════════════")
 
         # Draw contours - use different color for SAM vs standard
         if use_sam:
@@ -136,7 +155,9 @@ def measure_sandals(path, mm_per_px=None, draw_output=True, save_out=None, use_s
             'px_length': float(px_length),
             'px_width': float(px_width),
             'real_length_mm': float(real_length) if real_length else None,
-            'real_width_mm': float(real_width) if real_width else None
+            'real_width_mm': float(real_width) if real_width else None,
+            'contour_area_px': float(contour_area),
+            'detection_method': 'sam' if use_sam else 'standard'
         }
         
         if use_sam and inference_time > 0:
