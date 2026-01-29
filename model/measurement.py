@@ -153,6 +153,54 @@ def auto_select_mask(img):
 
     return mask1
 
+def principal_axis(contour):
+    pts = contour.reshape(-1, 2).astype(np.float32)
+    mean = np.mean(pts, axis=0)
+
+    # PCA via covariance
+    cov = np.cov(pts.T)
+    eigenvalues, eigenvectors = np.linalg.eig(cov)
+
+    # Major axis = largest eigenvalue
+    idx = np.argmax(eigenvalues)
+    direction = eigenvectors[:, idx]
+    direction /= np.linalg.norm(direction)
+
+    return mean, direction
+
+def project_onto_axis(contour, origin, direction):
+    pts = contour.reshape(-1, 2).astype(np.float32)
+    vecs = pts - origin
+    proj = vecs @ direction  # dot product
+    return proj
+
+def refined_endpoints(contour):
+    origin, axis = principal_axis(contour)
+    proj = project_onto_axis(contour, origin, axis)
+
+    # Sort points along axis
+    order = np.argsort(proj)
+    proj_sorted = proj[order]
+    pts_sorted = contour.reshape(-1, 2)[order]
+
+    n = len(proj_sorted)
+    k = max(int(0.05 * n), 10)  # 5% tails
+
+    # Left end
+    xL = proj_sorted[:k]
+    yL = np.arange(len(xL))
+    aL, bL = np.polyfit(yL, xL, 1)
+    left = aL * (-0.5) + bL
+
+    # Right end
+    xR = proj_sorted[-k:]
+    yR = np.arange(len(xR))
+    aR, bR = np.polyfit(yR, xR, 1)
+    right = aR * (len(xR) - 0.5) + bR
+
+    length_px = right - left
+    return length_px
+
 def measure_sandals(path, mm_per_px=None, draw_output=True, save_out=None, use_sam=False, use_yolo=False):
     """
     Measure object dimensions in an image.
@@ -227,7 +275,8 @@ def measure_sandals(path, mm_per_px=None, draw_output=True, save_out=None, use_s
 
         box, w, h, angle = endpoints_via_minrect(cnt)
 
-        px_length = max(w, h)
+        # px_length = max(w, h)
+        px_length = refined_endpoints(cnt)
         px_width  = min(w, h)
 
         real_length = px_length * mm_per_px if mm_per_px else None
