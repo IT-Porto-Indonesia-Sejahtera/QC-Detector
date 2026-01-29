@@ -42,8 +42,24 @@ def strong_mask(img):
     sobel_y = cv2.Sobel(L, cv2.CV_64F, 0, 1, ksize=3)
     magnitude = np.sqrt(sobel_x**2 + sobel_y**2)
     
+    # === 2.5 Gradient Direction Coherence (CRITICAL FIX) ===
+    angle = np.arctan2(sobel_y, sobel_x)  # radians
+
+    # Normalize angle to [0, pi]
+    angle = np.abs(angle)
+
+    # Coherence: strong if neighboring gradients align
+    kernel = np.ones((3, 3), np.float32)
+    mean_mag = cv2.filter2D(magnitude, -1, kernel)
+    coherence = magnitude / (mean_mag + 1e-6)
+
+    # Boost weak but coherent edges
+    boost_mask = (coherence > 0.6) & (magnitude > 8)
+    magnitude_boosted = magnitude.copy()
+    magnitude_boosted[boost_mask] *= 1.8
+
     # Normalize magnitude to 0-255
-    magnitude_norm = cv2.normalize(magnitude, None, 0, 255, cv2.NORM_MINMAX)
+    magnitude_norm = cv2.normalize(magnitude_boosted, None, 0, 255, cv2.NORM_MINMAX)
     magnitude_norm = magnitude_norm.astype(np.uint8)
     
     # Threshold for edges
@@ -57,8 +73,15 @@ def strong_mask(img):
         final_mask = edges.copy()
         
         # Close small gaps in edges
-        kernel_close = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7))
-        final_mask = cv2.morphologyEx(final_mask, cv2.MORPH_CLOSE, kernel_close, iterations=2)
+        # kernel_close = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7))
+        # final_mask = cv2.morphologyEx(final_mask, cv2.MORPH_CLOSE, kernel_close, iterations=2)
+        # Directional edge bridging (no inflation)
+        kernel_h = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 1))
+        kernel_v = cv2.getStructuringElement(cv2.MORPH_RECT, (1, 5))
+
+        final_mask = cv2.morphologyEx(final_mask, cv2.MORPH_CLOSE, kernel_h, iterations=1)
+        final_mask = cv2.morphologyEx(final_mask, cv2.MORPH_CLOSE, kernel_v, iterations=1)
+
         
     else:
         print(f"[strong_mask] Dark object detected ({white_pixel_ratio*100:.1f}% white) - using LAB + edges")
@@ -82,9 +105,10 @@ def strong_mask(img):
     # === 4. Inner Contour Enforcement (Metrology Trick) ===
     # Erode slightly to ensure we measure from inside boundary
     # This provides consistent precision and avoids aliasing
-    kernel_inner = np.ones((2, 2), np.uint8)
-    final_mask = cv2.erode(final_mask, kernel_inner, iterations=1)
-    
+    # kernel_inner = np.ones((2, 2), np.uint8)
+    # final_mask = cv2.erode(final_mask, kernel_inner, iterations=1)
+    final_mask = cv2.erode(final_mask, None, iterations=1)
+
     return final_mask
 
 
