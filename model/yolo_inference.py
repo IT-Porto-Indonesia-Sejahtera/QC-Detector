@@ -1,8 +1,8 @@
 """
-FastSAM Inference Module
+YOLOv8-seg Inference Module
 
-Lightweight AI-based segmentation using FastSAM (Fast Segment Anything Model).
-Runs on CPU and provides better edge detection than traditional contour methods.
+Segmentation using YOLOv8n-seg (nano variant optimized for CPU).
+Faster than FastSAM with better mask quality for curved edges.
 """
 
 import cv2
@@ -16,8 +16,8 @@ _model_path = None
 
 def get_model():
     """
-    Load FastSAM model (lazy loading with caching).
-    Downloads ~23MB model on first use.
+    Load YOLOv8n-seg model (lazy loading with caching).
+    Downloads ~6.7MB model on first use.
     """
     global _model, _model_path
     
@@ -27,26 +27,26 @@ def get_model():
     try:
         from ultralytics import YOLO
         
-        # FastSAM-s is the smaller variant (~23MB)
-        model_name = "FastSAM-s.pt"
+        # YOLOv8n-seg is the nano variant (~6.7MB, optimized for CPU)
+        model_name = "yolov8n-seg.pt"
         
         # Store in model folder
         model_dir = os.path.dirname(os.path.abspath(__file__))
         _model_path = os.path.join(model_dir, model_name)
         
-        print(f"[FastSAM] Loading model: {model_name}")
+        print(f"[YOLOv8-seg] Loading model: {model_name}")
         
         # YOLO will auto-download if not present
         _model = YOLO(model_name)
         
-        print("[FastSAM] Model loaded successfully")
+        print("[YOLOv8-seg] Model loaded successfully")
         return _model
         
     except ImportError:
-        print("[FastSAM] Error: ultralytics not installed. Run: pip install ultralytics")
+        print("[YOLOv8-seg] Error: ultralytics not installed. Run: pip install ultralytics")
         return None
     except Exception as e:
-        print(f"[FastSAM] Error loading model: {e}")
+        print(f"[YOLOv8-seg] Error loading model: {e}")
         return None
 
 
@@ -74,14 +74,13 @@ def refine_ai_mask_with_edges(image, ai_mask):
 
 
 
-def segment_image(image, conf=0.25, iou=0.9):
+def segment_image(image, conf=0.25):
     """
-    Segment the image using FastSAM.
+    Segment the image using YOLOv8n-seg.
     
     Args:
         image: BGR image (numpy array) or path to image
         conf: Confidence threshold (default 0.25)
-        iou: IoU threshold for NMS (default 0.9)
     
     Returns:
         mask: Binary mask of the largest detected object (numpy array)
@@ -101,7 +100,7 @@ def segment_image(image, conf=0.25, iou=0.9):
         img = image
     
     if img is None:
-        print("[FastSAM] Error: Could not load image")
+        print("[YOLOv8-seg] Error: Could not load image")
         return None, None, 0
     
     h, w = img.shape[:2]
@@ -114,39 +113,33 @@ def segment_image(image, conf=0.25, iou=0.9):
     results = model(
         img,
         device='cpu',
-        retina_masks=True,
-        imgsz=640,
         conf=conf,
-        iou=iou,
         verbose=False
     )
     
     inference_time = (time.time() - start_time) * 1000  # Convert to ms
     
     if len(results) == 0 or results[0].masks is None:
-        print("[FastSAM] No objects detected")
+        print("[YOLOv8-seg] No objects detected")
         return None, None, inference_time
     
-    # Get all masks
+    # Get all masks and boxes from results
     masks = results[0].masks.data.cpu().numpy()
+    boxes = results[0].boxes.xyxy.cpu().numpy()  # Bounding boxes
     
-    if len(masks) == 0:
-        print("[FastSAM] No masks found")
+    if len(masks) == 0 or len(boxes) == 0:
+        print("[YOLOv8-seg] No masks found")
         return None, None, inference_time
     
-    print(f"[FastSAM] Found {len(masks)} masks, selecting best one...")
+    print(f"[YOLOv8-seg] Found {len(masks)} objects, selecting best one...")
     
-    # Find the best mask (not just the largest!)
-    # We want: 
-    # 1. Not too large (>70% of image = likely background)
-    # 2. Not too small (<1% of image = noise)
-    # 3. Prefer masks centered in the image
-    
-    best_mask = None
+    # Find the best detection using same scoring logic
+    best_box = None
     best_score = -1
+    best_idx = -1
     
-    for i, mask in enumerate(masks):
-        # Resize mask to image dimensions
+    for i, (mask, box) in enumerate(zip(masks, boxes)):
+        # Resize mask to image dimensions for area calculation
         mask_resized = cv2.resize(mask.astype(np.uint8), (w, h), interpolation=cv2.INTER_NEAREST)
         
         # Calculate mask area ratio
@@ -155,10 +148,10 @@ def segment_image(image, conf=0.25, iou=0.9):
         
         # Skip if too large (background) or too small (noise)
         if area_ratio > 0.70:
-            print(f"[FastSAM]   Mask {i}: {area_ratio*100:.1f}% - skipped (too large, likely background)")
+            print(f"[YOLOv8-seg]   Detection {i}: {area_ratio*100:.1f}% - skipped (too large, likely background)")
             continue
         if area_ratio < 0.01:
-            print(f"[FastSAM]   Mask {i}: {area_ratio*100:.1f}% - skipped (too small)")
+            print(f"[YOLOv8-seg]   Detection {i}: {area_ratio*100:.1f}% - skipped (too small)")
             continue
         
         # Calculate mask centroid
@@ -175,53 +168,70 @@ def segment_image(image, conf=0.25, iou=0.9):
             center_score = 0
         
         # Score: prefer larger masks that are centered
-        # area_ratio is 0-0.7, center_score is 0-1
         score = (area_ratio * 0.7) + (center_score * 0.3)
         
-        print(f"[FastSAM]   Mask {i}: {area_ratio*100:.1f}% area, center_score={center_score:.2f}, score={score:.3f}")
+        print(f"[YOLOv8-seg]   Detection {i}: {area_ratio*100:.1f}% area, center_score={center_score:.2f}, score={score:.3f}")
         
         if score > best_score:
             best_score = score
-            best_mask = mask_resized
+            best_box = box
+            best_idx = i
     
-    if best_mask is None:
-        print("[FastSAM] No suitable mask found, using largest non-background mask")
-        # Fallback: use the largest mask that's not the background
-        for mask in masks:
-            mask_resized = cv2.resize(mask.astype(np.uint8), (w, h), interpolation=cv2.INTER_NEAREST)
-            mask_area = np.sum(mask_resized > 0)
-            area_ratio = mask_area / img_area
-            if area_ratio < 0.85:  # Accept anything smaller than 85%
-                best_mask = mask_resized
-                break
-    
-    if best_mask is None:
-        print("[FastSAM] Could not find suitable object mask")
+    if best_box is None:
+        print("[YOLOv8-seg] No suitable detection found")
         return None, None, inference_time
     
-    # Convert to binary mask (0 or 255)
-    mask_binary = (best_mask * 255).astype(np.uint8)
+    # === HYBRID APPROACH: Use YOLO bounding box to extract ROI ===
+    x1, y1, x2, y2 = map(int, best_box)
     
-    # Apply edge refinement (hybrid: AI detection + Standard edge precision)
-    print("[FastSAM] Applying edge refinement for curved boundaries...")
-    mask_binary = refine_ai_mask_with_edges(img, mask_binary)
+    # Expand ROI slightly to ensure we don't cut edges (5% margin)
+    margin = 0.05
+    box_w = x2 - x1
+    box_h = y2 - y1
+    x1 = max(0, int(x1 - box_w * margin))
+    y1 = max(0, int(y1 - box_h * margin))
+    x2 = min(w, int(x2 + box_w * margin))
+    y2 = min(h, int(y2 + box_h * margin))
     
-    # Extract contour from refined mask
-    contours, _ = cv2.findContours(mask_binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    print(f"[YOLOv8-seg] Extracting ROI: ({x1}, {y1}) to ({x2}, {y2})")
+    
+    # Extract ROI from original image
+    roi = img[y1:y2, x1:x2]
+    
+    if roi.size == 0:
+        print("[YOLOv8-seg] Error: Empty ROI")
+        return None, None, inference_time
+    
+    # === Run precise contour detection INSIDE ROI ===
+    print("[YOLOv8-seg] Running precision contour detection inside ROI...")
+    from model.measurement import strong_mask
+    
+    roi_mask = strong_mask(roi)
+    
+    # Find contour in ROI space
+    contours, _ = cv2.findContours(roi_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     
     if len(contours) == 0:
-        return mask_binary, None, inference_time
+        print("[YOLOv8-seg] No contour found in ROI")
+        return None, None, inference_time
     
-    # Get the largest contour
-    largest_contour = max(contours, key=cv2.contourArea)
+    # Get the largest contour in ROI
+    largest_contour_roi = max(contours, key=cv2.contourArea)
     
-    # Smooth the contour using approxPolyDP for cleaner curved edges
-    epsilon = 0.002 * cv2.arcLength(largest_contour, True)
-    smoothed_contour = cv2.approxPolyDP(largest_contour, epsilon, True)
+    # === Transform contour coordinates to global image space ===
+    largest_contour = largest_contour_roi.copy()
+    largest_contour[:, :, 0] += x1  # Shift X by ROI offset
+    largest_contour[:, :, 1] += y1  # Shift Y by ROI offset
     
-    print(f"[FastSAM] Segmentation complete in {inference_time:.1f}ms")
+    # Create full-size mask for visualization
+    mask_binary = np.zeros((h, w), dtype=np.uint8)
+    cv2.drawContours(mask_binary, [largest_contour], -1, 255, thickness=-1)
     
-    return mask_binary, smoothed_contour, inference_time
+    print(f"[YOLOv8-seg] Hybrid segmentation complete in {inference_time:.1f}ms")
+    print(f"[YOLOv8-seg] ROI-based contour: {len(largest_contour)} points")
+    
+    return mask_binary, largest_contour, inference_time
+
 
 
 def get_mask_and_contour(image_path):
@@ -241,7 +251,7 @@ def get_mask_and_contour(image_path):
 
 
 def is_available():
-    """Check if FastSAM dependencies are available."""
+    """Check if YOLOv8-seg dependencies are available."""
     try:
         from ultralytics import YOLO
         return True

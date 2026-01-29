@@ -55,7 +55,8 @@ class MeasurePhotoScreen(QWidget):
         
         self.method_combo = QComboBox()
         self.method_combo.addItem("Standard (Contour)", "standard")
-        self.method_combo.addItem("SAM (AI)", "sam")
+        self.method_combo.addItem("SAM (AI - FastSAM)", "sam")
+        self.method_combo.addItem("YOLO-Seg (AI - Recommended)", "yolo")
         self.method_combo.setMinimumWidth(UIScaling.scale(180))
         self.method_combo.setStyleSheet(f"""
             QComboBox {{
@@ -199,8 +200,14 @@ class MeasurePhotoScreen(QWidget):
         # Get selected detection method
         method = self.method_combo.currentData()
         use_sam = (method == "sam")
+        use_yolo = (method == "yolo")
         
-        method_name = "SAM (AI)" if use_sam else "Standard"
+        if use_yolo:
+            method_name = "YOLO-Seg (AI)"
+        elif use_sam:
+            method_name = "SAM (AI)"
+        else:
+            method_name = "Standard (Contour)"
         print(f"[INFO] Measuring with {method_name}: {self.selected_image_path}")
         
         try:
@@ -209,12 +216,13 @@ class MeasurePhotoScreen(QWidget):
                 mm_per_px=None,
                 draw_output=False,
                 save_out=output_path,
-                use_sam=use_sam
+                use_sam=use_sam,
+                use_yolo=use_yolo
             )
 
-            # Show inference time if using SAM
-            if use_sam and results and 'inference_time_ms' in results[0]:
-                print(f"[SAM] Inference time: {results[0]['inference_time_ms']:.1f}ms")
+            # Show inference time if using AI methods
+            if (use_sam or use_yolo) and results and 'inference_time_ms' in results[0]:
+                print(f"[{method_name}] Inference time: {results[0]['inference_time_ms']:.1f}ms")
             
             print("[RESULT]", results)
             pixmap = self.cv2_to_pixmap(processed_img)

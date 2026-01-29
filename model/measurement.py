@@ -7,24 +7,86 @@ def base_mask(gray):
     return preprocess_and_masks(gray)
 
 def strong_mask(img):
+    """
+    Edge-first metrology approach for precision object detection.
+    Uses Sobel gradients for sub-pixel accuracy and explicit white object detection.
+    """
+    h, w = img.shape[:2]
+    
+    # Convert to LAB and HSV for analysis
     lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
+    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
     L, A, B = cv2.split(lab)
+    
+    # === 1. Explicit White Object Detection ===
+    # High V (brightness) + Low S (saturation) = white/light objects
+    white_hsv = cv2.inRange(hsv, 
+                            np.array([0, 0, 140]),      # Low saturation, high value
+                            np.array([180, 60, 255]))
+    
+    # Also check LAB: High L (lightness)
+    white_lab = cv2.inRange(lab,
+                           np.array([170, 0, 0]),       # High L lightness
+                           np.array([255, 255, 255]))
+    
+    # Combine white detectors
+    white_combined = cv2.bitwise_or(white_hsv, white_lab)
+    
+    # Check if this is a white object (>10% white pixels)
+    white_pixel_ratio = np.sum(white_combined > 0) / (h * w)
+    is_white_object = white_pixel_ratio > 0.10
+    
+    # === 2. Sobel Edge Detection (better than Canny) ===
+    # Sobel gradient magnitude for sub-pixel accuracy
+    sobel_x = cv2.Sobel(L, cv2.CV_64F, 1, 0, ksize=3)
+    sobel_y = cv2.Sobel(L, cv2.CV_64F, 0, 1, ksize=3)
+    magnitude = np.sqrt(sobel_x**2 + sobel_y**2)
+    
+    # Normalize magnitude to 0-255
+    magnitude_norm = cv2.normalize(magnitude, None, 0, 255, cv2.NORM_MINMAX)
+    magnitude_norm = magnitude_norm.astype(np.uint8)
+    
+    # Threshold for edges
+    _, edges = cv2.threshold(magnitude_norm, 25, 255, cv2.THRESH_BINARY)
+    
+    # === 3. Adaptive Logic: White vs Dark Objects ===
+    if is_white_object:
+        print(f"[strong_mask] White object detected ({white_pixel_ratio*100:.1f}% white) - using edge-first approach")
+        
+        # For white: Use edges only to avoid over-segmentation
+        final_mask = edges.copy()
+        
+        # Close small gaps in edges
+        kernel_close = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7))
+        final_mask = cv2.morphologyEx(final_mask, cv2.MORPH_CLOSE, kernel_close, iterations=2)
+        
+    else:
+        print(f"[strong_mask] Dark object detected ({white_pixel_ratio*100:.1f}% white) - using LAB + edges")
+        
+        # For dark: Combine LAB threshold + edges
+        # Adaptive threshold on L channel for dark objects
+        th1 = cv2.adaptiveThreshold(
+            L, 255,
+            cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+            cv2.THRESH_BINARY_INV,
+            51, 5
+        )
+        
+        # Combine LAB mask + edges
+        final_mask = cv2.bitwise_or(th1, edges)
+        
+        # Morphology for smooth contours
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (9, 9))
+        final_mask = cv2.morphologyEx(final_mask, cv2.MORPH_CLOSE, kernel, iterations=2)
+    
+    # === 4. Inner Contour Enforcement (Metrology Trick) ===
+    # Erode slightly to ensure we measure from inside boundary
+    # This provides consistent precision and avoids aliasing
+    kernel_inner = np.ones((2, 2), np.uint8)
+    final_mask = cv2.erode(final_mask, kernel_inner, iterations=1)
+    
+    return final_mask
 
-    th1 = cv2.adaptiveThreshold(
-        L, 255,
-        cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-        cv2.THRESH_BINARY_INV,
-        51, 5
-    )
-
-    edges = cv2.Canny(L, 40, 120)
-
-    mask = cv2.bitwise_or(th1, edges)
-
-    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (9, 9))
-    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel, iterations=2)
-
-    return mask
 
 def endpoints_via_minrect(contour):
     rect = cv2.minAreaRect(contour)
@@ -67,7 +129,7 @@ def auto_select_mask(img):
 
     return mask1
 
-def measure_sandals(path, mm_per_px=None, draw_output=True, save_out=None, use_sam=False):
+def measure_sandals(path, mm_per_px=None, draw_output=True, save_out=None, use_sam=False, use_yolo=False):
     """
     Measure object dimensions in an image.
     
@@ -77,6 +139,7 @@ def measure_sandals(path, mm_per_px=None, draw_output=True, save_out=None, use_s
         draw_output: Whether to draw contours on output image
         save_out: Path to save the output image
         use_sam: If True, use FastSAM (AI) for segmentation instead of traditional method
+        use_yolo: If True, use YOLOv8-seg (AI) for segmentation (recommended for all objects)
         
     Returns:
         results: List of measurement dictionaries
@@ -90,7 +153,25 @@ def measure_sandals(path, mm_per_px=None, draw_output=True, save_out=None, use_s
     results = []
     inference_time = 0
     
-    if use_sam:
+    if use_yolo:
+        # Use YOLOv8-seg for AI-based segmentation (recommended)
+        try:
+            from .yolo_inference import segment_image
+            
+            mask, contour, inference_time = segment_image(img)
+            
+            if contour is not None:
+                contours = [contour]
+            else:
+                print("[YOLO-Seg] No contour found, falling back to standard method")
+                mask = auto_select_mask(img)
+                contours = find_largest_contours(mask, num_contours=1)
+                
+        except ImportError as e:
+            print(f"[YOLO-Seg] YOLOv8-seg not available: {e}, using standard method")
+            mask = auto_select_mask(img)
+            contours = find_largest_contours(mask, num_contours=1)
+    elif use_sam:
         # Use FastSAM for AI-based segmentation
         try:
             from .fastsam_inference import segment_image
