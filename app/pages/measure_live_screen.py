@@ -507,8 +507,9 @@ class LiveCameraScreen(QWidget):
         
         # Model Selection Dropdown (overlay style)
         self.model_combo = QComboBox()
-        self.model_combo.addItem("Traditional", "standard")
-        self.model_combo.addItem("SAM (AI)", "sam")
+        self.model_combo.addItem("YOLO-Seg (AI - Recommended)", "yolo")
+        self.model_combo.addItem("Standard (Beige Ready)", "standard")
+        self.model_combo.addItem("FastSAM (AI)", "sam")
         # Find index for current model
         idx = self.model_combo.findData(self.detection_model)
         if idx != -1: self.model_combo.setCurrentIndex(idx)
@@ -658,9 +659,10 @@ class LiveCameraScreen(QWidget):
         
         # Model selection for standard layouts
         self.model_combo = QComboBox()
+        self.model_combo.addItem("YOLO-Seg (AI)", "yolo")
         self.model_combo.addItem("Standard", "standard")
-        self.model_combo.addItem("SAM", "sam")
-        self.model_combo.setFixedWidth(UIScaling.scale(90))
+        self.model_combo.addItem("FastSAM", "sam")
+        self.model_combo.setFixedWidth(UIScaling.scale(120))
         self.model_combo.setFixedHeight(ctrl_btn_size)
         
         # Consistent styling for the combo box
@@ -1003,9 +1005,13 @@ class LiveCameraScreen(QWidget):
         
         # Determine model
         use_sam = False
+        use_yolo = False
         if hasattr(self, 'model_combo'):
-            use_sam = (self.model_combo.currentData() == "sam")
+            current_model = self.model_combo.currentData()
+            use_yolo = (current_model == "yolo")
+            use_sam = (current_model == "sam")
         else:
+            use_yolo = (self.detection_model == "yolo")
             use_sam = (self.detection_model == "sam")
             
         try:
@@ -1015,13 +1021,14 @@ class LiveCameraScreen(QWidget):
             t_obj = getattr(self, 'sandal_thickness', 15.0)
             mm_px_corrected = self.mm_per_px * (h_cam - t_obj) / h_cam if h_cam > 0 else self.mm_per_px
             
-            # Process
+            # Process with selected detection method
             results, processed = measure_live_sandals(
                 self.live_frame.copy(),
                 mm_per_px=mm_px_corrected,
                 draw_output=True,
                 save_out=None, # Optional: save to file
-                use_sam=use_sam
+                use_sam=use_sam,
+                use_yolo=use_yolo
             )
             
             self.captured_frame = processed

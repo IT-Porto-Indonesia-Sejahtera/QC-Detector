@@ -1,6 +1,7 @@
 import cv2
 import numpy as np
 from .preprocessor import preprocess_and_masks, ensure_dir
+from .measurement import strong_mask, auto_select_mask, find_largest_contours, refined_endpoints
 import os
 
 def endpoints_via_minrect(contour):
@@ -15,10 +16,15 @@ def find_largest_contours(mask, num_contours=2):
     cnts = sorted(cnts, key=lambda c: cv2.contourArea(c), reverse=True)
     return cnts[:num_contours]
 
-def measure_live_sandals(input_data, mm_per_px=None, draw_output=True, save_out=None, use_sam=False):
+def measure_live_sandals(input_data, mm_per_px=None, draw_output=True, save_out=None, use_sam=False, use_yolo=False):
     """
+    Live camera measurement with improved detection.
+    
+    Args:
+        use_yolo: If True, use YOLOv8-seg for detection (recommended)
+    
     Returns:
-      results list, processed image array (with text drawn)
+        results list, processed image array (with text drawn)
     """
     # Load image
     if isinstance(input_data, str):
@@ -29,24 +35,39 @@ def measure_live_sandals(input_data, mm_per_px=None, draw_output=True, save_out=
         img = input_data.copy()
 
     inference_time = 0
-    if use_sam:
+    
+    if use_yolo:
+        # Use YOLO-Seg (recommended for all objects)
+        try:
+            from .yolo_inference import segment_image
+            mask, contour, inference_time = segment_image(img)
+            if contour is not None:
+                contours = [contour]
+            else:
+                print("[LIVE] YOLO failed, using auto_select_mask")
+                mask = auto_select_mask(img)
+                contours = find_largest_contours(mask, num_contours=1)
+        except ImportError as e:
+            print(f"[LIVE] YOLO not available: {e}, using auto_select_mask")
+            mask = auto_select_mask(img)
+            contours = find_largest_contours(mask, num_contours=1)
+    elif use_sam:
+        # Use FastSAM
         try:
             from .fastsam_inference import segment_image
             mask, contour, inference_time = segment_image(img)
             if contour is not None:
                 contours = [contour]
             else:
-                # Fallback to standard
-                gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-                mask = preprocess_and_masks(gray)
+                print("[LIVE] SAM failed, using auto_select_mask")
+                mask = auto_select_mask(img)
                 contours = find_largest_contours(mask, num_contours=1)
         except ImportError:
-            gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-            mask = preprocess_and_masks(gray)
+            mask = auto_select_mask(img)
             contours = find_largest_contours(mask, num_contours=1)
     else:
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        mask = preprocess_and_masks(gray)
+        # Use improved auto_select_mask (with strong_mask for beige detection)
+        mask = auto_select_mask(img)
         contours = find_largest_contours(mask, num_contours=1)
 
     out = img.copy()
@@ -57,7 +78,9 @@ def measure_live_sandals(input_data, mm_per_px=None, draw_output=True, save_out=
             continue
 
         box, w, h, angle = endpoints_via_minrect(cnt)
-        px_length = max(w, h)
+        
+        # Use refined_endpoints for better length measurement
+        px_length = refined_endpoints(cnt)
         px_width = min(w, h)
 
         # Conversions
@@ -73,8 +96,13 @@ def measure_live_sandals(input_data, mm_per_px=None, draw_output=True, save_out=
         else:
             pass_fail = "UNKNOWN"
 
-        # Draw contour + box
-        contour_color = (255, 0, 255) if use_sam else (255, 255, 0)
+        # Draw contour + box with method-specific colors
+        if use_yolo:
+            contour_color = (0, 165, 255)  # Orange for YOLO
+        elif use_sam:
+            contour_color = (255, 0, 255)  # Magenta for SAM
+        else:
+            contour_color = (255, 255, 0)  # Cyan for standard
         cv2.drawContours(out, [cnt], -1, contour_color, 2)
         cv2.drawContours(out, [box], 0, (0, 255, 0), 2)
 
@@ -86,7 +114,13 @@ def measure_live_sandals(input_data, mm_per_px=None, draw_output=True, save_out=
             # Draw background for readability (bigger for more info)
             cv2.rectangle(out, (10, 10), (320, 155), (0, 0, 0), -1)
 
-            method_text = "Method: SAM (AI)" if use_sam else "Method: Traditional"
+            method_text = "Method: "
+            if use_yolo:
+                method_text += "YOLO-Seg (AI)"
+            elif use_sam:
+                method_text += "FastSAM (AI)"
+            else:
+                method_text += "Standard (Beige Ready)"
             cv2.putText(out, method_text, (x, y), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
 
             cv2.putText(out, f"Length: {real_length_mm:.1f} mm ({px_length:.0f} px)",
