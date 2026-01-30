@@ -36,6 +36,16 @@ def strong_mask(img):
     white_pixel_ratio = np.sum(white_combined > 0) / (h * w)
     is_white_object = white_pixel_ratio > 0.10
     
+    # === 1.5 Low Contrast Detection (for beige objects) ===
+    # Check if brightness barely changes
+    L_std = np.std(L)
+    is_low_contrast = L_std < 18
+    
+    # === 1.6 Beige / Neutral Object Detection ===
+    # Low color variation in ab channels + bright = beige/neutral
+    ab_std = np.std(A) + np.std(B)
+    is_neutral_object = (ab_std < 12) and (np.mean(L) > 130)
+    
     # === 2. Sobel Edge Detection (better than Canny) ===
     # Sobel gradient magnitude for sub-pixel accuracy
     sobel_x = cv2.Sobel(L, cv2.CV_64F, 1, 0, ksize=3)
@@ -65,23 +75,68 @@ def strong_mask(img):
     # Threshold for edges
     _, edges = cv2.threshold(magnitude_norm, 25, 255, cv2.THRESH_BINARY)
     
-    # === 3. Adaptive Logic: White vs Dark Objects ===
+    # === 3. Adaptive Logic: White vs Low-Contrast vs Dark Objects ===
+    # if is_white_object:
+    #     print(f"[strong_mask] White object detected ({white_pixel_ratio*100:.1f}% white) - using edge-first approach")
+        
+    #     # For white: Use edges only to avoid over-segmentation
+    #     final_mask = edges.copy()
+        
+    #     # Close small gaps in edges
+    #     # kernel_close = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7))
+    #     # final_mask = cv2.morphologyEx(final_mask, cv2.MORPH_CLOSE, kernel_close, iterations=2)
+    #     # Directional edge bridging (no inflation)
+    #     kernel_h = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 1))
+    #     kernel_v = cv2.getStructuringElement(cv2.MORPH_RECT, (1, 5))
+
+    #     final_mask = cv2.morphologyEx(final_mask, cv2.MORPH_CLOSE, kernel_h, iterations=1)
+    #     final_mask = cv2.morphologyEx(final_mask, cv2.MORPH_CLOSE, kernel_v, iterations=1)
+    # === 3. Adaptive Logic: White vs Low-Contrast vs Dark Objects ===
     if is_white_object:
-        print(f"[strong_mask] White object detected ({white_pixel_ratio*100:.1f}% white) - using edge-first approach")
+        print(f"[strong_mask] Beige/White object detected - Using A-Channel Precision Segmentation")
         
-        # For white: Use edges only to avoid over-segmentation
-        final_mask = edges.copy()
+        # 1. Otsu Threshold on 'A' Channel
+        # Separates "Green" (Background) from "Not Green" (Sandal)
+        _, mask_a = cv2.threshold(A, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
         
-        # Close small gaps in edges
-        # kernel_close = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7))
-        # final_mask = cv2.morphologyEx(final_mask, cv2.MORPH_CLOSE, kernel_close, iterations=2)
-        # Directional edge bridging (no inflation)
-        kernel_h = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 1))
-        kernel_v = cv2.getStructuringElement(cv2.MORPH_RECT, (1, 5))
-
-        final_mask = cv2.morphologyEx(final_mask, cv2.MORPH_CLOSE, kernel_h, iterations=1)
-        final_mask = cv2.morphologyEx(final_mask, cv2.MORPH_CLOSE, kernel_v, iterations=1)
-
+        # 2. Gentle Cleaning (UPDATED)
+        # We use a smaller kernel (3x3) to avoid shaving off sharp corners like the toe/heel
+        kernel_clean = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+        
+        # Morph Open: Removes only tiny noise specs, keeping the sandal shape intact
+        mask_clean = cv2.morphologyEx(mask_a, cv2.MORPH_OPEN, kernel_clean, iterations=1)
+        
+        # Morph Close: Fills small holes inside the sandal (e.g. logos/textures)
+        mask_clean = cv2.morphologyEx(mask_clean, cv2.MORPH_CLOSE, kernel_clean, iterations=2)
+        
+        # 3. Final Edge Recovery (THE FIX)
+        final_mask = mask_clean.copy()
+        
+        # PREVIOUSLY: final_mask = cv2.erode(final_mask, None, iterations=1)  <-- DELETED (This caused the cut)
+        
+        # NOW: Slightly expand to capture the transition edge pixels
+        # This restores the "cut" piece without creating a large gap
+        kernel_expand = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+        final_mask = cv2.dilate(final_mask, kernel_expand, iterations=1)
+        
+    elif is_low_contrast or is_neutral_object:
+        print(f"[strong_mask] Neutral/beige object detected (L_std={L_std:.1f}, ab_std={ab_std:.1f}) - using color edge detection")
+        
+        # For beige/low-contrast: Use Sobel gradients on ab channels
+        # This detects edges based on color changes, not brightness
+        gradA = cv2.Sobel(A, cv2.CV_64F, 1, 1, ksize=3)
+        gradB = cv2.Sobel(B, cv2.CV_64F, 1, 1, ksize=3)
+        ab_edges = np.sqrt(gradA**2 + gradB**2)
+        
+        ab_edges = cv2.normalize(ab_edges, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
+        _, ab_edges = cv2.threshold(ab_edges, 18, 255, cv2.THRESH_BINARY)
+        
+        # Combine regular edges with color-based edges
+        final_mask = cv2.bitwise_or(edges, ab_edges)
+        
+        # Morphology for smooth contours
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7))
+        final_mask = cv2.morphologyEx(final_mask, cv2.MORPH_CLOSE, kernel, iterations=2)
         
     else:
         print(f"[strong_mask] Dark object detected ({white_pixel_ratio*100:.1f}% white) - using LAB + edges")
@@ -102,7 +157,20 @@ def strong_mask(img):
         kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (9, 9))
         final_mask = cv2.morphologyEx(final_mask, cv2.MORPH_CLOSE, kernel, iterations=2)
     
-    # === 4. Inner Contour Enforcement (Metrology Trick) ===
+    # === 4. Fill Mask (Complete Partial Detections) ===
+    # Use flood fill from background to fill interior holes
+    filled = final_mask.copy()
+    h, w = filled.shape
+    mask_flood = np.zeros((h+2, w+2), np.uint8)
+    
+    # Flood fill from top-left corner (background)
+    cv2.floodFill(filled, mask_flood, (0, 0), 255)
+    filled_inv = cv2.bitwise_not(filled)
+    
+    # Combine: keeps edges + fills interior
+    final_mask = final_mask | filled_inv
+    
+    # === 5. Inner Contour Enforcement (Metrology Trick) ===
     # Erode slightly to ensure we measure from inside boundary
     # This provides consistent precision and avoids aliasing
     # kernel_inner = np.ones((2, 2), np.uint8)
@@ -121,7 +189,8 @@ def endpoints_via_minrect(contour):
 
 def find_largest_contours(mask, num_contours=2):
     cnts, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    cnts = sorted(cnts, key=lambda c: cv2.contourArea(c), reverse=True)
+    # Sort by convex hull area (safer for metrology, handles partial edges better)
+    cnts = sorted(cnts, key=lambda c: cv2.contourArea(cv2.convexHull(c)), reverse=True)
     return cnts[:num_contours]
 
 def auto_select_mask(img):

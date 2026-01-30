@@ -209,10 +209,33 @@ def segment_image(image, conf=0.25):
     roi_mask = strong_mask(roi)
     
     # Find contour in ROI space
+    # contours, _ = cv2.findContours(roi_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    
+    # if len(contours) == 0:
+    #     print("[YOLOv8-seg] No contour found in ROI")
+    #     return None, None, inference_time
+    roi_area = roi_mask.shape[0] * roi_mask.shape[1]
+    mask_pixels = cv2.countNonZero(roi_mask)
+    
+    # If precise mask covers less than 10% of ROI (likely failed), use YOLO mask
+    if mask_pixels < (roi_area * 0.10):
+        print(f"[YOLOv8-seg] Precision mask failed (only {mask_pixels} px). Fallback to YOLO raw mask.")
+        
+        # Extract the original YOLO mask for this ROI
+        # mask_resized was calculated earlier in the loop
+        yolo_roi_mask = mask_resized[y1:y2, x1:x2]
+        
+        # Binarize it
+        _, roi_mask = cv2.threshold(yolo_roi_mask, 1, 255, cv2.THRESH_BINARY)
+        
+        # Optional: Slight cleanup on YOLO mask
+        roi_mask = cv2.morphologyEx(roi_mask, cv2.MORPH_CLOSE, np.ones((5,5), np.uint8))
+
+    # Find contour in ROI space
     contours, _ = cv2.findContours(roi_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     
     if len(contours) == 0:
-        print("[YOLOv8-seg] No contour found in ROI")
+        print("[YOLOv8-seg] No contour found in ROI even after fallback")
         return None, None, inference_time
     
     # Get the largest contour in ROI
