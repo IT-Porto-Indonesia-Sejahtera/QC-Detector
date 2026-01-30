@@ -1,9 +1,9 @@
 {
     "camera_index": "ip",
-    "mm_per_px": 0.44292662734140537,
+    "mm_per_px": 0.69162005,
     "sensor_delay": 0.2123459,
     "fetch_status": "success",
-    "layout_mode": "minimal",
+    "layout_mode": "split",
     "last_fetched": "06/01/2026 17:04",
     "paths": {
         "profile": "C://User/test/asd/",
@@ -51,5 +51,8 @@
         "cy": 0.0
     },
     "dataset_save_measurements": false,
-    "last_dataset_path": "C:/QC Detector/QC-Detector/input/temp_assets"
+    "last_dataset_path": "C:/QC Detector/QC-Detector/input/temp_assets",
+    "detection_model": "standard",
+    "mounting_height": 771.0,
+    "sandal_thickness": 22.5
 }

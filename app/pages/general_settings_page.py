@@ -14,6 +14,8 @@ from app.utils.capture_thread import VideoCaptureThread
 from app.utils.ui_scaling import UIScaling
 from backend.aruco_utils import detect_aruco_marker
 from app.widgets.aruco_calibration_dialog import ArucoCalibrationDialog
+from backend.get_product_sku import ProductSKUWorker
+from backend.sku_cache import set_sku_data, get_log_text, add_log
 
 SETTINGS_FILE = os.path.join("output", "settings", "app_settings.json")
 
@@ -82,6 +84,10 @@ class GeneralSettingsPage(QWidget):
         p_card, p_layout = self.create_card("Application Parameters")
         p_layout.addWidget(self.create_styled_label("Resolution (mm/px):"))
         self.mm_px = QLineEdit(); self.style_input(self.mm_px); p_layout.addWidget(self.mm_px)
+        
+        p_layout.addWidget(self.create_styled_label("Default Detection Model:"))
+        self.det_model = QComboBox(); self.det_model.addItem("Standard (Contour)", "standard"); self.det_model.addItem("SAM (AI)", "sam"); self.style_input(self.det_model); p_layout.addWidget(self.det_model)
+        
         p_layout.addWidget(self.create_styled_label("Layout Mode:"))
         self.lay_mode = QComboBox(); self.lay_mode.addItems(["Classic", "Split", "Minimal"]); self.style_input(self.lay_mode); p_layout.addWidget(self.lay_mode)
         right.addWidget(p_card)
@@ -90,7 +96,23 @@ class GeneralSettingsPage(QWidget):
         aruco_card, aruco_layout = self.create_card("Auto Calibration System")
         aruco_layout.addWidget(self.create_styled_label("ArUco Marker Size (mm):"))
         self.marker_size = QLineEdit("50.0"); self.style_input(self.marker_size); aruco_layout.addWidget(self.marker_size)
-        self.btn_calibrate = QPushButton("Run Auto Calibration"); self.style_button(self.btn_calibrate); self.btn_calibrate.setStyleSheet(self.btn_calibrate.styleSheet() + "background-color: #9C27B0; color: white;"); self.btn_calibrate.clicked.connect(self.run_auto_calibration); aruco_layout.addWidget(self.btn_calibrate)
+        
+        # Height Correction Fields
+        h_height = QHBoxLayout()
+        v_h1 = QVBoxLayout(); v_h1.addWidget(self.create_styled_label("Mounting Height (mm)")); self.mount_h = QLineEdit("1000.0"); self.style_input(self.mount_h); v_h1.addWidget(self.mount_h)
+        v_h2 = QVBoxLayout(); v_h2.addWidget(self.create_styled_label("Sandal Thickness (mm)")); self.sandal_t = QLineEdit("15.0"); self.style_input(self.sandal_t); v_h2.addWidget(self.sandal_t)
+        h_height.addLayout(v_h1); h_height.addLayout(v_h2)
+        aruco_layout.addLayout(h_height)
+        
+        h_ctrl = QHBoxLayout()
+        self.btn_calibrate = QPushButton("Run Auto Calibration"); self.style_button(self.btn_calibrate, True); self.btn_calibrate.clicked.connect(self.run_auto_calibration)
+        self.btn_debug_aruco = QPushButton("🔍 Debug Off"); self.style_button(self.btn_debug_aruco); self.btn_debug_aruco.setFixedWidth(UIScaling.scale(120))
+        self.btn_debug_aruco.clicked.connect(self.toggle_aruco_debug)
+        self.aruco_debug_active = False
+        
+        h_ctrl.addWidget(self.btn_calibrate, 1); h_ctrl.addWidget(self.btn_debug_aruco)
+        aruco_layout.addLayout(h_ctrl)
+        
         self.calibration_status = QLabel(""); self.calibration_status.setStyleSheet("color: #666; font-size: 11px; background: transparent; border: none;"); aruco_layout.addWidget(self.calibration_status)
         right.addWidget(aruco_card)
         
@@ -170,6 +192,21 @@ class GeneralSettingsPage(QWidget):
         btn_photo = QPushButton("🖼️  Measure by Photo"); self.style_button(btn_photo)
         btn_photo.clicked.connect(self.go_to_photo); dev_layout.addWidget(btn_photo)
         right.addWidget(dev_card)
+        
+        # Database Sync Card
+        sync_card, sync_layout = self.create_card("Database Sync")
+        sync_layout.addWidget(self.create_styled_label("Fetch product SKU data from database:"))
+        self.btn_fetch_sku = QPushButton("🔄 Fetch SKU Data"); self.style_button(self.btn_fetch_sku, True)
+        self.btn_fetch_sku.clicked.connect(self.fetch_sku_data)
+        sync_layout.addWidget(self.btn_fetch_sku)
+        
+        sync_layout.addWidget(self.create_styled_label("Sync Log:"))
+        from PySide6.QtWidgets import QTextEdit
+        self.log_display = QTextEdit(); self.log_display.setReadOnly(True)
+        self.log_display.setFixedHeight(UIScaling.scale(120))
+        self.log_display.setStyleSheet(f"background: #1C1C1E; color: #00FF00; font-family: monospace; font-size: {UIScaling.scale_font(11)}px; padding: 8px; border-radius: 8px;")
+        sync_layout.addWidget(self.log_display)
+        right.addWidget(sync_card)
         
         btn_save = QPushButton("Save System Settings"); btn_save.setFixedHeight(UIScaling.scale(50)); self.style_button(btn_save, True); btn_save.clicked.connect(self.save_settings)
         right.addWidget(btn_save); right.addStretch()
@@ -261,8 +298,14 @@ class GeneralSettingsPage(QWidget):
         else: self.lay_mode.setCurrentIndex(0)
         self.s_port.setText(s.get("sensor_port", "")); self.p_port.setText(s.get("plc_port", ""))
         self.p_tri.setText(str(s.get("plc_trigger_reg", 12))); self.p_res.setText(str(s.get("plc_result_reg", 13)))
+        
+        det_mode = s.get("detection_model", "standard")
+        self.det_model.setCurrentIndex(self.det_model.findData(det_mode))
+        
         self.ip_presets = s.get("ip_camera_presets", [])
         self.marker_size.setText(str(s.get("aruco_marker_size", 50.0)))
+        self.mount_h.setText(str(s.get("mounting_height", 1000.0)))
+        self.sandal_t.setText(str(s.get("sandal_thickness", 15.0)))
         # Load crop settings
         crop = s.get("camera_crop", {})
         self.crop_left.setText(str(crop.get("left", 0)))
@@ -366,6 +409,7 @@ class GeneralSettingsPage(QWidget):
             
         s["sensor_port"] = self.s_port.text(); s["plc_port"] = self.p_port.text()
         s["plc_trigger_reg"] = int(self.p_tri.text() or 12); s["plc_result_reg"] = int(self.p_res.text() or 13)
+        s["detection_model"] = self.det_model.currentData()
         if s["camera_index"] == "ip":
             pid = self.ip_preset_combo.currentData()
             p = next((x for x in self.ip_presets if x["id"] == pid), None)
@@ -373,8 +417,11 @@ class GeneralSettingsPage(QWidget):
                 p.update({"address": self.ip_addr.text(), "port": self.port.text(), "path": self.path.text(), "username": self.user.text(), "password": self.passwd.text(), "protocol": self.proto.currentText()})
                 s["active_ip_preset_id"] = pid
         s["ip_camera_presets"] = self.ip_presets
-        # Save ArUco marker size
-        try: s["aruco_marker_size"] = float(self.marker_size.text())
+        # Save ArUco marker size & Heights
+        try: 
+            s["aruco_marker_size"] = float(self.marker_size.text())
+            s["mounting_height"] = float(self.mount_h.text())
+            s["sandal_thickness"] = float(self.sandal_t.text())
         except: pass
         # Save crop settings
         s["camera_crop"] = {
@@ -430,9 +477,34 @@ class GeneralSettingsPage(QWidget):
         if self.cap_thread: self.cap_thread.stop(); self.cap_thread = None
 
     def show_frame(self, frame):
-        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB); h, w, ch = rgb.shape
+        out_frame = frame
+        if hasattr(self, 'aruco_debug_active') and self.aruco_debug_active:
+            try:
+                ms = float(self.marker_size.text() or 50.0)
+                success, res = detect_aruco_marker(frame, ms)
+                if success:
+                    out_frame = res['annotated_frame']
+                    self.calibration_status.setText(f"Live: {res['mm_per_px']:.6f} mm/px {'(TILTED!)' if res['is_tilted'] else ''}")
+                else:
+                    self.calibration_status.setText(f"Searching: {res['error']}")
+            except:
+                pass
+
+        rgb = cv2.cvtColor(out_frame, cv2.COLOR_BGR2RGB); h, w, ch = rgb.shape
         pix = QPixmap.fromImage(QImage(rgb.data, w, h, ch*w, QImage.Format_RGB888))
         self.preview_box.setPixmap(pix.scaled(self.preview_box.size(), Qt.KeepAspectRatio))
+
+    def toggle_aruco_debug(self):
+        self.aruco_debug_active = not self.aruco_debug_active
+        if self.aruco_debug_active:
+            self.btn_debug_aruco.setText("🔍 Debug On")
+            self.btn_debug_aruco.setStyleSheet(self.btn_debug_aruco.styleSheet().replace("#E8E8ED", "#FF9800").replace("#007AFF", "white"))
+            self.calibration_status.setText("ArUco Debug Mode Active")
+        else:
+            self.btn_debug_aruco.setText("🔍 Debug Off")
+            self.style_button(self.btn_debug_aruco)
+            self.calibration_status.setText("")
+
 
     def go_back(self):
         self.stop_preview()
@@ -534,3 +606,50 @@ class GeneralSettingsPage(QWidget):
     def reset_camera_matrix(self):
         self.fx.setText("0.0"); self.fy.setText("0.0"); self.cx.setText("0.0"); self.cy.setText("0.0")
 
+    def fetch_sku_data(self):
+        """Fetch product SKU data from database asynchronously."""
+        # Update UI
+        self.btn_fetch_sku.setEnabled(False)
+        self.btn_fetch_sku.setText("Fetching...")
+        add_log("Starting SKU data fetch...")
+        self._update_log_display()
+        
+        # Create worker
+        self.sku_worker = ProductSKUWorker()
+        self.sku_worker.finished.connect(self._on_sku_fetch_success)
+        self.sku_worker.error.connect(self._on_sku_fetch_error)
+        self.sku_worker.start()
+
+    def _on_sku_fetch_success(self, data):
+        """Handle successful SKU fetch."""
+        if data:
+            set_sku_data(data)
+            add_log(f"SUCCESS: Fetched {len(data)} products from database.")
+            
+            # Log sample data
+            if len(data) > 0:
+                sample = data[0]
+                add_log(f"Sample: {sample.get('Nama Produk', 'N/A')[:30]}...")
+        else:
+            add_log("WARNING: Query returned 0 results.")
+        
+        self._reset_fetch_button()
+        self._update_log_display()
+
+    def _on_sku_fetch_error(self, error_msg):
+        """Handle SKU fetch error."""
+        add_log(f"ERROR: {error_msg}")
+        self._reset_fetch_button()
+        self._update_log_display()
+
+    def _reset_fetch_button(self):
+        """Reset fetch button to default state."""
+        self.btn_fetch_sku.setEnabled(True)
+        self.btn_fetch_sku.setText("🔄 Fetch SKU Data")
+
+    def _update_log_display(self):
+        """Update the log display text area."""
+        self.log_display.setText(get_log_text())
+        # Auto-scroll to bottom
+        scrollbar = self.log_display.verticalScrollBar()
+        scrollbar.setValue(scrollbar.maximum())

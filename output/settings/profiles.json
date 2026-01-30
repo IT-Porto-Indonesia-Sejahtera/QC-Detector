@@ -2,165 +2,212 @@
     {
         "id": "2ddd15e6-ce5d-48e0-a68b-f706b1a70c44",
         "name": "Shift 2",
-        "sub_label": "Team B",
-        "sku_label": "Testing Data",
-        "last_updated": "22/12/2025, 09:56:00",
+        "sub_label": "Team A",
+        "sku_label": "EVA Porto 1068M",
+        "last_updated": "22/12/2025, 17:00:07",
         "presets": [
             {
-                "sku": "E-0123M",
-                "size": "36",
-                "color_idx": 1,
-                "team": "A"
-            },
-            {
-                "sku": "E-0123M",
-                "size": "37",
-                "color_idx": 1,
-                "team": "A"
-            },
-            {
-                "sku": "E-0123M",
-                "size": "38",
-                "color_idx": 1,
-                "team": "A"
-            },
-            {
-                "sku": "E-0123M",
-                "size": "39",
-                "color_idx": 1,
-                "team": "A"
-            },
-            {
-                "sku": "E-0123M",
+                "sku": "EVA Porto 1068M",
                 "size": "40",
                 "color_idx": 1,
-                "team": "A"
+                "team": "Team A",
+                "otorisasi": "+1.0"
             },
             {
-                "sku": "E-0123M",
+                "sku": "EVA Porto 1068M",
                 "size": "41",
                 "color_idx": 1,
-                "team": "A"
+                "team": "Team A",
+                "otorisasi": "+1.0"
             },
             {
-                "sku": "E-0123M",
+                "sku": "EVA Porto 1068M",
                 "size": "42",
                 "color_idx": 1,
-                "team": "A"
+                "team": "Team A",
+                "otorisasi": "+1.0"
             },
             {
-                "sku": "E-0123M",
+                "sku": "EVA Porto 1068M",
                 "size": "43",
                 "color_idx": 1,
-                "team": "A"
+                "team": "Team A",
+                "otorisasi": "+1.0"
             },
             {
-                "sku": "E-9008L",
-                "size": "36",
-                "color_idx": 2,
-                "team": "A"
+                "sku": "EVA Porto 1068M",
+                "size": "44",
+                "color_idx": 1,
+                "team": "Team A",
+                "otorisasi": "+1.0"
             },
             {
-                "sku": "E-9008L",
-                "size": "37",
-                "color_idx": 2,
-                "team": "A"
+                "sku": "EVA Porto 1068M",
+                "size": "45",
+                "color_idx": 1,
+                "team": "Team A",
+                "otorisasi": "+1.0"
             },
             {
-                "sku": "E-9008L",
-                "size": "38",
-                "color_idx": 2,
-                "team": "A"
-            },
-            {
-                "sku": "E-9008L",
+                "sku": "EVA Porto 9006M-Black",
                 "size": "39",
                 "color_idx": 2,
-                "team": "A"
+                "team": "Team A",
+                "otorisasi": "+0.5"
             },
             {
-                "sku": "E-9008L",
+                "sku": "EVA Porto 9006M-Black",
                 "size": "40",
                 "color_idx": 2,
-                "team": "A"
+                "team": "Team A",
+                "otorisasi": "+0.5"
             },
             {
-                "sku": "E-9008L",
+                "sku": "EVA Porto 9006M-Black",
                 "size": "41",
                 "color_idx": 2,
-                "team": "A"
+                "team": "Team A",
+                "otorisasi": "+0.5"
             },
             {
-                "sku": "X-5000-Pro",
-                "size": "XS",
-                "color_idx": 3,
-                "team": "B"
-            },
-            {
-                "sku": "X-5000-Pro",
-                "size": "S",
-                "color_idx": 3,
-                "team": "B"
-            },
-            {
-                "sku": "X-5000-Pro",
-                "size": "M",
-                "color_idx": 3,
-                "team": "B"
-            },
-            {
-                "sku": "X-5000-Pro",
-                "size": "L",
-                "color_idx": 3,
-                "team": "B"
-            },
-            {
-                "sku": "X-5000-Pro",
-                "size": "XL",
-                "color_idx": 3,
-                "team": "B"
-            },
-            {
-                "sku": "X-5000-Pro",
-                "size": "XXL",
-                "color_idx": 3,
-                "team": "B"
-            },
-            {
-                "sku": "A-1001X",
-                "size": "37",
-                "color_idx": 2,
-                "team": "B"
-            },
-            {
-                "sku": "A-1001X",
-                "size": "38",
-                "color_idx": 2,
-                "team": "B"
-            },
-            {
-                "sku": "A-1001X",
-                "size": "39",
-                "color_idx": 2,
-                "team": "B"
-            },
-            {
-                "sku": "A-1001X",
-                "size": "40",
-                "color_idx": 2,
-                "team": "B"
-            },
-            {
-                "sku": "A-1001X",
-                "size": "41",
-                "color_idx": 2,
-                "team": "B"
-            },
-            {
-                "sku": "A-1001X",
+                "sku": "EVA Porto 9006M-Black",
                 "size": "42",
                 "color_idx": 2,
-                "team": "B"
+                "team": "Team A",
+                "otorisasi": "+0.5"
+            },
+            {
+                "sku": "EVA Porto 9006M-Black",
+                "size": "43",
+                "color_idx": 2,
+                "team": "Team A",
+                "otorisasi": "+0.5"
+            },
+            {
+                "sku": "EVA Porto 9006M-Black",
+                "size": "44",
+                "color_idx": 2,
+                "team": "Team A",
+                "otorisasi": "+0.5"
+            },
+            {
+                "sku": "EVA Porto 1002M",
+                "size": "39",
+                "color_idx": 3,
+                "team": "Team B",
+                "otorisasi": "pas"
+            },
+            {
+                "sku": "EVA Porto 1002M",
+                "size": "40",
+                "color_idx": 3,
+                "team": "Team B",
+                "otorisasi": "pas"
+            },
+            {
+                "sku": "EVA Porto 1002M",
+                "size": "41",
+                "color_idx": 3,
+                "team": "Team B",
+                "otorisasi": "pas"
+            },
+            {
+                "sku": "EVA Porto 1002M",
+                "size": "42",
+                "color_idx": 3,
+                "team": "Team B",
+                "otorisasi": "pas"
+            },
+            {
+                "sku": "EVA Porto 1002M",
+                "size": "43",
+                "color_idx": 3,
+                "team": "Team B",
+                "otorisasi": "pas"
+            },
+            {
+                "sku": "EVA Porto 1006B",
+                "size": "30",
+                "color_idx": 4,
+                "team": "Team B",
+                "otorisasi": "+1.0"
+            },
+            {
+                "sku": "EVA Porto 1006B",
+                "size": "31",
+                "color_idx": 4,
+                "team": "Team B",
+                "otorisasi": "+1.0"
+            },
+            {
+                "sku": "EVA Porto 1006B",
+                "size": "32",
+                "color_idx": 4,
+                "team": "Team B",
+                "otorisasi": "+1.0"
+            },
+            {
+                "sku": "EVA Porto 1006B",
+                "size": "33",
+                "color_idx": 4,
+                "team": "Team B",
+                "otorisasi": "+1.0"
+            },
+            {
+                "sku": "EVA Porto 1006B",
+                "size": "34",
+                "color_idx": 4,
+                "team": "Team B",
+                "otorisasi": "+1.0"
+            },
+            {
+                "sku": "EVA Porto 1006B",
+                "size": "35",
+                "color_idx": 4,
+                "team": "Team B",
+                "otorisasi": "+1.0"
+            }
+        ],
+        "selected_skus": [
+            {
+                "code": "EVA Porto 1068M",
+                "coeff": "EVA Porto 1068M",
+                "default_code": "EVA Porto 1068M",
+                "gdrive_id": "1cTmQZiJhRa3yO_OPYNINJZYS11-QPDTE",
+                "kategori": "Sandal EVA",
+                "otorisasi": "+1.0",
+                "sizes": "40-45",
+                "team": "Team A"
+            },
+            {
+                "code": "EVA Porto 9006M-Black",
+                "coeff": "EVA Porto 9006M-Black",
+                "default_code": "EVA Porto 9006M-Black",
+                "gdrive_id": "1gJAK69UybIAC4prbN8EBvH_9o3JVoisu",
+                "kategori": "Sandal EVA",
+                "otorisasi": "+0.5",
+                "sizes": "39-44",
+                "team": "Team A"
+            },
+            {
+                "code": "EVA Porto 1002M",
+                "coeff": "EVA Porto 1002M",
+                "default_code": "EVA Porto 1002M",
+                "gdrive_id": "110ysuBRfCF4Wu-3g3BzMYg8VrJmJjlq5",
+                "kategori": "Sandal EVA",
+                "otorisasi": "pas",
+                "sizes": "39-43",
+                "team": "Team B"
+            },
+            {
+                "code": "EVA Porto 1006B",
+                "coeff": "EVA Porto 1006B",
+                "default_code": "EVA Porto 1006B",
+                "gdrive_id": "1hb813Kwtqw4HG08BdKdqTvLXZsph_N4e",
+                "kategori": "Sandal EVA",
+                "otorisasi": "+1.0",
+                "sizes": "30-35",
+                "team": "Team B"
             }
         ]
     }

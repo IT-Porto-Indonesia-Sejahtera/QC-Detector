@@ -15,7 +15,7 @@ def find_largest_contours(mask, num_contours=2):
     cnts = sorted(cnts, key=lambda c: cv2.contourArea(c), reverse=True)
     return cnts[:num_contours]
 
-def measure_live_sandals(input_data, mm_per_px=None, draw_output=True, save_out=None):
+def measure_live_sandals(input_data, mm_per_px=None, draw_output=True, save_out=None, use_sam=False):
     """
     Returns:
       results list, processed image array (with text drawn)
@@ -28,9 +28,26 @@ def measure_live_sandals(input_data, mm_per_px=None, draw_output=True, save_out=
     else:
         img = input_data.copy()
 
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    mask = preprocess_and_masks(gray)
-    contours = find_largest_contours(mask, num_contours=1)
+    inference_time = 0
+    if use_sam:
+        try:
+            from .fastsam_inference import segment_image
+            mask, contour, inference_time = segment_image(img)
+            if contour is not None:
+                contours = [contour]
+            else:
+                # Fallback to standard
+                gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+                mask = preprocess_and_masks(gray)
+                contours = find_largest_contours(mask, num_contours=1)
+        except ImportError:
+            gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+            mask = preprocess_and_masks(gray)
+            contours = find_largest_contours(mask, num_contours=1)
+    else:
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        mask = preprocess_and_masks(gray)
+        contours = find_largest_contours(mask, num_contours=1)
 
     out = img.copy()
     results = []
@@ -57,7 +74,8 @@ def measure_live_sandals(input_data, mm_per_px=None, draw_output=True, save_out=
             pass_fail = "UNKNOWN"
 
         # Draw contour + box
-        cv2.drawContours(out, [cnt], -1, (255, 255, 0), 2)
+        contour_color = (255, 0, 255) if use_sam else (255, 255, 0)
+        cv2.drawContours(out, [cnt], -1, contour_color, 2)
         cv2.drawContours(out, [box], 0, (0, 255, 0), 2)
 
         # Put text at TOP-LEFT of image (not near the box)
@@ -66,23 +84,29 @@ def measure_live_sandals(input_data, mm_per_px=None, draw_output=True, save_out=
             x, y = 20, 35
 
             # Draw background for readability (bigger for more info)
-            cv2.rectangle(out, (10, 10), (280, 130), (0, 0, 0), -1)
+            cv2.rectangle(out, (10, 10), (320, 155), (0, 0, 0), -1)
 
-            # Draw detailed measurement text
+            method_text = "Method: SAM (AI)" if use_sam else "Method: Traditional"
+            cv2.putText(out, method_text, (x, y), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+
             cv2.putText(out, f"Length: {real_length_mm:.1f} mm ({px_length:.0f} px)",
-                        (x, y), cv2.FONT_HERSHEY_SIMPLEX,
+                        (x, y + 25), cv2.FONT_HERSHEY_SIMPLEX,
                         0.55, (0, 255, 255), 2)
 
             cv2.putText(out, f"Width:  {real_width_mm:.1f} mm ({px_width:.0f} px)",
-                        (x, y + 25), cv2.FONT_HERSHEY_SIMPLEX,
+                        (x, y + 50), cv2.FONT_HERSHEY_SIMPLEX,
                         0.55, (0, 200, 255), 2)
             
             cv2.putText(out, f"Scale: {mm_per_px:.6f} mm/px",
-                        (x, y + 50), cv2.FONT_HERSHEY_SIMPLEX,
+                        (x, y + 75), cv2.FONT_HERSHEY_SIMPLEX,
                         0.5, (200, 200, 200), 1)
             
-            cv2.putText(out, f"L: {real_length_cm:.2f} cm  W: {real_width_cm:.2f} cm",
-                        (x, y + 75), cv2.FONT_HERSHEY_SIMPLEX,
+            inf_text = f"L: {real_length_cm:.2f}cm W: {real_width_cm:.2f}cm"
+            if use_sam and inference_time > 0:
+                inf_text += f" ({inference_time:.0f}ms)"
+            
+            cv2.putText(out, inf_text,
+                        (x, y + 100), cv2.FONT_HERSHEY_SIMPLEX,
                         0.5, (150, 255, 150), 1)
 
         # Add to results dict
@@ -93,7 +117,8 @@ def measure_live_sandals(input_data, mm_per_px=None, draw_output=True, save_out=
             "real_width_mm": float(real_width_mm) if real_width_mm else None,
             "real_length_cm": float(real_length_cm) if real_length_cm else None,
             "real_width_cm": float(real_width_cm) if real_width_cm else None,
-            "pass_fail": pass_fail
+            "pass_fail": pass_fail,
+            "inference_time_ms": inference_time if use_sam else 0
         })
 
     if save_out:
@@ -101,4 +126,3 @@ def measure_live_sandals(input_data, mm_per_px=None, draw_output=True, save_out=
         cv2.imwrite(save_out, out)
 
     return results, out
-

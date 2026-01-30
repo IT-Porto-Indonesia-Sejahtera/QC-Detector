@@ -54,6 +54,13 @@ class ArucoCalibrationDialog(QDialog):
         
         diff = ((self.new_mmpx - self.current_mmpx) / self.current_mmpx) * 100 if self.current_mmpx > 0 else 0
         
+        # Tilt Warning
+        if self.result_data.get('is_tilted'):
+            tilt_lbl = QLabel("⚠️ WARNING: Marker tilt detected. Result may be inaccurate.")
+            tilt_lbl.setStyleSheet("color: #FF9800; font-weight: bold; font-size: 11px;")
+            tilt_lbl.setAlignment(Qt.AlignCenter)
+            info_layout.addWidget(tilt_lbl)
+
         row1 = QHBoxLayout()
         row1.addWidget(QLabel("Current Resolution:"))
         val1 = QLabel(f"{self.current_mmpx:.6f} mm/px")
