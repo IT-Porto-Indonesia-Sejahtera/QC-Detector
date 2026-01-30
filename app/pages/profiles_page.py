@@ -12,6 +12,8 @@ from app.utils.theme_manager import ThemeManager
 from project_utilities.json_utility import JsonUtility
 from app.utils.ui_scaling import UIScaling
 from app.widgets.sku_selector_overlay import SkuSelectorOverlay
+from backend.get_product_sku import ProductSKUWorker
+from backend.sku_cache import set_sku_data, add_log
 
 PROFILES_FILE = os.path.join("output", "settings", "profiles.json")
 SETTINGS_FILE = os.path.join("output", "settings", "app_settings.json")
@@ -54,6 +56,15 @@ class ProfilesPage(QWidget):
         header_layout.addSpacing(20)
         header_layout.addWidget(lbl_title)
         header_layout.addStretch()
+        
+        # Sync Button
+        self.btn_sync = QPushButton("🔄 Sync SKU")
+        self.btn_sync.setFixedHeight(UIScaling.scale(40))
+        self.btn_sync.setStyleSheet(f"border: 1px solid #007AFF; border-radius: 8px; padding: 0 15px; font-size: {UIScaling.scale_font(14)}px; font-weight: bold; color: #007AFF; background: white;")
+        self.btn_sync.setCursor(Qt.PointingHandCursor)
+        self.btn_sync.clicked.connect(self.fetch_sku_data)
+        header_layout.addWidget(self.btn_sync)
+        
         layout.addWidget(header)
         
         # Content
@@ -296,19 +307,68 @@ class ProfilesPage(QWidget):
         row["data"] = sku_data
         row["sku_val"].setText(str(sku_data.get("code", "")))
 
+    def _parse_sizes(self, size_str, code=""):
+        if not size_str:
+            # Fallback if no sizes field
+            if any(x in code.upper() for x in ["S","M","L","XL"]):
+                return ["S", "M", "L", "XL"]
+            return ["36","37","38","39","40","41","42","43","44"]
+            
+        size_str = str(size_str).strip()
+        # Handle range like "40-45"
+        if "-" in size_str and not any(c.isalpha() for c in size_str):
+            try:
+                parts = size_str.split("-")
+                if len(parts) == 2:
+                    start = int(parts[0].strip())
+                    end = int(parts[1].strip())
+                    return [str(i) for i in range(start, end + 1)]
+            except: pass
+            
+        # Handle comma or space separated
+        delimiters = [",", " "]
+        for d in delimiters:
+            if d in size_str:
+                return [s.strip() for s in size_str.split(d) if s.strip()]
+                
+        return [size_str]
+
     def save_current_profile(self):
         if not self.current_editing: return
+        from backend.sku_cache import get_sku_by_code
         presets, selected_skus = [], []
         team_label, sku_label = "", ""
         for idx, row in enumerate(self.sku_rows):
             if row["data"]:
                 data = row["data"].copy(); data["team"] = row["team_cmb"].currentText()
-                selected_skus.append(data)
                 code = data.get("code", "UNKNOWN")
+                
+                # AUTO-REPAIR: If data is missing sizes or otorisasi, try fetching from cache
+                if not data.get("sizes") or not data.get("otorisasi"):
+                    full_data = get_sku_by_code(code)
+                    if full_data:
+                        print(f"Auto-repairing SKU metadata for {code}")
+                        for k, v in full_data.items():
+                            if k not in data or not data[k]:
+                                data[k] = v
+                
+                selected_skus.append(data)
+                otorisasi = data.get("otorisasi", "0")
+                
                 if not team_label: team_label = data["team"]
                 if not sku_label: sku_label = code
-                sizes = ["S", "M", "L", "XL"] if any(x in code.upper() for x in ["S","M","L","XL"]) else ["36","37","38","39","40","41","42","43","44"]
-                for s in sizes: presets.append({"sku": code, "size": s, "color_idx": (idx%4)+1, "team": data["team"]})
+                
+                # Parse sizes from SKU data
+                sizes = self._parse_sizes(data.get("sizes", ""), code)
+                
+                for s in sizes: 
+                    presets.append({
+                        "sku": code, 
+                        "size": s, 
+                        "color_idx": (idx%4)+1, 
+                        "team": data["team"],
+                        "otorisasi": otorisasi # Include otorisasi in preset
+                    })
         
         self.current_editing.update({
             "name": self.name_input.text(),
@@ -351,3 +411,37 @@ class ProfilesPage(QWidget):
 
     def refresh_data(self):
         self.load_profiles()
+
+    def fetch_sku_data(self):
+        """Fetch product SKU data from database asynchronously."""
+        self.btn_sync.setEnabled(False)
+        self.btn_sync.setText("Syncing...")
+        add_log("Starting SKU data fetch from Profiles page...")
+        
+        self.sku_worker = ProductSKUWorker()
+        self.sku_worker.finished.connect(self._on_sku_fetch_success)
+        self.sku_worker.error.connect(self._on_sku_fetch_error)
+        self.sku_worker.start()
+
+    def _on_sku_fetch_success(self, data):
+        """Handle successful SKU fetch."""
+        if data:
+            set_sku_data(data)
+            add_log(f"SUCCESS: Fetched {len(data)} products.")
+            from PySide6.QtWidgets import QMessageBox
+            QMessageBox.information(self, "Sync Complete", f"Successfully fetched {len(data)} SKU records.")
+        else:
+            add_log("WARNING: Query returned 0 results.")
+        self._reset_sync_button()
+
+    def _on_sku_fetch_error(self, error_msg):
+        """Handle SKU fetch error."""
+        add_log(f"ERROR: {error_msg}")
+        from PySide6.QtWidgets import QMessageBox
+        QMessageBox.warning(self, "Sync Failed", f"Error: {error_msg}")
+        self._reset_sync_button()
+
+    def _reset_sync_button(self):
+        """Reset sync button to default state."""
+        self.btn_sync.setEnabled(True)
+        self.btn_sync.setText("🔄 Sync SKU")

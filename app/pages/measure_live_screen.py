@@ -20,6 +20,7 @@ from app.utils.theme_manager import ThemeManager
 from app.utils.camera_utils import open_video_capture
 from app.utils.capture_thread import VideoCaptureThread
 from app.utils.ui_scaling import UIScaling
+from backend.size_categorization import categorize_measurement, get_category_color
 
 # Global list to hold stuck threads so they aren't garbage collected abruptly
 _zombie_threads = []
@@ -111,12 +112,18 @@ class LiveCameraScreen(QWidget):
         self.bs_count = 0
         self.current_sku = "---"
         self.current_size = "---"
+        self.current_otorisasi = 0.0
         self.last_result = None
         
         # Profile State
         self.active_profile_id = None
         self.active_profile_data = {}
-        self.presets = DEFAULT_PRESETS # Added from instruction
+        self.presets = DEFAULT_PRESETS
+        
+        # UI Layout Containers (initialized to None)
+        self.left_presets_layout = None
+        self.right_presets_layout = None
+        self.classic_presets_layout = None
         
         # Load Data
         self.load_settings()
@@ -347,6 +354,21 @@ class LiveCameraScreen(QWidget):
         else:
             self.presets = DEFAULT_PRESETS
 
+    def refresh_data(self):
+        """Refresh settings and profile data from JSON files."""
+        print("Refreshing LiveCameraScreen data...")
+        old_layout_mode = getattr(self, 'layout_mode', None)
+        self.load_settings()
+        self.load_active_profile()
+        
+        # If layout mode changed, we need a full UI rebuild
+        if old_layout_mode is not None and old_layout_mode != self.layout_mode:
+            print(f"Layout mode changed from {old_layout_mode} to {self.layout_mode}. Rebuilding...")
+            self._rebuild_ui()
+        else:
+            self.render_presets()
+            self.update_info_bar()
+
     def update_info_bar(self):
         if self.active_profile_data:
             name = self.active_profile_data.get("name", "")
@@ -370,6 +392,9 @@ class LiveCameraScreen(QWidget):
             # Camera crop settings
             self.camera_crop = self.settings.get("camera_crop", {})
             self.lens_distortion = self.settings.get("lens_distortion", {})
+            self.detection_model = self.settings.get("detection_model", "standard")
+            self.mounting_height = self.settings.get("mounting_height", 1000.0)
+            self.sandal_thickness = self.settings.get("sandal_thickness", 15.0)
         else:
             self.mm_per_px = 0.215984148
             self.camera_index = 0
@@ -379,6 +404,9 @@ class LiveCameraScreen(QWidget):
             self.active_ip_preset_id = None
             self.camera_crop = {}
             self.lens_distortion = {}
+            self.detection_model = "standard"
+            self.mounting_height = 1000.0
+            self.sandal_thickness = 15.0
 
     def setup_minimal_layout(self):
         """Minimal Layout: Full-screen preview with overlay controls."""
@@ -476,12 +504,55 @@ class LiveCameraScreen(QWidget):
         
         top_bar.addWidget(btn_back)
         top_bar.addStretch()
+        
+        # Model Selection Dropdown (overlay style)
+        self.model_combo = QComboBox()
+        self.model_combo.addItem("Traditional", "standard")
+        self.model_combo.addItem("SAM (AI)", "sam")
+        # Find index for current model
+        idx = self.model_combo.findData(self.detection_model)
+        if idx != -1: self.model_combo.setCurrentIndex(idx)
+        
+        self.model_combo.setMinimumWidth(UIScaling.scale(150))
+        self.model_combo.setFixedHeight(btn_size)
+        self.model_combo.setStyleSheet(f"""
+            QComboBox {{
+                background-color: rgba(30, 30, 30, 0.6);
+                color: white;
+                border-radius: {UIScaling.scale(8)}px;
+                padding: 10px;
+                font-size: {UIScaling.scale_font(16)}px;
+                border: 2px solid rgba(255, 255, 255, 0.4);
+                font-weight: bold;
+            }}
+            QComboBox::drop-down {{ border: 0; }}
+            QComboBox QAbstractItemView {{
+                background-color: #1C1C1E;
+                color: white;
+                selection-background-color: #007AFF;
+            }}
+        """)
+        top_bar.addWidget(self.model_combo)
+        top_bar.addSpacing(10)
+        
         top_bar.addWidget(btn_settings)
         
         overlay_layout.addLayout(top_bar)
         overlay_layout.addStretch() # Push everything up
         
         stack.addWidget(overlay_widget)
+        
+        # --- Layer 3: Status Overlay (Loading/Error) ---
+        self.status_overlay = QFrame()
+        self.status_overlay.setStyleSheet("background-color: rgba(0, 0, 0, 0.5);")
+        status_layout = QVBoxLayout(self.status_overlay)
+        self.status_label = QLabel("")
+        self.status_label.setAlignment(Qt.AlignCenter)
+        self.status_label.setStyleSheet(f"color: white; font-weight: bold; font-size: {UIScaling.scale_font(24)}px;")
+        status_layout.addWidget(self.status_label)
+        self.status_overlay.hide()
+        stack.addWidget(self.status_overlay)
+        
         stack.setCurrentIndex(1) # CRITICAL: Put the overlay on top interaction-wise
 
     def setup_classic_layout(self):
@@ -584,6 +655,32 @@ class LiveCameraScreen(QWidget):
         
         top_ctrl_layout.addWidget(self.back_button)
         top_ctrl_layout.addWidget(self.info_bar, 1) 
+        
+        # Model selection for standard layouts
+        self.model_combo = QComboBox()
+        self.model_combo.addItem("Standard", "standard")
+        self.model_combo.addItem("SAM", "sam")
+        self.model_combo.setFixedWidth(UIScaling.scale(90))
+        self.model_combo.setFixedHeight(ctrl_btn_size)
+        
+        # Consistent styling for the combo box
+        self.model_combo.setStyleSheet(f"""
+            QComboBox {{
+                background-color: #F5F5F5;
+                color: #333333;
+                border: 1px solid #E0E0E0;
+                border-radius: {info_bar_radius}px;
+                padding: 1px 5px;
+                font-size: {UIScaling.scale_font(13)}px;
+                font-weight: bold;
+            }}
+            QComboBox::drop-down {{ border: 0; }}
+        """)
+        
+        idx = self.model_combo.findData(self.detection_model)
+        if idx != -1: self.model_combo.setCurrentIndex(idx)
+        top_ctrl_layout.addWidget(self.model_combo)
+
         top_ctrl_layout.addWidget(btn_edit)
         top_ctrl_layout.addWidget(self.btn_switch)
         top_ctrl_layout.addWidget(self.settings_btn)
@@ -645,6 +742,8 @@ class LiveCameraScreen(QWidget):
         self.val_detail_len = QLabel("-")
         self.lbl_detail_wid = QLabel("Width :")
         self.val_detail_wid = QLabel("-")
+        self.lbl_detail_oto = QLabel("Auto-Oto :")
+        self.val_detail_oto = QLabel("-")
         self.lbl_detail_res = QLabel("Result :")
         self.val_detail_res = QLabel("-")
         
@@ -652,20 +751,30 @@ class LiveCameraScreen(QWidget):
         label_style = f"font-weight: bold; color: #999999; font-size: {detail_font_size}px;"
         val_style = f"font-weight: bold; color: #333333; font-size: {detail_font_size}px;"
         
-        for w in [self.lbl_detail_sku, self.lbl_detail_len, self.lbl_detail_wid, self.lbl_detail_res]: w.setStyleSheet(label_style)
-        for w in [self.val_detail_sku, self.val_detail_len, self.val_detail_wid, self.val_detail_res]: 
+        for w in [self.lbl_detail_sku, self.lbl_detail_len, self.lbl_detail_wid, self.lbl_detail_oto, self.lbl_detail_res]: w.setStyleSheet(label_style)
+        for w in [self.val_detail_sku, self.val_detail_len, self.val_detail_wid, self.val_detail_oto, self.val_detail_res]: 
             w.setAlignment(Qt.AlignRight)
             w.setStyleSheet(val_style)
             
         details_layout.addWidget(self.lbl_detail_sku, 0, 0); details_layout.addWidget(self.val_detail_sku, 0, 1)
         details_layout.addWidget(self.lbl_detail_len, 1, 0); details_layout.addWidget(self.val_detail_len, 1, 1)
         details_layout.addWidget(self.lbl_detail_wid, 2, 0); details_layout.addWidget(self.val_detail_wid, 2, 1)
-        details_layout.addWidget(self.lbl_detail_res, 3, 0); details_layout.addWidget(self.val_detail_res, 3, 1)
+        details_layout.addWidget(self.lbl_detail_oto, 3, 0); details_layout.addWidget(self.val_detail_oto, 3, 1)
+        details_layout.addWidget(self.lbl_detail_res, 4, 0); details_layout.addWidget(self.val_detail_res, 4, 1)
         
         layout.addLayout(details_layout)
         
-        return panel 
-
+        # Add Status Label to preview background (overlay style)
+        self.status_overlay = QFrame(self.preview_label)
+        self.status_overlay.setStyleSheet("background-color: rgba(0, 0, 0, 0.4); border-radius: 8px;")
+        self.status_overlay.hide()
+        stat_l = QVBoxLayout(self.status_overlay)
+        self.status_label = QLabel("")
+        self.status_label.setAlignment(Qt.AlignCenter)
+        self.status_label.setStyleSheet("color: white; font-weight: bold; font-size: 18px;")
+        stat_l.addWidget(self.status_label)
+        
+        return panel
             
     def save_settings(self):
         # We should load existing settings first to not overwrite other fields
@@ -675,8 +784,9 @@ class LiveCameraScreen(QWidget):
             "mm_per_px": self.mm_per_px,
             "camera_index": self.camera_index,
             "active_profile_id": self.active_profile_id,
-            "ip_camera_username": self.ip_camera_username,
-            "ip_camera_password": self.ip_camera_password
+            "ip_camera_username": getattr(self, "ip_camera_username", ""),
+            "ip_camera_password": getattr(self, "ip_camera_password", ""),
+            "detection_model": self.model_combo.currentData() if hasattr(self, 'model_combo') else self.detection_model
         })
         JsonUtility.save_to_json(SETTINGS_FILE, settings)
 
@@ -711,8 +821,14 @@ class LiveCameraScreen(QWidget):
             layout_B.setContentsMargins(0, 0, 0, 0)
             
             # Filter Presets
-            presets_A = [p for p in self.presets if p.get("team", "A") == "A"]
-            presets_B = [p for p in self.presets if p.get("team", "A") == "B"]
+            def is_team_match(p, target):
+                team = str(p.get("team", "A")).upper().strip()
+                target = str(target).upper().strip()
+                # Match "Team A" with "A", or just "A" with "A"
+                return team == target or team.endswith(" " + target)
+
+            presets_A = [p for p in self.presets if is_team_match(p, "A")]
+            presets_B = [p for p in self.presets if is_team_match(p, "B")]
             
             # Render to respective layouts
             self._render_presets_auto_fit(presets_A, layout_A)
@@ -747,11 +863,16 @@ class LiveCameraScreen(QWidget):
             presets_left = []
             presets_right = []
             
+            def is_team_match(p, target):
+                team = str(p.get("team", "A")).upper().strip()
+                target = str(target).upper().strip()
+                # Match "Team A" with "A", or just "A" with "A"
+                return team == target or team.endswith(" " + target)
+
             for p in self.presets:
-                p_team = p.get("team", "A") # Default to A
-                if p_team == left_team:
+                if is_team_match(p, left_team):
                     presets_left.append(p)
-                elif p_team == right_team:
+                elif is_team_match(p, right_team):
                     presets_right.append(p)
                     
             # 4. Clear existing items
@@ -763,25 +884,25 @@ class LiveCameraScreen(QWidget):
             self._render_presets_auto_fit(presets_right, self.right_presets_layout)
         
     def _clear_layout(self, layout):
-        if not layout:
+        if layout is None:
             return
         while layout.count():
             item = layout.takeAt(0)
             widget = item.widget()
             if widget:
-                widget.setParent(None)
+                widget.deleteLater()
             else:
-                layout = item.layout()
-                if layout:
-                    self._clear_layout(layout)
+                sub_layout = item.layout()
+                if sub_layout:
+                    self._clear_layout(sub_layout)
 
     def _render_presets_auto_fit(self, presets, parent_layout):
         """
         Renders presets into parent_layout using a dynamic Auto-Fit approach.
-        - No ScrollArea.
-        - Groups are distributed evenly vertically (stretch=1).
-        - Buttons expand to fill space.
         """
+        if parent_layout is None:
+            return
+        
         if not presets:
             lbl_empty = QLabel("No Presets")
             lbl_empty.setAlignment(Qt.AlignCenter)
@@ -862,88 +983,167 @@ class LiveCameraScreen(QWidget):
         p = self.presets[idx]
         self.current_sku = p.get("sku", "---")
         self.current_size = p.get("size", "---")
+        self.current_otorisasi = float(p.get("otorisasi", 0) or 0)
         
         # Update UI
         self.val_detail_sku.setText(f"{self.current_sku}/{self.current_size}")
-        print(f"Selected Preset {idx}: {self.current_sku} / {self.current_size}")
+        if hasattr(self, 'val_detail_oto'):
+            self.val_detail_oto.setText(f"{self.current_otorisasi:+.1f}")
+        print(f"Selected Preset {idx}: {self.current_sku} / {self.current_size} (+{self.current_otorisasi})")
 
     def capture_frame(self):
         if self.live_frame is None:
             return
             
+        # Show Loading Indicator
+        self.show_status("Processing...", is_error=False)
+        QApplication.processEvents() # Force UI update
+        
         self.is_paused = True # Freeze preview
         
-        # Process
-        results, processed = measure_live_sandals(
-            self.live_frame.copy(),
-            mm_per_px=self.mm_per_px,
-            draw_output=True,
-            save_out=None # Optional: save to file
-        )
-        
-        self.captured_frame = processed
-        
-        # Display Results
-        if results:
-            r = results[0]
-            px_length = r.get("px_length", 0)
-            px_width = r.get("px_width", 0)
-            length_mm = r.get("real_length_mm", 0)
-            width_mm = r.get("real_width_mm", 0) # Assumed exist
-            # If not in dict, calc from cm
-            if not width_mm: width_mm = r.get("real_width_cm", 0) * 10
-            
-            # Debug output for pixel measurements
-            print(f"[CAPTURE] Pixel Length: {px_length:.2f} px | Pixel Width: {px_width:.2f} px")
-            print(f"[CAPTURE] mm/px: {self.mm_per_px:.6f} | Real Length: {length_mm:.2f} mm | Real Width: {width_mm:.2f} mm")
-            
-            pf = r.get("pass_fail", "FAIL")
-            
-            self.val_detail_len.setText(f"{length_mm:.2f} mm")
-            self.val_detail_wid.setText(f"{width_mm:.2f} mm")
-            self.val_detail_res.setText(pf)
-
-            
-            # BIG Style: White BG, Dark Text, Colored Background
-            # Content: SIZE on top (Big), STATUS on bottom (Smaller)
-            display_size = self.current_size if self.current_size != "---" else "-"
-            
-            res_font_size = UIScaling.scale_font(48)
-            res_padding = UIScaling.scale(20)
-            res_radius = UIScaling.scale(15)
-            
-            if pf == "PASS":
-                self.good_count += 1
-                self.lbl_big_result.setText(f"{display_size}\nGOOD")
-                self.lbl_big_result.setStyleSheet(f"color: white; background-color: #4CAF50; padding: {res_padding}px; border-radius: {res_radius}px; border: none; font-size: {res_font_size}px; font-weight: 900;")
-                # Write random 1-4 to PLC register 13 for GOOD
-                self._write_plc_result(is_good=True)
-            else:
-                self.bs_count += 1
-                self.lbl_big_result.setText(f"{display_size}\nREJECT")
-                self.lbl_big_result.setStyleSheet(f"color: white; background-color: #D32F2F; padding: {res_padding}px; border-radius: {res_radius}px; border: none; font-size: {res_font_size}px; font-weight: 900;")
-                # Write random 5-8 to PLC register 13 for BS
-                self._write_plc_result(is_good=False)
-                
-            self.update_counters()
-            
+        # Determine model
+        use_sam = False
+        if hasattr(self, 'model_combo'):
+            use_sam = (self.model_combo.currentData() == "sam")
         else:
-            self.val_detail_res.setText("-")
-            self.val_detail_len.setText("-")
-            self.val_detail_wid.setText("-")
-            self.lbl_big_result.setText("-\nIDLE")
-            # Idle: Grey text on white
-            res_font_size = UIScaling.scale_font(48)
-            res_padding = UIScaling.scale(20)
-            res_radius = UIScaling.scale(15)
-            self.lbl_big_result.setStyleSheet(f"color: #999999; background-color: white; font-size: {res_font_size}px; font-weight: 900; padding: {res_padding}px; border-radius: {res_radius}px; border: 4px solid #E0E0E0;")
-
+            use_sam = (self.detection_model == "sam")
             
-        # Update Preview with processed frame
-        self.show_image(self.captured_frame)
+        try:
+            # Apply Height Correction (Parallax)
+            # Formula: mm_px_corrected = mm_px * (H - T) / H
+            h_cam = getattr(self, 'mounting_height', 1000.0)
+            t_obj = getattr(self, 'sandal_thickness', 15.0)
+            mm_px_corrected = self.mm_per_px * (h_cam - t_obj) / h_cam if h_cam > 0 else self.mm_per_px
+            
+            # Process
+            results, processed = measure_live_sandals(
+                self.live_frame.copy(),
+                mm_per_px=mm_px_corrected,
+                draw_output=True,
+                save_out=None, # Optional: save to file
+                use_sam=use_sam
+            )
+            
+            self.captured_frame = processed
+            
+            # Display Results
+            if results:
+                self.hide_status()
+                r = results[0]
+                px_length = r.get("px_length", 0)
+                px_width = r.get("px_width", 0)
+                length_mm = r.get("real_length_mm", 0)
+                width_mm = r.get("real_width_mm", 0) # Assumed exist
+                # If not in dict, calc from cm
+                if not width_mm: width_mm = r.get("real_width_cm", 0) * 10
+                
+                # Debug output for pixel measurements
+                print(f"[CAPTURE] Pixel Length: {px_length:.2f} px | Pixel Width: {px_width:.2f} px")
+                print(f"[CAPTURE] mm/px (Base): {self.mm_per_px:.6f} | mm/px (Corrected): {mm_px_corrected:.6f}")
+                print(f"[CAPTURE] Real Length: {length_mm:.2f} mm | Real Width: {width_mm:.2f} mm")
+                
+                # --- Size-Based Categorization ---
+                # Get current size and otorisasi from preset
+                try:
+                    selected_size = float(self.current_size) if self.current_size not in ["---", "-", ""] else 0
+                except:
+                    selected_size = 0
+                otorisasi = getattr(self, 'current_otorisasi', 0.0) or 0.0
+                
+                if selected_size > 0:
+                    cat_result = categorize_measurement(length_mm, selected_size, otorisasi)
+                    category = cat_result["category"]
+                    detail = cat_result["detail"]
+                    deviation_mm = cat_result["deviation_mm"]
+                    print(f"[CAPTURE] Size: {selected_size} | Otorisasi: {otorisasi} | Target: {cat_result['target_length_mm']} mm")
+                    print(f"[CAPTURE] Deviation: {deviation_mm:.2f} mm ({cat_result['deviation_size']:.4f} size units) => {detail}")
+                else:
+                    # Fallback to old PASS/FAIL if no size selected
+                    pf = r.get("pass_fail", "FAIL")
+                    category = "GOOD" if pf == "PASS" else "REJECT"
+                    detail = category
+                    print(f"[CAPTURE] No size selected, using legacy PASS/FAIL: {pf}")
+                
+                self.val_detail_len.setText(f"{length_mm:.2f} mm")
+                self.val_detail_wid.setText(f"{width_mm:.2f} mm")
+                self.val_detail_res.setText(category)
+
+                
+                # BIG Style: White BG, Dark Text, Colored Background
+                # Content: SIZE on top (Big), STATUS on bottom (Smaller)
+                display_size = self.current_size if self.current_size != "---" else "-"
+                
+                res_font_size = UIScaling.scale_font(48)
+                res_padding = UIScaling.scale(20)
+                res_radius = UIScaling.scale(15)
+                bg_color = get_category_color(category)
+                
+                if category == "GOOD":
+                    self.good_count += 1
+                    self.lbl_big_result.setText(f"{display_size}\nGOOD")
+                    self.lbl_big_result.setStyleSheet(f"color: white; background-color: {bg_color}; padding: {res_padding}px; border-radius: {res_radius}px; border: none; font-size: {res_font_size}px; font-weight: 900;")
+                    self._write_plc_result(is_good=True)
+                elif category == "OVEN":
+                    # OVEN counts as neither good nor reject for now
+                    self.lbl_big_result.setText(f"{display_size}\nOVEN")
+                    self.lbl_big_result.setStyleSheet(f"color: white; background-color: {bg_color}; padding: {res_padding}px; border-radius: {res_radius}px; border: none; font-size: {res_font_size}px; font-weight: 900;")
+                    # TODO: Determine PLC behavior for OVEN
+                else:  # REJECT
+                    self.bs_count += 1
+                    self.lbl_big_result.setText(f"{display_size}\nREJECT")
+                    self.lbl_big_result.setStyleSheet(f"color: white; background-color: {bg_color}; padding: {res_padding}px; border-radius: {res_radius}px; border: none; font-size: {res_font_size}px; font-weight: 900;")
+                    self._write_plc_result(is_good=False)
+                    
+                self.update_counters()
+                
+            else:
+                self.val_detail_res.setText("-")
+                self.val_detail_len.setText("-")
+                self.val_detail_wid.setText("-")
+                self.lbl_big_result.setText("-\nIDLE")
+                # Idle: Grey text on white
+                res_font_size = UIScaling.scale_font(48)
+                res_padding = UIScaling.scale(20)
+                res_radius = UIScaling.scale(15)
+                self.lbl_big_result.setStyleSheet(f"color: #999999; background-color: white; font-size: {res_font_size}px; font-weight: 900; padding: {res_padding}px; border-radius: {res_radius}px; border: 4px solid #E0E0E0;")
+
+            # Update Preview with processed frame
+            self.show_image(self.captured_frame)
+            
+        except Exception as e:
+            print(f"[Capture] Error: {e}")
+            self.show_status(f"Error: {str(e)}", is_error=True)
+            self.val_detail_res.setText("ERROR")
+            self.lbl_big_result.setText("-\nERROR")
+            self.lbl_big_result.setStyleSheet("color: white; background-color: #D32F2F; font-size: 48px; font-weight: 900; border-radius: 15px;")
         
         # Auto-resume after showing result (allows sensor to trigger again)
         QTimer.singleShot(1500, self.resume_live)  # Resume after 1.5 seconds
+
+    def show_status(self, text, is_error=False):
+        if not hasattr(self, 'status_label'): return
+        self.status_label.setText(text)
+        color = "rgba(211, 47, 47, 0.8)" if is_error else "rgba(0, 0, 0, 0.5)"
+        self.status_overlay.setStyleSheet(f"background-color: {color}; border-radius: 8px;")
+        
+        # For non-minimal layouts, position it over preview
+        if self.layout_mode != "minimal":
+             self.status_overlay.setGeometry(self.preview_label.rect())
+             
+        self.status_overlay.show()
+        self.status_overlay.raise_()
+
+    def hide_status(self):
+        if hasattr(self, 'status_overlay'):
+            self.status_overlay.hide()
+
+    def resume_live(self):
+        self.hide_status()
+        self.is_paused = False
+
+    def create_settings_menu(self):
+        """Placeholder for settings menu (now managed via General Settings page)."""
+        pass
 
     def update_counters(self):
         self.lbl_good.setText(f"{self.good_count}\nGood")
@@ -972,42 +1172,28 @@ class LiveCameraScreen(QWidget):
         pix = QPixmap.fromImage(qimg)
         
         # Scale to label using KeepAspectRatio
-        # The label might be taller than the image aspect ratio, causing padding.
-        # We rely on AlignmentCenter to keep it in middle.
-        
         lbl_w = self.preview_label.width()
         lbl_h = self.preview_label.height()
         
-        # Scale to FIT the label (Letterbox if needed), ensuring full image visibility
-        # Matches 'BoxFit.contain' behavior
-        pix = pix.scaled(lbl_w, lbl_h, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-        
-        # No cropping logic needed
-            
-        self.preview_label.setPixmap(pix)
+        if lbl_w > 0 and lbl_h > 0:
+            pix = pix.scaled(lbl_w, lbl_h, Qt.KeepAspectRatio, Qt.SmoothTransformation)
             
         self.preview_label.setPixmap(pix)
     
     def cv2_to_pixmap(self, img):
-        # ... existing utility if needed ...
-        pass
+        if img is None: return QPixmap()
+        rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        h, w, ch = rgb.shape
+        bytes_per_line = ch * w
+        qimg = QImage(rgb.data, w, h, bytes_per_line, QImage.Format_RGB888)
+        return QPixmap.fromImage(qimg)
 
     # ------------------------------------------------------------------
     # Lifecycle
     # ------------------------------------------------------------------
     def showEvent(self, event):
         # Reload Data when showing screen (e.g. returning from Settings Page)
-        old_layout_mode = getattr(self, 'layout_mode', None)
-        self.load_settings()
-        self.load_active_profile()
-        
-        # Check if layout mode changed - if so, rebuild the entire UI
-        if old_layout_mode is not None and old_layout_mode != self.layout_mode:
-            self._rebuild_ui()
-        
-        self.render_presets()
-        self.update_info_bar()
-        
+        self.refresh_data()
         self.start_camera()
         super().showEvent(event)
 
@@ -1026,7 +1212,6 @@ class LiveCameraScreen(QWidget):
         
         # Rebuild UI with new layout mode
         self.init_ui()
-        
         
     def hideEvent(self, event):
         self.stop_camera()
@@ -1081,28 +1266,18 @@ class LiveCameraScreen(QWidget):
             
             # If thread is still running (timeout occurred), do NOT destroy it.
             if self.cap_thread.isRunning():
-                print(f"[LiveCamera] Thread {self.cap_thread} is stuck. Detaching and abandoning (zombie)...")
-                # Disconnect signals to prevent ghost data
+                print(f"[LiveCamera] Thread {self.cap_thread} is stuck. Detaching and abandoning...")
                 try:
                     self.cap_thread.frame_ready.disconnect(self.on_frame_received)
                     self.cap_thread.connection_failed.disconnect(self.on_camera_connection_failed)
                 except Exception:
-                    pass # Helper might have already failed
+                    pass
                     
-                # Detach from parent (so it's not destroyed when self is destroyed)
                 self.cap_thread.setParent(None)
-                # Keep reference globally
-                _zombie_threads.append(self.cap_thread)
             
-            # ALWAYS nullify local reference so start_camera can create a fresh one
-            self.cap_thread = None
-        else:
             self.cap_thread = None
         
-        # Stop sensor
         self.stop_sensor()
-        
-        # Stop PLC trigger
         self.stop_plc_trigger()
 
     def go_back(self):
@@ -1110,14 +1285,6 @@ class LiveCameraScreen(QWidget):
         if self.parent_widget:
             self.parent_widget.go_back()
             
-    # ------------------------------------------------------------------
-    # Settings Menu (REMOVED - Managed via Settings Page)
-    # ------------------------------------------------------------------
-    def create_settings_menu(self):
-        # Kept as placeholder or removed if unused. 
-        # Since logic was redirected, we can leave empty or minimal.
-        pass
-
     def toggle_layout_mode(self):
         new_mode = "classic" if self.layout_mode == "split" else "split"
         self.layout_mode = new_mode
@@ -1125,17 +1292,9 @@ class LiveCameraScreen(QWidget):
         self.reload_ui()
 
     def reload_ui(self):
-        # Clear existing layout
         if self.layout():
-            # Reparenting the layout to a temporary widget deletes it
             QWidget().setLayout(self.layout())
-        
-        # Re-initialize UI
         self.init_ui()
-        
-    # show_settings_menu REMOVED - using implementation at top of file
-    
-    # on_settings_saved REMOVED - page handles saving to file
         
     def on_mm_changed(self, text):
         try:
@@ -1144,9 +1303,6 @@ class LiveCameraScreen(QWidget):
             self.save_settings()
         except ValueError:
             pass
-
-    def resume_live(self):
-        self.is_paused = False
 
     # ------------------------------------------------------------------
     # Sensor Trigger

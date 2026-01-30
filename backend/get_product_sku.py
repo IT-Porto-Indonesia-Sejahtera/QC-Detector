@@ -21,15 +21,13 @@ def get_product_sku(
         limit: Optional limit on number of results
     
     Returns:
-        List of product dictionaries with 'id', 'default_code', 'size', and 'gdrive_id' keys.
+        List of product dictionaries with keys: 'Nama Produk', 'Perbesaran Ukuran (Otorisasi)', 
+        'List Size Available', 'Kategori', 'GDrive ID'.
         Returns empty list if database is not connected or query fails.
     
     Example:
         products = get_product_sku()
-        # [{'id': 1, 'default_code': 'SKU001', 'size': '38,39,40', 'gdrive_id': 'abc123'}, ...]
-        
-        products = get_product_sku(limit=10)
-        # First 10 products
+        # [{'Nama Produk': 'Sandal X', 'GDrive ID': '1abc...', ...}, ...]
     """
     if not is_connected():
         return []
@@ -38,29 +36,51 @@ def get_product_sku(
     limit_clause = f"LIMIT {int(limit)}" if limit else ""
     
     query = f'''
-    WITH product_template_table AS (
-        SELECT id, default_code, size
-        FROM product_template
-        WHERE size IS NOT NULL
-          AND product_type != 'tali'
-    ),
-    product_image_table AS (
-        SELECT DISTINCT ON (res_id)
-            res_id AS product_tmpl_id,
-            gdrive_id
-        FROM ir_attachment
-        WHERE res_model = 'product.template'
-        ORDER BY res_id, id DESC
-    )
-    SELECT
-        ptt.id,
-        ptt.default_code,
-        ptt.size,
-        pit.gdrive_id
-    FROM product_template_table ptt
-    LEFT JOIN product_image_table pit
-        ON pit.product_tmpl_id = ptt.id
-    ORDER BY ptt.default_code
+    SELECT * FROM (
+        SELECT DISTINCT ON (pt.id)
+            pt.name AS "Nama Produk",
+            ptd.normal_size AS "Perbesaran Ukuran (Otorisasi)",
+--             (
+--                 SELECT string_agg(pav.name, ', ' ORDER BY pav.name)
+--                 FROM product_attribute_line pal
+--                 JOIN product_attribute_line_product_attribute_value_rel rel ON pal.id = rel.product_attribute_line_id
+--                 JOIN product_attribute_value pav ON rel.product_attribute_value_id = pav.id
+--                 JOIN product_attribute pa ON pal.attribute_id = pa.id
+--                 WHERE pal.product_tmpl_id = pt.id
+--                   AND (pa.name ILIKE 'Size' OR pa.name ILIKE 'Ukuran' OR pa.name ILIKE 'Nomor')
+--             ) 
+            pt.size AS "List Size Available",
+            pc.name AS "Kategori",
+            ia.gdrive_id AS "GDrive ID"
+
+        FROM 
+            product_template pt
+        LEFT JOIN 
+            product_template_dev ptd ON ptd.product_tmpl_id = pt.id
+        JOIN 
+            ir_attachment ia ON ia.res_model = 'product.template' AND ia.res_id = pt.id
+        LEFT JOIN 
+            product_category pc ON pt.categ_id = pc.id
+        LEFT JOIN 
+            res_users ru_attach ON ia.create_uid = ru_attach.id
+        LEFT JOIN 
+            res_partner rp_attach_create ON ru_attach.partner_id = rp_attach_create.id
+        LEFT JOIN 
+            res_users ru_prod ON pt.create_uid = ru_prod.id
+        LEFT JOIN 
+            res_partner rp_prod_create ON ru_prod.partner_id = rp_prod_create.id
+
+        WHERE 
+            pt.active = true 
+            AND ia.gdrive_id IS NOT NULL 
+            AND ia.gdrive_id != ''
+            AND pc.name IN ('Sandal EVA')
+        ORDER BY 
+            pt.id, ptd.id DESC, ia.id ASC
+    ) AS data_produk
+    WHERE 
+        "List Size Available" IS NOT NULL
+    AND "Perbesaran Ukuran (Otorisasi)" IS NOT NULL
     {limit_clause}
     '''
     

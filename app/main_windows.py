@@ -48,6 +48,7 @@ class MainWindow(QWidget):
 
     def go_to_live(self):
         self.from_live = False
+        self.live_page.refresh_data()
         self.stack.setCurrentWidget(self.live_page)
 
     def go_to_dataset(self):
@@ -67,6 +68,7 @@ class MainWindow(QWidget):
         # Admin back button: return to live if we came from there, otherwise return to menu
         if self.from_live:
             self.from_live = False
+            self.live_page.refresh_data()
             self.stack.setCurrentWidget(self.live_page)
         else:
             self.stack.setCurrentWidget(self.menu_page)

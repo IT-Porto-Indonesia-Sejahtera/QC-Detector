@@ -12,8 +12,7 @@ from app.widgets.base_overlay import BaseOverlay
 from app.utils.theme_manager import ThemeManager
 from app.utils.ui_scaling import UIScaling
 from app.utils.image_loader import NetworkImageLoader
-
-SKUS_FILE = os.path.join("output", "settings", "result.json")
+from backend.sku_cache import get_sku_data
 
 class SkuSelectorOverlay(BaseOverlay):
     sku_selected = Signal(dict)
@@ -108,22 +107,26 @@ class SkuSelectorOverlay(BaseOverlay):
         self.render_grid()
 
     def load_skus(self):
-        loaded = JsonUtility.load_from_json(SKUS_FILE)
+        # Load from the persistent SKU cache (fetched from database)
+        loaded = get_sku_data()
         self.all_skus = []
         if loaded:
-            # Deduplicate by 'default_code'
+            # Deduplicate by 'Nama Produk' (product name from new query)
             seen = set()
             for item in loaded:
-                code = item.get("default_code")
+                # Use new field names from database query
+                code = item.get("Nama Produk") or item.get("default_code")
                 if code and code not in seen:
                     seen.add(code)
-                    # Create normalized item
+                    # Create normalized item with both old and new field mappings
                     norm = {
-                        "code": code, # Alias for compatibility
+                        "code": code,
                         "default_code": code,
-                        "gdrive_id": item.get("gdrive_id"),
-                        # We don't care about size here, as we are selecting the SKU model
-                        "coeff": code # For compatibility if needed
+                        "gdrive_id": item.get("GDrive ID") or item.get("gdrive_id"),
+                        "otorisasi": item.get("Perbesaran Ukuran (Otorisasi)") or 0,
+                        "kategori": item.get("Kategori"),
+                        "sizes": item.get("List Size Available"),
+                        "coeff": code
                     }
                     self.all_skus.append(norm)
         
