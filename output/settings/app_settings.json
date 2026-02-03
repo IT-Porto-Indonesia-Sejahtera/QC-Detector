@@ -1,6 +1,6 @@
 {
     "camera_index": "ip",
-    "mm_per_px": 0.69142318,
+    "mm_per_px": 0.68949779,
     "sensor_delay": 0.2123459,
     "fetch_status": "success",
     "layout_mode": "classic",
@@ -40,7 +40,7 @@
         "bottom": 26
     },
     "lens_distortion": {
-        "k1": -0.35,
+        "k1": 0.0,
         "k2": 0.0,
         "p1": 0.0,
         "p2": 0.0,
@@ -54,5 +54,5 @@
     "last_dataset_path": "C:/QC Detector/QC-Detector/input/temp_assets",
     "detection_model": "standard",
     "mounting_height": 790.0,
-    "sandal_thickness": 30.0
+    "sandal_thickness": 0.0
 }
