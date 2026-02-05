@@ -204,9 +204,13 @@ def segment_image(image, conf=0.25):
     
     # === Run precise contour detection INSIDE ROI ===
     print("[YOLOv8-seg] Running precision contour detection inside ROI...")
-    from model.measurement import strong_mask
+    # from model.measurement import strong_mask
     
-    roi_mask = strong_mask(roi)
+    # roi_mask = strong_mask(roi)
+    from model.measurement import auto_select_mask 
+
+    # Gunakan logika seleksi otomatis yang sama dengan mode Standard
+    roi_mask = auto_select_mask(roi)
     
     # Find contour in ROI space
     # contours, _ = cv2.findContours(roi_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
