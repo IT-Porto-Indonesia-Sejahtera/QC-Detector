@@ -4,3 +4,18 @@
 [2026-01-06 17:30:30] [SUCCESS] Fetched 90 SKUs successfully
 [2026-01-07 08:40:29] [SUCCESS] Fetched 90 SKUs successfully
 [2026-01-14 10:28:51] [WARNING] Fetch returned 0 products - connection may have failed
+[2026-02-05 10:46:03] [INFO] Starting product SKU fetch...
+[2026-02-05 10:46:03] [INFO] DB_HOST from env: odoo.porto.co.id
+[2026-02-05 10:46:03] [INFO] Database not connected. Attempting to initialize...
+[2026-02-05 10:46:03] [INFO] Database connection established.
+[2026-02-05 10:46:03] [SUCCESS] Fetched 1188 products.
+[2026-02-05 10:46:03] [SUCCESS] Successfully saved to /Users/porto-mac/Documents/GitHub/QC-Detector/output/settings/skus.json
+[2026-02-05 10:46:36] [INFO] Test Info Message
+[2026-02-05 10:46:36] [SUCCESS] Test Success Message
+[2026-02-05 10:46:36] [ERROR] Test Error Message
+[2026-02-05 10:47:15] [INFO] Test Info Message
+[2026-02-05 10:47:15] [SUCCESS] Test Success Message
+[2026-02-05 10:47:15] [ERROR] Test Error Message
+[2026-02-05 10:47:50] [INFO] Test Info Message
+[2026-02-05 10:47:50] [SUCCESS] Test Success Message
+[2026-02-05 10:47:50] [ERROR] Test Error Message

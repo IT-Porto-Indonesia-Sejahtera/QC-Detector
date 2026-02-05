@@ -3,50 +3,50 @@
         "id": "2ddd15e6-ce5d-48e0-a68b-f706b1a70c44",
         "name": "Shift 2",
         "sub_label": "Team A",
-        "sku_label": "EVA Porto 1068M",
-        "last_updated": "22/12/2025, 17:00:07",
+        "sku_label": "E1068M",
+        "last_updated": "22/12/2025, 13:52:47",
         "presets": [
             {
-                "sku": "EVA Porto 1068M",
+                "sku": "E1068M",
                 "size": "40",
                 "color_idx": 1,
                 "team": "Team A",
-                "otorisasi": "+1.0"
+                "otorisasi": 0
             },
             {
-                "sku": "EVA Porto 1068M",
+                "sku": "E1068M",
                 "size": "41",
                 "color_idx": 1,
                 "team": "Team A",
-                "otorisasi": "+1.0"
+                "otorisasi": 0
             },
             {
-                "sku": "EVA Porto 1068M",
+                "sku": "E1068M",
                 "size": "42",
                 "color_idx": 1,
                 "team": "Team A",
-                "otorisasi": "+1.0"
+                "otorisasi": 0
             },
             {
-                "sku": "EVA Porto 1068M",
+                "sku": "E1068M",
                 "size": "43",
                 "color_idx": 1,
                 "team": "Team A",
-                "otorisasi": "+1.0"
+                "otorisasi": 0
             },
             {
-                "sku": "EVA Porto 1068M",
+                "sku": "E1068M",
                 "size": "44",
                 "color_idx": 1,
                 "team": "Team A",
-                "otorisasi": "+1.0"
+                "otorisasi": 0
             },
             {
-                "sku": "EVA Porto 1068M",
+                "sku": "E1068M",
                 "size": "45",
                 "color_idx": 1,
                 "team": "Team A",
-                "otorisasi": "+1.0"
+                "otorisasi": 0
             },
             {
                 "sku": "EVA Porto 9006M-Black",
@@ -170,12 +170,12 @@
         ],
         "selected_skus": [
             {
-                "code": "EVA Porto 1068M",
-                "coeff": "EVA Porto 1068M",
-                "default_code": "EVA Porto 1068M",
-                "gdrive_id": "1cTmQZiJhRa3yO_OPYNINJZYS11-QPDTE",
-                "kategori": "Sandal EVA",
-                "otorisasi": "+1.0",
+                "code": "E1068M",
+                "coeff": "E1068M",
+                "default_code": "E1068M",
+                "gdrive_id": "https://lh3.googleusercontent.com/d/1h0lH79VPVHLvWIN-Yr6rRJhx65nV31JB=s600",
+                "kategori": "EVA1",
+                "otorisasi": 0,
                 "sizes": "40-45",
                 "team": "Team A"
             },

@@ -34,10 +34,10 @@
     "plc_result_reg": 13,
     "aruco_marker_size": 50.0,
     "camera_crop": {
-        "left": 36,
-        "right": 36,
-        "top": 26,
-        "bottom": 26
+        "left": 37,
+        "right": 37,
+        "top": 20,
+        "bottom": 20
     },
     "lens_distortion": {
         "k1": -0.35,
@@ -54,5 +54,7 @@
     "last_dataset_path": "C:/QC Detector/QC-Detector/input/temp_assets",
     "detection_model": "standard",
     "mounting_height": 790.0,
-    "sandal_thickness": 30.0
+    "sandal_thickness": 30.0,
+    "aruco_layout_width": 371.0,
+    "aruco_layout_height": 201.0
 }
