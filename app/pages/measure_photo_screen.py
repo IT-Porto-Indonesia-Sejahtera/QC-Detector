@@ -114,8 +114,6 @@ class MeasurePhotoScreen(QWidget):
         # Load thumbnails
         self.load_thumbnails()
 
-        #maximize
-        self.showMaximized()
 
     def load_thumbnails(self):
         """Load all images in input folder as thumbnails."""

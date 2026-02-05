@@ -484,11 +484,15 @@ class GeneralSettingsPage(QWidget):
                 success, res = detect_aruco_marker(frame, ms)
                 if success:
                     out_frame = res['annotated_frame']
-                    self.calibration_status.setText(f"Live: {res['mm_per_px']:.6f} mm/px {'(TILTED!)' if res['is_tilted'] else ''}")
+                    count = res.get('marker_count', 1)
+                    tilt_txt = ' (TILTED!)' if res.get('is_tilted') else ''
+                    self.calibration_status.setText(f"Live: {res['mm_per_px']:.6f} mm/px | {count} markers{tilt_txt}")
+                    self.calibration_status.setStyleSheet("color: #4CAF50; font-weight: bold;")
                 else:
                     self.calibration_status.setText(f"Searching: {res['error']}")
-            except:
-                pass
+                    self.calibration_status.setStyleSheet("color: #666;")
+            except Exception as e:
+                self.calibration_status.setText(f"Error: {str(e)[:50]}")
 
         rgb = cv2.cvtColor(out_frame, cv2.COLOR_BGR2RGB); h, w, ch = rgb.shape
         pix = QPixmap.fromImage(QImage(rgb.data, w, h, ch*w, QImage.Format_RGB888))
@@ -566,8 +570,11 @@ class GeneralSettingsPage(QWidget):
             self.btn_calibrate.setText("Run Auto Calibration")
             return
         
-        self.calibration_status.setText("Marker detected!")
+        count = result.get('marker_count', 1)
+        stability = result.get('stability', 100)
+        self.calibration_status.setText(f"Detected {count} marker(s) | Stability: {stability:.1f}%")
         self.calibration_status.setStyleSheet("color: #4CAF50; font-weight: bold;")
+
         
         try:
             current_mmpx = float(self.mm_px.text() or 0.21)

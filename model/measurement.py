@@ -383,6 +383,16 @@ def measure_sandals(path, mm_per_px=None, draw_output=True, save_out=None, use_s
             'detection_method': 'sam' if use_sam else 'standard'
         }
         
+        # Log detection result to detections.log
+        try:
+            from project_utilities.logger_config import get_detection_logger
+            det_logger = get_detection_logger()
+            log_msg = f"Detection Result: Length={result_dict['real_length_mm']:.2f}mm, Width={result_dict['real_width_mm']:.2f}mm, Method={result_dict['detection_method']}" if result_dict['real_length_mm'] else f"Detection Result (PX): Length={px_length:.1f}px, Width={px_width:.1f}px"
+            det_logger.info(log_msg)
+        except Exception as e:
+            print(f"Failed to log detection: {e}")
+
+        
         if use_sam and inference_time > 0:
             result_dict['inference_time_ms'] = inference_time
             

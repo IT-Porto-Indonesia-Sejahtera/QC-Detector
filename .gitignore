@@ -39,4 +39,4 @@ env/
 
 # Output
 output/log_output/
-input/temp_assets/
+# input/temp_assets/

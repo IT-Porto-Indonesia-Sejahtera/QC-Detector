@@ -16,6 +16,7 @@ class VideoCaptureThread(QThread):
         self.running = True
         self.cap = None
         self.last_frame = None  # Store for calibration access
+        self.raw_frame = None   # Store RAW uncropped frame for ArUco calibration
         # Crop params: {"left": 0, "right": 0, "top": 0, "bottom": 0} in percent
         self.crop_params = crop_params or {}
         # Distortion params: {k1, k2, p1, p2, k3, fx, fy, cx, cy}
@@ -149,6 +150,9 @@ class VideoCaptureThread(QThread):
                 if ret:
                     # 1. Distortion Correction first (on full frame)
                     frame = self.apply_distortion_correction(frame)
+                    
+                    # Store RAW uncropped frame for calibration
+                    self.raw_frame = frame.copy()
                     
                     # 2. Crop/Zoom
                     frame = self.apply_crop(frame)

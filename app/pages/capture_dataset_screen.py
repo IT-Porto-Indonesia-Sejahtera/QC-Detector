@@ -11,6 +11,7 @@ from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtGui import QPixmap, QImage
 from app.utils.camera_utils import open_video_capture
 from app.utils.capture_thread import VideoCaptureThread
+from app.utils.consistency_test_thread import ConsistencyTestThread
 from project_utilities.json_utility import JsonUtility
 from app.utils.ui_scaling import UIScaling
 from model.measure_live_sandals import measure_live_sandals
@@ -65,6 +66,26 @@ class CaptureDatasetScreen(QWidget):
             QComboBox::drop-down {{ border: 0px; }}
         """)
 
+        # Model Selector
+        self.model_select = QComboBox()
+        self.model_select.setFixedWidth(UIScaling.scale(150))
+        self.model_select.addItems(["Standard (CV)", "YOLO v8", "FastSAM"])
+        
+        # Set default to YOLO as requested if available, else Standard
+        # Simple string match logic
+        self.model_select.setCurrentIndex(1) # YOLO
+        
+        self.model_select.setStyleSheet(f"""
+            QComboBox {{
+                padding: {cam_select_padding}px;
+                border: 1px solid #555;
+                border-radius: 5px;
+                background: #333;
+                color: white;
+            }}
+            QComboBox::drop-down {{ border: 0px; }}
+        """)
+
         # -----------------------------------------------------------------
         # UI LAYOUT
         # -----------------------------------------------------------------
@@ -96,6 +117,9 @@ class CaptureDatasetScreen(QWidget):
 
         top_bar.addWidget(self.back_button, alignment=Qt.AlignLeft)
         top_bar.addStretch()
+        top_bar.addWidget(QLabel("Model: "))
+        top_bar.addWidget(self.model_select)
+        top_bar.addSpacing(15)
         top_bar.addWidget(QLabel("Camera: "))
         top_bar.addWidget(self.cam_select)
         
@@ -135,6 +159,13 @@ class CaptureDatasetScreen(QWidget):
         self.chk_measure.setChecked(self.settings.get("dataset_save_measurements", False))
         self.chk_measure.toggled.connect(self.update_save_options)
         options_layout.addWidget(self.chk_measure)
+        
+        # New: Capture images during consistency test
+        self.chk_capture_images_test = QCheckBox("Capture Images during Consistency Test")
+        self.chk_capture_images_test.setStyleSheet("color: #FFA000; font-weight: bold;")
+        self.chk_capture_images_test.setChecked(False)
+        options_layout.addWidget(self.chk_capture_images_test)
+        
         bottom_v_layout.addLayout(options_layout)
 
         # Capture Control Row
@@ -147,6 +178,12 @@ class CaptureDatasetScreen(QWidget):
         self.btn_plc_toggle.setStyleSheet("background: #444; color: #888; font-weight: bold; border-radius: 8px;")
         self.btn_plc_toggle.clicked.connect(self.toggle_plc)
         
+        # Test Consistency Button
+        self.test_btn = QPushButton("Test Consistency")
+        self.test_btn.setMinimumHeight(UIScaling.scale(50))
+        self.test_btn.setStyleSheet("background: #E65100; color: white; font-weight: bold; border-radius: 8px;")
+        self.test_btn.clicked.connect(self.start_consistency_test)
+
         # Capture Button
         self.capture_btn = QPushButton("📸 Capture Image (Manual)")
         self.capture_btn.setMinimumHeight(UIScaling.scale(50))
@@ -165,6 +202,7 @@ class CaptureDatasetScreen(QWidget):
         self.capture_btn.clicked.connect(self.capture_image)
         
         control_layout.addWidget(self.btn_plc_toggle, 1)
+        control_layout.addWidget(self.test_btn, 1)
         control_layout.addWidget(self.capture_btn, 2)
         bottom_v_layout.addLayout(control_layout)
 
@@ -174,6 +212,7 @@ class CaptureDatasetScreen(QWidget):
         # Camera system
         self.cap_thread = None
         self.live_frame = None
+        self.test_thread = None
         
         # -----------------------------------------------------------------
         # PLC Modbus Trigger
@@ -443,3 +482,73 @@ class CaptureDatasetScreen(QWidget):
             import traceback
             traceback.print_exc()
             self.capture_btn.setText("System Error!")
+
+    def start_consistency_test(self):
+        if not self.cap_thread or not self.cap_thread.isRunning():
+            from PySide6.QtWidgets import QMessageBox
+            QMessageBox.warning(self, "Error", "Camera is not running!")
+            return
+
+        from PySide6.QtWidgets import QInputDialog
+        attempts, ok = QInputDialog.getInt(self, "Consistency Test", 
+                                         "Number of attempts (frames):", 
+                                         100, 10, 1000)
+        if not ok:
+            return
+
+        # Map UI model selection to internal string
+        model_map = {
+            "Standard (CV)": "standard",
+            "YOLO v8": "yolo",
+            "FastSAM": "sam"
+        }
+        selected_text = self.model_select.currentText()
+        model_type = model_map.get(selected_text, "standard")
+
+        mmpx = self.settings.get("mm_per_px", 0.21)
+
+        print(f"[Dataset] Starting Consistency Test: {attempts} attempts, model={model_type}")
+        
+        # Create thread
+        self.test_thread = ConsistencyTestThread(
+            video_thread=self.cap_thread,
+            num_attempts=attempts,
+            model_type=model_type,
+            output_dir=self.output_dir,
+            mm_per_px=mmpx,
+            capture_images=self.chk_capture_images_test.isChecked()
+        )
+        
+        self.test_thread.progress_update.connect(self.on_test_progress)
+        self.test_thread.finished_test.connect(self.on_test_finished)
+        self.test_thread.error_occurred.connect(self.on_test_error)
+        
+        # UI updates
+        self.test_btn.setEnabled(False)
+        self.capture_btn.setEnabled(False)
+        self.test_btn.setText("Running...")
+        
+        self.test_thread.start()
+
+    def on_test_progress(self, current, total):
+        self.test_btn.setText(f"Running... {current}/{total}")
+
+    def on_test_finished(self, file_path):
+        from PySide6.QtWidgets import QMessageBox
+        self.test_btn.setText("Test Consistency")
+        self.test_btn.setEnabled(True)
+        self.capture_btn.setEnabled(True)
+        
+        ext = "Excel file" if file_path.endswith(".xlsx") else "CSV file"
+        QMessageBox.information(self, "Test Complete", f"Consistency test finished.\nSaved to {ext}:\n{file_path}")
+        self.test_thread = None
+
+    def on_test_error(self, err_msg):
+        from PySide6.QtWidgets import QMessageBox
+        self.test_btn.setText("Test Consistency")
+        self.test_btn.setEnabled(True)
+        self.capture_btn.setEnabled(True)
+        
+        QMessageBox.critical(self, "Test Error", f"Error during test:\n{err_msg}")
+        self.test_thread = None
+

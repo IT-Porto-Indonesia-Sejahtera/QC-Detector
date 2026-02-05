@@ -55,6 +55,50 @@ def run_ui_mode():
     """Run the GUI version of the app."""
     app.run_app()
 
+# --- Global Crash Handler ---
+def install_crash_handlers():
+    """
+    Install global exception handlers to catch crashes and log them.
+    """
+    from project_utilities.logger_config import get_crash_logger
+    import traceback
+    
+    logger = get_crash_logger()
+    
+    def log_exception(exc_type, exc_value, exc_traceback):
+        """
+        Handler for uncaught exceptions.
+        """
+        # Ignore KeyboardInterrupt so Ctrl+C still works
+        if issubclass(exc_type, KeyboardInterrupt):
+            sys.__excepthook__(exc_type, exc_value, exc_traceback)
+            return
+
+        # Log the full traceback
+        error_msg = "".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
+        print(f"[CRASH] Uncaught exception:\n{error_msg}", file=sys.stderr)
+        logger.error(f"Uncaught exception:\n{error_msg}")
+        
+    # Set the hook
+    sys.excepthook = log_exception
+    
+    # Also catch threading exceptions (Python 3.8+)
+    def log_thread_exception(args):
+        """
+        Handler for uncaught thread exceptions.
+        """
+        if issubclass(args.exc_type, KeyboardInterrupt):
+            return
+
+        error_msg = "".join(traceback.format_exception(args.exc_type, args.exc_value, args.exc_traceback))
+        print(f"[CRASH] Uncaught thread exception in {args.thread.name}:\n{error_msg}", file=sys.stderr)
+        logger.error(f"Uncaught thread exception in {args.thread.name}:\n{error_msg}")
+
+    import threading
+    threading.excepthook = log_thread_exception
+    print("[SYSTEM] Global crash handlers installed.")
+
+
 if __name__ == "__main__":
     # Register signal handlers for graceful shutdown
     signal.signal(signal.SIGINT, signal_handler)   # Ctrl+C
@@ -62,6 +106,9 @@ if __name__ == "__main__":
     
     # Register cleanup function for normal exit
     atexit.register(cleanup)
+    
+    # Install global crash logger
+    install_crash_handlers()
     
     # Initialize database connection pool
     init_database()

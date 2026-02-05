@@ -952,10 +952,12 @@ class LiveCameraScreen(QWidget):
                 r, c = divmod(i, columns)
                 
                 size = p.get("size", "??")
+                display_size = str(size)
+                
                 color_idx = p.get("color_idx", 0)
                 bg_color = SKU_COLORS.get(color_idx, "#E0E0E0")
                 
-                btn = QPushButton(str(size))
+                btn = QPushButton(display_size)
                 # Dynamic Sizing: Expanding Policy
                 btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
                 btn.setStyleSheet(f"background-color: {bg_color}; border: none; border-radius: {btn_radius}px; color: #000000; font-weight: bold; font-size: {btn_font_size}px; padding: 5px;")

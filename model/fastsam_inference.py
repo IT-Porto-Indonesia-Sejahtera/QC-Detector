@@ -52,35 +52,40 @@ def get_model():
 
 def refine_ai_mask_with_edges(image, ai_mask):
     """
-    Return AI mask as-is without refinement.
-    Any morphological operation erodes edges, so we preserve the original AI boundaries.
+    Tighten AI mask boundaries to match true object edges.
+    FastSAM tends to produce masks that extend significantly beyond object boundaries.
     
     Args:
-        image: Original BGR image (not used, kept for compatibility)
+        image: Original BGR image (for potential edge-guided refinement)
         ai_mask: Binary mask from AI model (values 0 or 255)
         
     Returns:
-        ai_mask: Original unmodified mask
+        refined_mask: Eroded mask that better matches actual object edges
     """
     if ai_mask is None or np.sum(ai_mask) == 0:
         return ai_mask
     
-    # Return AI mask without any refinement to preserve full edges
-    print("[Refinement] Using raw AI mask (no morphology - full edge preservation)")
-    return ai_mask
+    # Now that we run at native resolution (1080p+), we need stronger erosion 
+    # to remove the AI "halo" / shadows.
+    # 5x5 kernel with 3 iterations removes ~6-8 pixels of bleed from edges
+    kernel = np.ones((5, 5), np.uint8)
+    refined = cv2.erode(ai_mask, kernel, iterations=3)
+    
+    print("[Refinement] Applied strong erosion (5x5, 3 iters) to high-res FastSAM mask")
+    return refined
 
 
 
 
 
 
-def segment_image(image, conf=0.25, iou=0.9):
+def segment_image(image, conf=0.4, iou=0.9):
     """
     Segment the image using FastSAM.
     
     Args:
         image: BGR image (numpy array) or path to image
-        conf: Confidence threshold (default 0.25)
+        conf: Confidence threshold (default 0.4 to reduce shadow/background noise)
         iou: IoU threshold for NMS (default 0.9)
     
     Returns:
@@ -110,12 +115,22 @@ def segment_image(image, conf=0.25, iou=0.9):
     
     start_time = time.time()
     
+    # Calculate optimal inference size (preserve detail)
+    # Use the largest dimension, capped at 1920 to prevent memory issues
+    # Must be a multiple of 32 for YOLO/FastSAM
+    max_dim = max(h, w)
+    inference_size = min(max_dim, 1920) 
+    # Round to nearest multiple of 32
+    inference_size = int(round(inference_size / 32) * 32)
+    
+    print(f"[FastSAM] Running inference at size {inference_size}x{inference_size} (Original: {w}x{h})")
+    
     # Run inference
     results = model(
         img,
         device='cpu',
         retina_masks=True,
-        imgsz=640,
+        imgsz=inference_size,
         conf=conf,
         iou=iou,
         verbose=False

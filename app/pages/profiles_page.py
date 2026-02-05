@@ -309,29 +309,56 @@ class ProfilesPage(QWidget):
 
     def _parse_sizes(self, size_str, code=""):
         if not size_str:
-            # Fallback if no sizes field
             if any(x in code.upper() for x in ["S","M","L","XL"]):
                 return ["S", "M", "L", "XL"]
             return ["36","37","38","39","40","41","42","43","44"]
             
-        size_str = str(size_str).strip()
-        # Handle range like "40-45"
-        if "-" in size_str and not any(c.isalpha() for c in size_str):
-            try:
-                parts = size_str.split("-")
-                if len(parts) == 2:
-                    start = int(parts[0].strip())
-                    end = int(parts[1].strip())
-                    return [str(i) for i in range(start, end + 1)]
-            except: pass
-            
-        # Handle comma or space separated
-        delimiters = [",", " "]
-        for d in delimiters:
-            if d in size_str:
-                return [s.strip() for s in size_str.split(d) if s.strip()]
+        s = str(size_str).strip().upper()
+        
+        # 1. Handle comma lists FIRST "240mm, 250mm" or "39/40, 41/42"
+        if "," in s:
+            items = [x.strip() for x in s.split(",")]
+            result = []
+            for item in items:
+                # Helper to resolve "39/40" -> "40"
+                if "/" in item and "MM" not in item:
+                     # "39/40" -> take "40" (the bigger one/second one)
+                    parts = item.split("/")
+                    result.append(parts[-1].strip())
+                else:
+                    result.append(item)
+            return result
+
+        # 2. Handle "SMALL", "MEDIUM", "LARGE", "240MM" (Single items)
+        if any(x in s for x in ["SMALL", "MEDIUM", "LARGE", "MM"]):
+            return [s]
+
+        # Helper to resolve "39/40" -> "40" for ranges
+        def resolve_slash(val):
+            if "/" in val:
+                parts = val.split("/")
+                return parts[-1].strip() 
+            return val
+
+        # 3. Handle standard ranges "30-35" or "35/36 - 39/40"
+        if "-" in s:
+            parts = s.split("-")
+            if len(parts) == 2:
+                start_s = resolve_slash(parts[0].strip())
+                end_s = resolve_slash(parts[1].strip())
                 
-        return [size_str]
+                if start_s.isdigit() and end_s.isdigit():
+                    start = int(start_s)
+                    end = int(end_s)
+                    if start < end:
+                        return [str(i) for i in range(start, end + 1)]
+            
+        # 4. Handle single slash "39/40" -> "40"
+        if "/" in s:
+            return [resolve_slash(s)]
+            
+        # 5. Fallback: return as single item
+        return [s]
 
     def save_current_profile(self):
         if not self.current_editing: return

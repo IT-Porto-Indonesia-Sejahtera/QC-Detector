@@ -92,13 +92,26 @@ def clear_cache() -> None:
     add_log("Cache cleared (memory).")
 
 
+
+# Import centralized logger
+from app.utils.fetch_logger import log_info, log_error, log_success
+
 def add_log(message: str) -> None:
-    """Add a timestamped log message."""
+    """Add a timestamped log message and write to persistent log."""
     timestamp = datetime.datetime.now().strftime("%H:%M:%S")
     _fetch_log.append(f"[{timestamp}] {message}")
     # Keep only last 50 messages
     if len(_fetch_log) > 50:
         _fetch_log.pop(0)
+        
+    # Forward to persistent logger
+    if "ERROR" in message:
+        log_error(message)
+    elif "SUCCESS" in message:
+        log_success(message)
+    else:
+        log_info(message)
+
 
 
 def get_logs() -> List[str]:

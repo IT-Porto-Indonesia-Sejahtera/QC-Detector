@@ -36,56 +36,97 @@ def get_product_sku(
     limit_clause = f"LIMIT {int(limit)}" if limit else ""
     
     query = f'''
-    SELECT * FROM (
-        SELECT DISTINCT ON (pt.id)
-            pt.name AS "Nama Produk",
-            ptd.normal_size AS "Perbesaran Ukuran (Otorisasi)",
---             (
---                 SELECT string_agg(pav.name, ', ' ORDER BY pav.name)
---                 FROM product_attribute_line pal
---                 JOIN product_attribute_line_product_attribute_value_rel rel ON pal.id = rel.product_attribute_line_id
---                 JOIN product_attribute_value pav ON rel.product_attribute_value_id = pav.id
---                 JOIN product_attribute pa ON pal.attribute_id = pa.id
---                 WHERE pal.product_tmpl_id = pt.id
---                   AND (pa.name ILIKE 'Size' OR pa.name ILIKE 'Ukuran' OR pa.name ILIKE 'Nomor')
---             ) 
-            pt.size AS "List Size Available",
-            pc.name AS "Kategori",
-            ia.gdrive_id AS "GDrive ID"
-
-        FROM 
-            product_template pt
-        LEFT JOIN 
-            product_template_dev ptd ON ptd.product_tmpl_id = pt.id
-        JOIN 
-            ir_attachment ia ON ia.res_model = 'product.template' AND ia.res_id = pt.id
-        LEFT JOIN 
-            product_category pc ON pt.categ_id = pc.id
-        LEFT JOIN 
-            res_users ru_attach ON ia.create_uid = ru_attach.id
-        LEFT JOIN 
-            res_partner rp_attach_create ON ru_attach.partner_id = rp_attach_create.id
-        LEFT JOIN 
-            res_users ru_prod ON pt.create_uid = ru_prod.id
-        LEFT JOIN 
-            res_partner rp_prod_create ON ru_prod.partner_id = rp_prod_create.id
-
-        WHERE 
-            pt.active = true 
-            AND ia.gdrive_id IS NOT NULL 
-            AND ia.gdrive_id != ''
-            AND pc.name IN ('Sandal EVA')
-        ORDER BY 
-            pt.id, ptd.id DESC, ia.id ASC
-    ) AS data_produk
-    WHERE 
-        "List Size Available" IS NOT NULL
-    AND "Perbesaran Ukuran (Otorisasi)" IS NOT NULL
+    WITH base_data AS (
+    SELECT
+        ptd.product_code,
+        ptd.revisi,
+        pm.name AS divisi,
+        ptd.size,
+        ptd.code_cetakan,
+        ptd.normal_size AS perbesar_ukuran,
+--         ptd.hardness,
+        ptd.state,
+        MAX(
+            CASE
+                WHEN ir.is_cover = true
+                THEN concat('https://lh3.googleusercontent.com/d/', ir.gdrive_id, '=s600')
+            END
+        ) AS cover_image
+    FROM product_template_dev ptd
+        LEFT JOIN product_template pt ON pt.id = ptd.product_tmpl_id
+        LEFT JOIN product_product pp ON pp.product_tmpl_id = pt.id
+        LEFT JOIN product_dev_plant_rel pdp ON pdp.product_dev_id = ptd.id
+        LEFT JOIN plant_master pm ON pm.id = pdp.plant_id
+        LEFT JOIN crm_team ct ON ct.id = ptd.team_id
+        LEFT JOIN product_attribute_value_product_product_rel rel_warna
+            ON rel_warna.product_product_id = pp.id
+        LEFT JOIN product_attribute_value pav
+            ON pav.id = rel_warna.product_attribute_value_id
+        LEFT JOIN product_template_dev_line ptdl ON ptdl.product_dev_id = ptd.id
+        LEFT JOIN ir_attachment ir
+            ON ptd.id = ir.res_id
+           AND ir.res_model::text = 'product.template.dev'
+    WHERE
+        pav.attribute_id = 2
+        AND ptd.state <> 'cancel'
+        AND ptd.active = true
+        AND ptd.size IS NOT NULL
+        AND pm.name = 'EVA1'
+        AND lower(COALESCE(ptd.product_code, '')) NOT LIKE '%label%'
+        AND lower(COALESCE(ptd.product_code, '')) NOT LIKE '%aksesoris%'
+    GROUP BY
+        ptd.id, ptd.name, ptd.otorisasi_type, ptd.is_portolady,
+        pt.id, ptd.product_code, ptd.document_code, ptd.revisi,
+        pm.name, ptd.size, ptd.release_date, ptd.otorisasi_date,
+        ptd.is_registered_haki, ptd.haki_submit_date, ptd.code_cetakan,
+        ptd.normal_size, ptd.is_release_exdig, ct.name, ptd.is_no_brand,
+        ptd.notes_tali, ptd.notes_accessories, ptd.hardness,
+        ptd.notes_packing, ptd.is_alternative_acc, ptd.state
+)
+, ranked_data AS (
+    SELECT
+        *,
+        ROW_NUMBER() OVER (
+            PARTITION BY product_code
+            ORDER BY revisi DESC
+        ) AS rn
+    FROM base_data
+)
+SELECT *
+FROM ranked_data
+WHERE rn = 1
     {limit_clause}
     '''
     
     result = fetch_all(query, as_dict=True)
-    return result
+    
+    # Process and clean data
+    cleaned_result = []
+    if result:
+        for row in result:
+            # Parse Otorisasi (Perbesaran Ukuran)
+            # Format examples: "+1.0", "+0.5", "pas", "Pas", "0"
+            raw_oto = str(row.get('perbesaran_ukuran', '')).lower().strip()
+            oto_val = 0.0
+            if raw_oto and raw_oto not in ['pas', 'none', 'null']:
+                try:
+                    oto_val = float(raw_oto.replace('+', ''))
+                except ValueError:
+                    pass
+            
+            # Map to clean dictionary
+            cleaned_result.append({
+                'Nama Produk': row.get('product_code', 'Unknown'),
+                'Perbesaran Ukuran (Otorisasi)': oto_val,  # Now a float
+                'Raw Otorisasi': row.get('perbesaran_ukuran'), # Keep original just in case
+                'List Size Available': row.get('size', ''),
+                'Kategori': row.get('divisi', 'Unknown'),
+                'Cover Image': row.get('cover_image'), # Direct URL
+                'GDrive ID': row.get('cover_image') # Legacy support (aliased to URL)
+            })
+            
+    return cleaned_result
+
 
 
 def get_product_sku_json(

@@ -61,6 +61,19 @@ class ArucoCalibrationDialog(QDialog):
             tilt_lbl.setAlignment(Qt.AlignCenter)
             info_layout.addWidget(tilt_lbl)
 
+        # Multi-marker info
+        m_count = self.result_data.get('marker_count', 1)
+        stability = self.result_data.get('stability', 100)
+        
+        row_multi = QHBoxLayout()
+        row_multi.addWidget(QLabel(f"Markers Detected: {m_count}"))
+        row_multi.addStretch()
+        stab_color = "#4CAF50" if stability > 95 else "#FF9800"
+        stab_lbl = QLabel(f"Stability: {stability:.1f}%")
+        stab_lbl.setStyleSheet(f"font-weight: bold; color: {stab_color};")
+        row_multi.addWidget(stab_lbl)
+        info_layout.addLayout(row_multi)
+
         row1 = QHBoxLayout()
         row1.addWidget(QLabel("Current Resolution:"))
         val1 = QLabel(f"{self.current_mmpx:.6f} mm/px")
