@@ -150,9 +150,13 @@ def segment_image(image, conf=0.25):
     if roi.size == 0: return None, None, inference_time
     
     # Gunakan Auto Select Mask pada ROI
-    from model.measurement import auto_select_mask
-    roi_mask = auto_select_mask(roi)
+    # from model.measurement import auto_select_mask
+    # roi_mask = auto_select_mask(roi)
+    print("[YOLOv8-seg] Running precision contour detection inside ROI...")
+    from model.measurement import strong_mask
     
+    roi_mask = strong_mask(roi)
+
     # Validasi mask
     roi_area = roi_mask.shape[0] * roi_mask.shape[1]
     mask_pixels = cv2.countNonZero(roi_mask)
