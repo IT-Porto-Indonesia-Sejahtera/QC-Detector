@@ -23,6 +23,17 @@
             "port": "554",
             "path": "/Streaming/Channels/101",
             "username": "admin",
+            "password": "Porto.12",
+            "transport": "tcp"
+        },
+        {
+            "id": "ip-preset-dvr",
+            "name": "Hikvision DVR - Channel 1",
+            "protocol": "rtsp",
+            "address": "192.168.1.64",
+            "port": "554",
+            "path": "/Streaming/Channels/1",
+            "username": "admin",
             "password": "Porto.cctv",
             "transport": "tcp"
         }
@@ -34,13 +45,13 @@
     "plc_result_reg": 13,
     "aruco_marker_size": 50.0,
     "camera_crop": {
-        "left": 37,
-        "right": 37,
-        "top": 20,
-        "bottom": 20
+        "left": 0,
+        "right": 0,
+        "top": 0,
+        "bottom": 0
     },
     "lens_distortion": {
-        "k1": -0.35,
+        "k1": 0.0,
         "k2": 0.0,
         "p1": 0.0,
         "p2": 0.0,
