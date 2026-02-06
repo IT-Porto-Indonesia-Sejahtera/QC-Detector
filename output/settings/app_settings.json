@@ -1,9 +1,9 @@
 {
     "camera_index": "ip",
-    "mm_per_px": 0.74986919,
+    "mm_per_px": 0.69142318,
     "sensor_delay": 0.2123459,
     "fetch_status": "success",
-    "layout_mode": "minimal",
+    "layout_mode": "classic",
     "last_fetched": "06/01/2026 17:04",
     "paths": {
         "profile": "C://User/test/asd/",
@@ -23,6 +23,17 @@
             "port": "554",
             "path": "/Streaming/Channels/101",
             "username": "admin",
+            "password": "Porto.12",
+            "transport": "tcp"
+        },
+        {
+            "id": "ip-preset-dvr",
+            "name": "Hikvision DVR - Channel 1",
+            "protocol": "rtsp",
+            "address": "192.168.1.64",
+            "port": "554",
+            "path": "/Streaming/Channels/1",
+            "username": "admin",
             "password": "Porto.cctv",
             "transport": "tcp"
         }
@@ -32,12 +43,12 @@
     "plc_port": "/dev/cu.usbserial-14120",
     "plc_trigger_reg": 12,
     "plc_result_reg": 13,
-    "aruco_marker_size": 49.0,
+    "aruco_marker_size": 50.0,
     "camera_crop": {
-        "left": 37,
-        "right": 37,
-        "top": 20,
-        "bottom": 20
+        "left": 0,
+        "right": 0,
+        "top": 0,
+        "bottom": 0
     },
     "lens_distortion": {
         "k1": 0.0,
@@ -51,10 +62,10 @@
         "cy": 0.0
     },
     "dataset_save_measurements": false,
-    "last_dataset_path": "/Users/porto-mac/Documents/GitHub/QC-Detector/input/temp_assets",
+    "last_dataset_path": "C:/QC Detector/QC-Detector/input/temp_assets",
     "detection_model": "standard",
     "mounting_height": 790.0,
-    "sandal_thickness": 45.0,
+    "sandal_thickness": 30.0,
     "aruco_layout_width": 371.0,
     "aruco_layout_height": 201.0
 }
