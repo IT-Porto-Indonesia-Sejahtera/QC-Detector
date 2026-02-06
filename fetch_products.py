@@ -5,6 +5,10 @@ import time
 import logging
 import argparse
 from datetime import datetime, timedelta
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 # Ensure we can import from backend
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -73,36 +77,96 @@ def fetch_and_save():
         log_error(traceback.format_exc())
         return False
 
-def run_daemon(interval_hours=24):
+def get_seconds_until_next_schedule(schedule_times):
     """
-    Runs the fetch task in a loop.
+    Calculate seconds until the nearest time in the schedule.
+    schedule_times: list of strings like "06:00", "18:00"
     """
-    log_info(f"Starting daemon mode. Fetching every {interval_hours} hours.")
+    now = datetime.now()
+    possible_runs = []
+    
+    for t_str in schedule_times:
+        try:
+            h, m = map(int, t_str.split(':'))
+            # Try today
+            run_time = now.replace(hour=h, minute=m, second=0, microsecond=0)
+            if run_time <= now:
+                # If already passed today, try tomorrow
+                run_time += timedelta(days=1)
+            possible_runs.append(run_time)
+        except Exception as e:
+            log_error(f"Invalid schedule time format '{t_str}': {e}")
+    
+    if not possible_runs:
+        return None
+        
+    next_run = min(possible_runs)
+    wait_seconds = (next_run - now).total_seconds()
+    return wait_seconds, next_run
+
+def run_daemon(interval_hours=None, interval_mins=None, schedule=None):
+    """
+    Runs the fetch task in a loop with flexible scheduling.
+    """
+    if schedule:
+        log_info(f"Starting daemon mode. Scheduled times: {', '.join(schedule)}")
+    elif interval_mins:
+        log_info(f"Starting daemon mode. Fetching every {interval_mins} minutes.")
+    else:
+        log_info(f"Starting daemon mode. Fetching every {interval_hours} hours.")
     
     while True:
+        # Run the task
         success = fetch_and_save()
+        
         if not success:
             log_error("Failed to fetch and save. Retrying in 5 minutes...")
-            time.sleep(300)  # Wait 5 minutes before retrying
+            time.sleep(300)
             continue
         
-        # Calculate next run
-        next_run = datetime.now() + timedelta(hours=interval_hours)
-        log_info(f"Sleeping until {next_run.strftime('%Y-%m-%d %H:%M:%S')}")
-        # Sleep
-        time.sleep(interval_hours * 3600)
+        # Determine wait time
+        wait_seconds = 0
+        next_run_desc = ""
+        
+        if schedule:
+            res = get_seconds_until_next_schedule(schedule)
+            if res:
+                wait_seconds, next_run_dt = res
+                next_run_desc = next_run_dt.strftime('%Y-%m-%d %H:%M:%S')
+            else:
+                log_error("No valid schedules found. Falling back to 24h interval.")
+                wait_seconds = 24 * 3600
+                next_run_desc = (datetime.now() + timedelta(hours=24)).strftime('%Y-%m-%d %H:%M:%S')
+        elif interval_mins:
+            wait_seconds = interval_mins * 60
+            next_run_desc = (datetime.now() + timedelta(minutes=interval_mins)).strftime('%Y-%m-%d %H:%M:%S')
+        else:
+            wait_seconds = interval_hours * 3600
+            next_run_desc = (datetime.now() + timedelta(hours=interval_hours)).strftime('%Y-%m-%d %H:%M:%S')
+            
+        log_info(f"Task complete. Sleeping until {next_run_desc} ({int(wait_seconds)} seconds)")
+        time.sleep(wait_seconds)
 
 def main():
     parser = argparse.ArgumentParser(description="Fetch Product SKUs from Database")
     parser.add_argument('--now', action='store_true', help="Run immediately and exit (default behavior)")
     parser.add_argument('--daemon', action='store_true', help="Run in a loop (daemon mode)")
     parser.add_argument('--interval', type=int, default=24, help="Interval in hours for daemon mode (default: 24)")
+    parser.add_argument('--interval-min', type=int, help="Interval in minutes for daemon mode (overrides --interval)")
+    parser.add_argument('--schedule', type=str, help="Comma-separated times (HH:MM) to run, e.g., '06:00,18:00'")
     
     args = parser.parse_args()
     
-    # Default to running immediately if no specific mode or if --now is passed
     if args.daemon:
-        run_daemon(args.interval)
+        schedule_list = None
+        if args.schedule:
+            schedule_list = [t.strip() for t in args.schedule.split(',')]
+            
+        run_daemon(
+            interval_hours=args.interval, 
+            interval_mins=args.interval_min, 
+            schedule=schedule_list
+        )
     else:
         # One-shot execution
         fetch_and_save()

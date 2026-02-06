@@ -77,7 +77,9 @@ def install_crash_handlers():
         # Log the full traceback
         error_msg = "".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
         print(f"[CRASH] Uncaught exception:\n{error_msg}", file=sys.stderr)
-        logger.error(f"Uncaught exception:\n{error_msg}")
+        
+        # This will trigger the LarkLoggingHandler automatically with level "CRITICAL" (mapped to "crash")
+        logger.critical(f"Uncaught exception: {exc_value}\n{error_msg}")
         
     # Set the hook
     sys.excepthook = log_exception
@@ -92,7 +94,9 @@ def install_crash_handlers():
 
         error_msg = "".join(traceback.format_exception(args.exc_type, args.exc_value, args.exc_traceback))
         print(f"[CRASH] Uncaught thread exception in {args.thread.name}:\n{error_msg}", file=sys.stderr)
-        logger.error(f"Uncaught thread exception in {args.thread.name}:\n{error_msg}")
+        
+        # This will trigger the LarkLoggingHandler automatically
+        logger.critical(f"Uncaught thread exception in {args.thread.name}: {args.exc_value}\n{error_msg}")
 
     import threading
     threading.excepthook = log_thread_exception

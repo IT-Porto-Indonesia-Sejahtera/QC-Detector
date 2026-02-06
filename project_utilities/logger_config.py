@@ -10,14 +10,57 @@ Provides configured loggers for:
 import os
 import logging
 from logging.handlers import RotatingFileHandler, TimedRotatingFileHandler
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 # Base log directory
 LOG_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'logs')
 os.makedirs(LOG_DIR, exist_ok=True)
 
+def _add_lark_handler(logger):
+    """Utility to add Lark notification handler to a logger"""
+    webhook = os.getenv("LARK_WEBHOOK_URL")
+    if not webhook:
+        return
+        
+    try:
+        from tools.lark_notifier import LarkLoggingHandler
+        # Check if already has a LarkLoggingHandler
+        if not any(isinstance(h, LarkLoggingHandler) for h in logger.handlers):
+            handler = LarkLoggingHandler()
+            formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(module)s - %(message)s')
+            handler.setFormatter(formatter)
+            handler.setLevel(logging.WARNING) # Notify on Warning/Error/Critical
+            logger.addHandler(handler)
+    except Exception as e:
+        print(f"DEBUG: Failed to add Lark handler to {logger.name if hasattr(logger, 'name') else 'root'}: {e}")
+
+# Apply to root logger for total coverage
+_add_lark_handler(logging.getLogger())
+
 # Logger names
 CRASH_LOGGER_NAME = 'qc_crash_logger'
 DETECTION_LOGGER_NAME = 'qc_detection_logger'
+
+def _add_lark_handler(logger):
+    """Utility to add Lark notification handler to a logger"""
+    webhook = os.getenv("LARK_WEBHOOK_URL")
+    if not webhook:
+        return
+        
+    try:
+        from tools.lark_notifier import LarkLoggingHandler
+        # Check if already has a LarkLoggingHandler
+        if not any(isinstance(h, LarkLoggingHandler) for h in logger.handlers):
+            handler = LarkLoggingHandler()
+            formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(module)s - %(message)s')
+            handler.setFormatter(formatter)
+            handler.setLevel(logging.ERROR) # Only notify on errors or higher
+            logger.addHandler(handler)
+    except Exception as e:
+        print(f"DEBUG: Failed to add Lark handler to {logger.name}: {e}")
 
 def setup_crash_logger():
     """
@@ -44,6 +87,9 @@ def setup_crash_logger():
         handler.setFormatter(formatter)
         logger.addHandler(handler)
         
+        # Add Lark integration
+        _add_lark_handler(logger)
+        
     return logger
 
 def setup_detection_logger():
@@ -69,12 +115,14 @@ def setup_detection_logger():
         formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
         handler.setFormatter(formatter)
         logger.addHandler(handler)
-        print(f"DEBUG: Added handler {handler} to logger {logger.name}. Log file: {log_file}")
         
         # Also add a stream handler to see logs in console during development
         stream_handler = logging.StreamHandler()
         stream_handler.setFormatter(formatter)
         logger.addHandler(stream_handler)
+        
+        # Add Lark integration
+        _add_lark_handler(logger)
         
     return logger
 
@@ -103,6 +151,9 @@ def setup_fetch_logger():
         stream_handler = logging.StreamHandler()
         stream_handler.setFormatter(formatter)
         logger.addHandler(stream_handler)
+        
+        # Add Lark integration
+        _add_lark_handler(logger)
         
     return logger
 

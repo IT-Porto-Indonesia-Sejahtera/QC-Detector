@@ -1,4 +1,7 @@
 import sys
+import os
+import json
+import traceback
 from PySide6.QtWidgets import QApplication, QWidget, QStackedWidget, QVBoxLayout
 from app.pages.menu_screen import MenuScreen
 from app.pages.measure_photo_screen import MeasurePhotoScreen
@@ -7,6 +10,8 @@ from app.pages.measure_live_screen import LiveCameraScreen
 from app.pages.capture_dataset_screen import CaptureDatasetScreen
 from app.pages.general_settings_page import GeneralSettingsPage
 from app.pages.profiles_page import ProfilesPage
+from app.utils.fetch_logger import log_info, log_error, log_warning
+from project_utilities.json_utility import JsonUtility
 
 class MainWindow(QWidget):
     def __init__(self):
@@ -53,42 +58,73 @@ class MainWindow(QWidget):
         # --- Internal Scheduler Setup ---
         from PySide6.QtCore import QTimer, QTime
         from backend.get_product_sku import ProductSKUWorker
-        import json
-        import os
 
-        # Helper to get worker class (lazy import style kept simple here)
         self.ProductSKUWorker = ProductSKUWorker
-
         self.scheduler_timer = QTimer(self)
         self.scheduler_timer.timeout.connect(self.check_scheduler)
         self.scheduler_timer.start(60000) # Check every 60 seconds
 
-        # State to prevent multiple runs in the same minute/window
+        # Load scheduler settings
+        self.refresh_scheduler_settings()
+        
+        log_info(f"[Scheduler] Internal scheduler started. Mode: {self.scheduler_mode}")
+    
+    def refresh_scheduler_settings(self):
+        """Load scheduler configuration from app_settings.json"""
+        settings_file = os.path.join("output", "settings", "app_settings.json")
+        settings = JsonUtility.load_from_json(settings_file) or {}
+        
+        # Scheduling Modes: "daily" (legacy), "interval" (minutes), "schedule" (specific times)
+        self.scheduler_mode = settings.get("scheduler_mode", "daily")
+        self.scheduler_interval_min = settings.get("scheduler_interval_min", 60)
+        self.scheduler_schedule_times = settings.get("scheduler_schedule_times", ["09:00"])
+        
+        # Legacy single-time support
+        self.scheduled_hour = settings.get("scheduler_hour", 9) 
+        self.scheduled_minute = settings.get("scheduler_minute", 0)
+        
+        # State tracking
+        self.last_run_time = None 
         self.last_run_date = None
-        
-        # Default schedule time (could be loaded from settings)
-        self.scheduled_hour = 9 
-        self.scheduled_minute = 0
-        
-        print(f"[Scheduler] Internal scheduler started. Checking every min. Target: {self.scheduled_hour:02d}:{self.scheduled_minute:02d}")
 
     def check_scheduler(self):
-        from PySide6.QtCore import QTime, QDate
-        now = QTime.currentTime()
-        today = QDate.currentDate()
+        from PySide6.QtCore import QTime, QDate, QDateTime
+        now = QDateTime.currentDateTime()
         
-        # Check time match (simple equality check on hour/minute)
-        # We use a flag 'last_run_date' to ensure we only run ONCE per day
-        if (now.hour() == self.scheduled_hour and 
-            now.minute() == self.scheduled_minute):
-            
-            if self.last_run_date != today:
-                print(f"[Scheduler] Time match! Starting scheduled fetch task...")
-                self.run_scheduled_fetch()
-                self.last_run_date = today
+        should_run = False
+        
+        if self.scheduler_mode == "interval":
+            # Interval mode: check if enough minutes passed since last run
+            if self.last_run_time is None:
+                should_run = True # Run on startup if in interval mode
             else:
-                # Already ran today
-                pass
+                mins_passed = self.last_run_time.secsTo(now) / 60
+                if mins_passed >= self.scheduler_interval_min:
+                    should_run = True
+                    
+        elif self.scheduler_mode == "schedule":
+            # Multi-time schedule mode
+            current_time_str = now.time().toString("HH:mm")
+            if current_time_str in self.scheduler_schedule_times:
+                # Ensure we only run once per day for THIS specific minute slot
+                # Using a combo of date + time string for tracking
+                run_id = f"{now.date().toString(Qt.ISODate)}_{current_time_str}"
+                if self.last_run_date != run_id:
+                    should_run = True
+                    self.last_run_date = run_id
+                    
+        else: # "daily" legacy mode
+            now_time = now.time()
+            if (now_time.hour() == self.scheduled_hour and 
+                now_time.minute() == self.scheduled_minute):
+                if self.last_run_date != now.date():
+                    should_run = True
+                    self.last_run_date = now.date()
+
+        if should_run:
+            log_info(f"[Scheduler] Condition met ({self.scheduler_mode}). Starting fetch...")
+            self.run_scheduled_fetch()
+            self.last_run_time = now
 
     def run_scheduled_fetch(self):
         worker = self.ProductSKUWorker(limit=None, parent=self)
@@ -103,7 +139,7 @@ class MainWindow(QWidget):
         import json
         
         try:
-            print(f"[Scheduler] Fetch success! Got {len(products)} items.")
+            log_info(f"[Scheduler] Fetch success! Got {len(products)} items.")
             if not products:
                 print("[Scheduler] Empty result, skipping save.")
                 return
@@ -114,7 +150,7 @@ class MainWindow(QWidget):
             with open(output_path, 'w', encoding='utf-8') as f:
                 json.dump(products, f, indent=4, ensure_ascii=False)
                 
-            print(f"[Scheduler] Saved to {output_path}")
+            log_info(f"[Scheduler] Saved results to {output_path}")
             
             # Optional: Refresh currently open pages if they display this data
             # self.profiles_page.refresh_data() # usage depends on if it's safe to call off-main-thread or if this is main thread.
@@ -123,10 +159,11 @@ class MainWindow(QWidget):
                 self.profiles_page.refresh_data()
                 
         except Exception as e:
-            print(f"[Scheduler] Error saving data: {e}")
+            log_error(f"[Scheduler] Error saving data: {e}")
+            log_error(traceback.format_exc())
 
     def on_scheduled_fetch_error(self, err_msg):
-        print(f"[Scheduler] Fetch failed: {err_msg}")
+        log_error(f"[Scheduler] Fetch failed: {err_msg}")
 
     def go_to_photo(self):
         self.stack.setCurrentWidget(self.photo_page)

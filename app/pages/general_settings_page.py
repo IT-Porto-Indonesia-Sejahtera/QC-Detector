@@ -235,8 +235,11 @@ class GeneralSettingsPage(QWidget):
         sync_layout.addWidget(self.log_display)
         right.addWidget(sync_card)
         
-        btn_save = QPushButton("Save System Settings"); btn_save.setFixedHeight(UIScaling.scale(50)); self.style_button(btn_save, True); btn_save.clicked.connect(self.save_settings)
-        right.addWidget(btn_save); right.addStretch()
+        h_save_btns = QHBoxLayout()
+        btn_apply = QPushButton("Quick Apply"); btn_apply.setFixedHeight(UIScaling.scale(50)); self.style_button(btn_apply); btn_apply.clicked.connect(self.apply_quick_settings)
+        btn_save = QPushButton("Save & Exit"); btn_save.setFixedHeight(UIScaling.scale(50)); self.style_button(btn_save, True); btn_save.clicked.connect(self.save_settings)
+        h_save_btns.addWidget(btn_apply); h_save_btns.addWidget(btn_save)
+        right.addLayout(h_save_btns); right.addStretch()
         scroll_layout.addLayout(right, 1)
 
         
@@ -438,7 +441,33 @@ class GeneralSettingsPage(QWidget):
     def on_camera_change(self):
         self.ip_section.setVisible(self.camera_combo.currentData() == "ip")
 
+    def apply_quick_settings(self):
+        """Save settings without leaving the page"""
+        try:
+            settings_dict = self._gather_settings_dict()
+            JsonUtility.save_to_json(SETTINGS_FILE, settings_dict)
+            self.calibration_status.setText("Settings applied and saved!")
+            self.calibration_status.setStyleSheet("color: #4CAF50; font-weight: bold;")
+            # Show a temporary message
+            QMessageBox.information(self, "Success", "Settings applied successfully!")
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to apply settings: {e}")
+
     def save_settings(self):
+        """Save settings and return to live feed"""
+        try:
+            settings_dict = self._gather_settings_dict()
+            JsonUtility.save_to_json(SETTINGS_FILE, settings_dict)
+            QMessageBox.information(self, "Success", "Settings saved!")
+            
+            # Navigate to Live Feed after save
+            if self.controller:
+                self.controller.go_to_live()
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to save settings: {e}")
+
+    def _gather_settings_dict(self):
+        """Helper to collect all UI values into a settings dictionary"""
         s = JsonUtility.load_from_json(SETTINGS_FILE) or {}
         try: s["mm_per_px"] = float(self.mm_px.text())
         except: pass
@@ -507,12 +536,7 @@ class GeneralSettingsPage(QWidget):
         except:
              pass 
              
-        JsonUtility.save_to_json(SETTINGS_FILE, s)
-        QMessageBox.information(self, "Success", "Settings saved!")
-        
-        # Navigate to Live Feed after save
-        if self.controller:
-            self.controller.go_to_live()
+        return s
 
     def toggle_preview(self):
         if self.cap_thread: self.stop_preview(); self.btn_preview.setText("Start Test Feed")

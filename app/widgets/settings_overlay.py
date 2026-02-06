@@ -231,8 +231,15 @@ class SettingsOverlay(BaseOverlay):
         title_font_size = UIScaling.scale_font(24)
         lbl_title.setStyleSheet(f"font-size: {title_font_size}px; font-weight: bold; color: {self.theme['text_main']}; margin-left: 10px;")
         
-        btn_save = QPushButton("Save Settings")
-        btn_save_w = UIScaling.scale(160)
+        btn_apply = QPushButton("Apply")
+        btn_apply_w = UIScaling.scale(100)
+        btn_apply_h = UIScaling.scale(45)
+        btn_apply.setFixedSize(btn_apply_w, btn_apply_h)
+        btn_apply.setStyleSheet(self.btn_secondary_style)
+        btn_apply.clicked.connect(self.apply_settings_clicked)
+
+        btn_save = QPushButton("Save & Exit")
+        btn_save_w = UIScaling.scale(140)
         btn_save_h = UIScaling.scale(45)
         btn_save_font_size = UIScaling.scale_font(16)
         btn_save.setFixedSize(btn_save_w, btn_save_h)
@@ -251,6 +258,8 @@ class SettingsOverlay(BaseOverlay):
         header.addWidget(btn_back)
         header.addWidget(lbl_title)
         header.addStretch()
+        header.addWidget(btn_apply)
+        header.addSpacing(10)
         header.addWidget(btn_save)
         self.main_layout.addLayout(header)
 
@@ -1058,8 +1067,23 @@ class SettingsOverlay(BaseOverlay):
         self.stop_preview()
         super().close_overlay()
 
+    def apply_settings_clicked(self):
+        """Save settings without closing overlay"""
+        self.save_current_settings()
+        self.connection_status.setText("Settings applied!")
+        self.connection_status.setStyleSheet("color: #4CAF50; font-weight: bold;")
+        
+        # Briefly change color to show feedback
+        original_style = self.connection_status.styleSheet()
+        QTimer.singleShot(2000, lambda: self.connection_status.setStyleSheet(original_style))
+
     def save_settings_clicked(self):
-        """Save settings to file"""
+        """Save settings and close overlay"""
+        self.save_current_settings()
+        self.close_overlay()
+
+    def save_current_settings(self):
+        """Internal helper to gather and save settings"""
         source = self.get_selected_camera_source()
         
         # Update settings object
@@ -1116,7 +1140,6 @@ class SettingsOverlay(BaseOverlay):
         JsonUtility.save_to_json(settings_file, self.settings)
         
         self.settings_saved.emit(self.settings)
-        self.close_overlay()
 
     # -------------------------------------------------------------------------
     # SKU Fetch Logic
