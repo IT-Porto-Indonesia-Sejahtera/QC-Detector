@@ -1,0 +1,302 @@
+2026-02-05 10:52:14,213 - ERROR - test_crash - TEST CRASH HANDLER CAUGHT: This is a simulated crash for testing purposes.
+2026-02-05 10:56:05,660 - ERROR - fetch_logger - ERROR: Simulation error
+2026-02-05 11:00:16,254 - ERROR - test_log_separation - Global Crash Entry
+2026-02-05 11:10:27,071 - ERROR - main - Uncaught exception:
+Traceback (most recent call last):
+  File "/Users/porto-mac/Documents/GitHub/QC-Detector/app/utils/image_loader.py", line 38, in run
+    self.signals.image_loaded.emit(self.gdrive_id, pixmap)
+RuntimeError: Signal source has been deleted
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/porto-mac/Documents/GitHub/QC-Detector/app/utils/image_loader.py", line 43, in run
+    self.signals.image_failed.emit(self.gdrive_id, str(e))
+RuntimeError: Signal source has been deleted
+
+2026-02-05 11:10:28,571 - ERROR - main - Uncaught exception:
+Traceback (most recent call last):
+  File "/Users/porto-mac/Documents/GitHub/QC-Detector/app/utils/image_loader.py", line 38, in run
+    self.signals.image_loaded.emit(self.gdrive_id, pixmap)
+RuntimeError: Signal source has been deleted
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/porto-mac/Documents/GitHub/QC-Detector/app/utils/image_loader.py", line 43, in run
+    self.signals.image_failed.emit(self.gdrive_id, str(e))
+RuntimeError: Signal source has been deleted
+
+2026-02-05 11:10:30,537 - ERROR - main - Uncaught exception:
+Traceback (most recent call last):
+  File "/Users/porto-mac/Documents/GitHub/QC-Detector/app/utils/image_loader.py", line 38, in run
+    self.signals.image_loaded.emit(self.gdrive_id, pixmap)
+RuntimeError: Signal source has been deleted
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/porto-mac/Documents/GitHub/QC-Detector/app/utils/image_loader.py", line 43, in run
+    self.signals.image_failed.emit(self.gdrive_id, str(e))
+RuntimeError: Signal source has been deleted
+
+2026-02-05 11:10:30,597 - ERROR - main - Uncaught exception:
+Traceback (most recent call last):
+  File "/Users/porto-mac/Documents/GitHub/QC-Detector/app/utils/image_loader.py", line 38, in run
+    self.signals.image_loaded.emit(self.gdrive_id, pixmap)
+RuntimeError: Signal source has been deleted
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/porto-mac/Documents/GitHub/QC-Detector/app/utils/image_loader.py", line 43, in run
+    self.signals.image_failed.emit(self.gdrive_id, str(e))
+RuntimeError: Signal source has been deleted
+
+2026-02-05 11:10:31,746 - ERROR - main - Uncaught exception:
+Traceback (most recent call last):
+  File "/Users/porto-mac/Documents/GitHub/QC-Detector/app/utils/image_loader.py", line 38, in run
+    self.signals.image_loaded.emit(self.gdrive_id, pixmap)
+RuntimeError: Signal source has been deleted
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/porto-mac/Documents/GitHub/QC-Detector/app/utils/image_loader.py", line 43, in run
+    self.signals.image_failed.emit(self.gdrive_id, str(e))
+RuntimeError: Signal source has been deleted
+
+2026-02-05 11:10:32,724 - ERROR - main - Uncaught exception:
+Traceback (most recent call last):
+  File "/Users/porto-mac/Documents/GitHub/QC-Detector/app/utils/image_loader.py", line 38, in run
+    self.signals.image_loaded.emit(self.gdrive_id, pixmap)
+RuntimeError: Signal source has been deleted
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/porto-mac/Documents/GitHub/QC-Detector/app/utils/image_loader.py", line 43, in run
+    self.signals.image_failed.emit(self.gdrive_id, str(e))
+RuntimeError: Signal source has been deleted
+
+2026-02-05 11:10:33,926 - ERROR - main - Uncaught exception:
+Traceback (most recent call last):
+  File "/Users/porto-mac/Documents/GitHub/QC-Detector/app/utils/image_loader.py", line 38, in run
+    self.signals.image_loaded.emit(self.gdrive_id, pixmap)
+RuntimeError: Signal source has been deleted
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/porto-mac/Documents/GitHub/QC-Detector/app/utils/image_loader.py", line 43, in run
+    self.signals.image_failed.emit(self.gdrive_id, str(e))
+RuntimeError: Signal source has been deleted
+
+2026-02-05 11:10:34,056 - ERROR - main - Uncaught exception:
+Traceback (most recent call last):
+  File "/Users/porto-mac/Documents/GitHub/QC-Detector/app/utils/image_loader.py", line 38, in run
+    self.signals.image_loaded.emit(self.gdrive_id, pixmap)
+RuntimeError: Signal source has been deleted
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/porto-mac/Documents/GitHub/QC-Detector/app/utils/image_loader.py", line 43, in run
+    self.signals.image_failed.emit(self.gdrive_id, str(e))
+RuntimeError: Signal source has been deleted
+
+2026-02-05 11:10:34,446 - ERROR - main - Uncaught exception:
+Traceback (most recent call last):
+  File "/Users/porto-mac/Documents/GitHub/QC-Detector/app/utils/image_loader.py", line 38, in run
+    self.signals.image_loaded.emit(self.gdrive_id, pixmap)
+RuntimeError: Signal source has been deleted
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/porto-mac/Documents/GitHub/QC-Detector/app/utils/image_loader.py", line 43, in run
+    self.signals.image_failed.emit(self.gdrive_id, str(e))
+RuntimeError: Signal source has been deleted
+
+2026-02-05 11:10:35,655 - ERROR - main - Uncaught exception:
+Traceback (most recent call last):
+  File "/Users/porto-mac/Documents/GitHub/QC-Detector/app/utils/image_loader.py", line 38, in run
+    self.signals.image_loaded.emit(self.gdrive_id, pixmap)
+RuntimeError: Signal source has been deleted
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/porto-mac/Documents/GitHub/QC-Detector/app/utils/image_loader.py", line 43, in run
+    self.signals.image_failed.emit(self.gdrive_id, str(e))
+RuntimeError: Signal source has been deleted
+
+2026-02-05 11:10:35,881 - ERROR - main - Uncaught exception:
+Traceback (most recent call last):
+  File "/Users/porto-mac/Documents/GitHub/QC-Detector/app/utils/image_loader.py", line 38, in run
+    self.signals.image_loaded.emit(self.gdrive_id, pixmap)
+RuntimeError: Signal source has been deleted
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/porto-mac/Documents/GitHub/QC-Detector/app/utils/image_loader.py", line 43, in run
+    self.signals.image_failed.emit(self.gdrive_id, str(e))
+RuntimeError: Signal source has been deleted
+
+2026-02-05 11:10:36,078 - ERROR - main - Uncaught exception:
+Traceback (most recent call last):
+  File "/Users/porto-mac/Documents/GitHub/QC-Detector/app/utils/image_loader.py", line 38, in run
+    self.signals.image_loaded.emit(self.gdrive_id, pixmap)
+RuntimeError: Signal source has been deleted
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/porto-mac/Documents/GitHub/QC-Detector/app/utils/image_loader.py", line 43, in run
+    self.signals.image_failed.emit(self.gdrive_id, str(e))
+RuntimeError: Signal source has been deleted
+
+2026-02-05 11:10:36,801 - ERROR - main - Uncaught exception:
+Traceback (most recent call last):
+  File "/Users/porto-mac/Documents/GitHub/QC-Detector/app/utils/image_loader.py", line 38, in run
+    self.signals.image_loaded.emit(self.gdrive_id, pixmap)
+RuntimeError: Signal source has been deleted
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/porto-mac/Documents/GitHub/QC-Detector/app/utils/image_loader.py", line 43, in run
+    self.signals.image_failed.emit(self.gdrive_id, str(e))
+RuntimeError: Signal source has been deleted
+
+2026-02-05 11:10:37,778 - ERROR - main - Uncaught exception:
+Traceback (most recent call last):
+  File "/Users/porto-mac/Documents/GitHub/QC-Detector/app/utils/image_loader.py", line 38, in run
+    self.signals.image_loaded.emit(self.gdrive_id, pixmap)
+RuntimeError: Signal source has been deleted
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/porto-mac/Documents/GitHub/QC-Detector/app/utils/image_loader.py", line 43, in run
+    self.signals.image_failed.emit(self.gdrive_id, str(e))
+RuntimeError: Signal source has been deleted
+
+2026-02-05 11:10:44,745 - ERROR - main - Uncaught exception:
+Traceback (most recent call last):
+  File "/Users/porto-mac/Documents/GitHub/QC-Detector/app/utils/image_loader.py", line 38, in run
+    self.signals.image_loaded.emit(self.gdrive_id, pixmap)
+RuntimeError: Signal source has been deleted
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/porto-mac/Documents/GitHub/QC-Detector/app/utils/image_loader.py", line 43, in run
+    self.signals.image_failed.emit(self.gdrive_id, str(e))
+RuntimeError: Signal source has been deleted
+
+2026-02-05 11:10:45,841 - ERROR - main - Uncaught exception:
+Traceback (most recent call last):
+  File "/Users/porto-mac/Documents/GitHub/QC-Detector/app/utils/image_loader.py", line 38, in run
+    self.signals.image_loaded.emit(self.gdrive_id, pixmap)
+RuntimeError: Signal source has been deleted
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/porto-mac/Documents/GitHub/QC-Detector/app/utils/image_loader.py", line 43, in run
+    self.signals.image_failed.emit(self.gdrive_id, str(e))
+RuntimeError: Signal source has been deleted
+
+2026-02-05 11:10:47,015 - ERROR - main - Uncaught exception:
+Traceback (most recent call last):
+  File "/Users/porto-mac/Documents/GitHub/QC-Detector/app/utils/image_loader.py", line 38, in run
+    self.signals.image_loaded.emit(self.gdrive_id, pixmap)
+RuntimeError: Signal source has been deleted
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/porto-mac/Documents/GitHub/QC-Detector/app/utils/image_loader.py", line 43, in run
+    self.signals.image_failed.emit(self.gdrive_id, str(e))
+RuntimeError: Signal source has been deleted
+
+2026-02-05 11:10:47,785 - ERROR - main - Uncaught exception:
+Traceback (most recent call last):
+  File "/Users/porto-mac/Documents/GitHub/QC-Detector/app/utils/image_loader.py", line 38, in run
+    self.signals.image_loaded.emit(self.gdrive_id, pixmap)
+RuntimeError: Signal source has been deleted
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/porto-mac/Documents/GitHub/QC-Detector/app/utils/image_loader.py", line 43, in run
+    self.signals.image_failed.emit(self.gdrive_id, str(e))
+RuntimeError: Signal source has been deleted
+
+2026-02-05 11:10:47,956 - ERROR - main - Uncaught exception:
+Traceback (most recent call last):
+  File "/Users/porto-mac/Documents/GitHub/QC-Detector/app/utils/image_loader.py", line 38, in run
+    self.signals.image_loaded.emit(self.gdrive_id, pixmap)
+RuntimeError: Signal source has been deleted
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/porto-mac/Documents/GitHub/QC-Detector/app/utils/image_loader.py", line 43, in run
+    self.signals.image_failed.emit(self.gdrive_id, str(e))
+RuntimeError: Signal source has been deleted
+
+2026-02-05 11:10:48,248 - ERROR - main - Uncaught exception:
+Traceback (most recent call last):
+  File "/Users/porto-mac/Documents/GitHub/QC-Detector/app/utils/image_loader.py", line 38, in run
+    self.signals.image_loaded.emit(self.gdrive_id, pixmap)
+RuntimeError: Signal source has been deleted
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/porto-mac/Documents/GitHub/QC-Detector/app/utils/image_loader.py", line 43, in run
+    self.signals.image_failed.emit(self.gdrive_id, str(e))
+RuntimeError: Signal source has been deleted
+
+2026-02-05 11:10:49,436 - ERROR - main - Uncaught exception:
+Traceback (most recent call last):
+  File "/Users/porto-mac/Documents/GitHub/QC-Detector/app/utils/image_loader.py", line 38, in run
+    self.signals.image_loaded.emit(self.gdrive_id, pixmap)
+RuntimeError: Signal source has been deleted
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/porto-mac/Documents/GitHub/QC-Detector/app/utils/image_loader.py", line 43, in run
+    self.signals.image_failed.emit(self.gdrive_id, str(e))
+RuntimeError: Signal source has been deleted
+
+2026-02-05 11:10:51,438 - ERROR - main - Uncaught exception:
+Traceback (most recent call last):
+  File "/Users/porto-mac/Documents/GitHub/QC-Detector/app/utils/image_loader.py", line 38, in run
+    self.signals.image_loaded.emit(self.gdrive_id, pixmap)
+RuntimeError: Signal source has been deleted
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/porto-mac/Documents/GitHub/QC-Detector/app/utils/image_loader.py", line 43, in run
+    self.signals.image_failed.emit(self.gdrive_id, str(e))
+RuntimeError: Signal source has been deleted
+
+2026-02-05 11:10:51,657 - ERROR - main - Uncaught exception:
+Traceback (most recent call last):
+  File "/Users/porto-mac/Documents/GitHub/QC-Detector/app/utils/image_loader.py", line 38, in run
+    self.signals.image_loaded.emit(self.gdrive_id, pixmap)
+RuntimeError: Signal source has been deleted
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/porto-mac/Documents/GitHub/QC-Detector/app/utils/image_loader.py", line 43, in run
+    self.signals.image_failed.emit(self.gdrive_id, str(e))
+RuntimeError: Signal source has been deleted
+

@@ -4,7 +4,7 @@
         "name": "Shift 2",
         "sub_label": "Team A",
         "sku_label": "E1068M",
-        "last_updated": "22/12/2025, 13:52:47",
+        "last_updated": "22/12/2025, 15:24:05",
         "presets": [
             {
                 "sku": "E1068M",
@@ -49,46 +49,60 @@
                 "otorisasi": 0
             },
             {
-                "sku": "EVA Porto 9006M-Black",
+                "sku": "E6003M-Beige",
+                "size": "37",
+                "color_idx": 2,
+                "team": "Team A",
+                "otorisasi": 0
+            },
+            {
+                "sku": "E6003M-Beige",
+                "size": "38",
+                "color_idx": 2,
+                "team": "Team A",
+                "otorisasi": 0
+            },
+            {
+                "sku": "E6003M-Beige",
                 "size": "39",
                 "color_idx": 2,
                 "team": "Team A",
-                "otorisasi": "+0.5"
+                "otorisasi": 0
             },
             {
-                "sku": "EVA Porto 9006M-Black",
+                "sku": "E6003M-Beige",
                 "size": "40",
                 "color_idx": 2,
                 "team": "Team A",
-                "otorisasi": "+0.5"
+                "otorisasi": 0
             },
             {
-                "sku": "EVA Porto 9006M-Black",
+                "sku": "E6003M-Beige",
                 "size": "41",
                 "color_idx": 2,
                 "team": "Team A",
-                "otorisasi": "+0.5"
+                "otorisasi": 0
             },
             {
-                "sku": "EVA Porto 9006M-Black",
+                "sku": "E6003M-Beige",
                 "size": "42",
                 "color_idx": 2,
                 "team": "Team A",
-                "otorisasi": "+0.5"
+                "otorisasi": 0
             },
             {
-                "sku": "EVA Porto 9006M-Black",
+                "sku": "E6003M-Beige",
                 "size": "43",
                 "color_idx": 2,
                 "team": "Team A",
-                "otorisasi": "+0.5"
+                "otorisasi": 0
             },
             {
-                "sku": "EVA Porto 9006M-Black",
+                "sku": "E6003M-Beige",
                 "size": "44",
                 "color_idx": 2,
                 "team": "Team A",
-                "otorisasi": "+0.5"
+                "otorisasi": 0
             },
             {
                 "sku": "EVA Porto 1002M",
@@ -180,13 +194,13 @@
                 "team": "Team A"
             },
             {
-                "code": "EVA Porto 9006M-Black",
-                "coeff": "EVA Porto 9006M-Black",
-                "default_code": "EVA Porto 9006M-Black",
-                "gdrive_id": "1gJAK69UybIAC4prbN8EBvH_9o3JVoisu",
-                "kategori": "Sandal EVA",
-                "otorisasi": "+0.5",
-                "sizes": "39-44",
+                "code": "E6003M-Beige",
+                "coeff": "E6003M-Beige",
+                "default_code": "E6003M-Beige",
+                "gdrive_id": "https://lh3.googleusercontent.com/d/1rPN2md95_3HZ_kTVwfej896HXsHlGq9k=s600",
+                "kategori": "EVA1",
+                "otorisasi": 0,
+                "sizes": "37-44",
                 "team": "Team A"
             },
             {

@@ -124,8 +124,35 @@ class GeneralSettingsPage(QWidget):
         self.crop_right = QLineEdit("0"); self.style_input(self.crop_right); crop_layout.addWidget(self.crop_right)
         crop_layout.addWidget(self.create_styled_label("Crop Top (%):"))
         self.crop_top = QLineEdit("0"); self.style_input(self.crop_top); crop_layout.addWidget(self.crop_top)
-        crop_layout.addWidget(self.create_styled_label("Crop Bottom (%):"))
         self.crop_bottom = QLineEdit("0"); self.style_input(self.crop_bottom); crop_layout.addWidget(self.crop_bottom)
+        
+        # Rotation
+        crop_layout.addWidget(self.create_styled_label("Image Rotation:"))
+        self.rotation_combo = QComboBox()
+        self.rotation_combo.addItems(["0°", "90° CW", "180°", "90° CCW"])
+        self.rotation_combo.setItemData(0, 0); self.rotation_combo.setItemData(1, 90)
+        self.rotation_combo.setItemData(2, 180); self.rotation_combo.setItemData(3, 270)
+        self.style_input(self.rotation_combo)
+        self.rotation_combo.currentIndexChanged.connect(self.update_live_params)
+        crop_layout.addWidget(self.rotation_combo)
+        
+        # Connect crop inputs
+        for inp in [self.crop_left, self.crop_right, self.crop_top, self.crop_bottom]:
+            inp.textChanged.connect(self.update_live_params)
+        
+        # Aspect Ratio Correction
+        crop_layout.addWidget(self.create_styled_label("Aspect Ratio Correction (e.g. 1.0, 16:9, 4:3):"))
+        self.aspect_ratio = QLineEdit("1.0"); self.style_input(self.aspect_ratio); crop_layout.addWidget(self.aspect_ratio)
+        
+        # Force Resolution
+        crop_layout.addWidget(self.create_styled_label("Force Resolution (0 = Auto):"))
+        h_res = QHBoxLayout()
+        self.force_w = QLineEdit("0"); self.style_input(self.force_w); self.force_w.setPlaceholderText("Width")
+        self.force_h = QLineEdit("0"); self.style_input(self.force_h); self.force_h.setPlaceholderText("Height")
+        h_res.addWidget(self.create_styled_label("W:")); h_res.addWidget(self.force_w)
+        h_res.addWidget(self.create_styled_label("H:")); h_res.addWidget(self.force_h)
+        crop_layout.addLayout(h_res)
+        
         right.addWidget(crop_card)
 
         # Lens Distortion Card
@@ -312,6 +339,18 @@ class GeneralSettingsPage(QWidget):
         self.crop_right.setText(str(crop.get("right", 0)))
         self.crop_top.setText(str(crop.get("top", 0)))
         self.crop_bottom.setText(str(crop.get("bottom", 0)))
+        
+        # Load Rotation
+        rot_val = crop.get("rotation", 0)
+        idx = self.rotation_combo.findData(rot_val)
+        if idx != -1: self.rotation_combo.setCurrentIndex(idx)
+        
+        # Load Aspect Ratio
+        self.aspect_ratio.setText(str(s.get("aspect_ratio_correction", 1.0)))
+        
+        # Load Force Resolution
+        self.force_w.setText(str(s.get("force_width", 0)))
+        self.force_h.setText(str(s.get("force_height", 0)))
 
         # Load distortion settings
         dist = s.get("lens_distortion", {})
@@ -355,7 +394,8 @@ class GeneralSettingsPage(QWidget):
                 "left": int(self.crop_left.text() or 0),
                 "right": int(self.crop_right.text() or 0),
                 "top": int(self.crop_top.text() or 0),
-                "bottom": int(self.crop_bottom.text() or 0)
+                "bottom": int(self.crop_bottom.text() or 0),
+                "rotation": self.rotation_combo.currentData()
             }
             
             # Gather distortion params
@@ -371,7 +411,11 @@ class GeneralSettingsPage(QWidget):
                 "cy": float(self.cy.text() or 0)
             }
             
-            self.cap_thread.update_params(crop_params=crop, distortion_params=dist)
+            # Gather aspect ratio
+            aspect_input = self.aspect_ratio.text() 
+            aspect = self.parse_aspect_ratio_input(aspect_input)
+            
+            self.cap_thread.update_params(crop_params=crop, distortion_params=dist, aspect_ratio_correction=aspect)
         except Exception as e:
             print(f"Error updating live params: {e}")
 
@@ -428,8 +472,24 @@ class GeneralSettingsPage(QWidget):
             "left": int(self.crop_left.text() or 0),
             "right": int(self.crop_right.text() or 0),
             "top": int(self.crop_top.text() or 0),
-            "bottom": int(self.crop_bottom.text() or 0)
+            "bottom": int(self.crop_bottom.text() or 0),
+            "rotation": self.rotation_combo.currentData()
         }
+        
+        # Save aspect ratio
+        try: 
+            aspect_input = self.aspect_ratio.text()
+            s["aspect_ratio_correction"] = self.parse_aspect_ratio_input(aspect_input)
+        except: 
+            s["aspect_ratio_correction"] = 1.0
+            
+        # Save Force Resolution
+        try:
+            s["force_width"] = int(self.force_w.text() or 0)
+            s["force_height"] = int(self.force_h.text() or 0)
+        except:
+            s["force_width"] = 0
+            s["force_height"] = 0
         
         # Save distortion settings
         try:
@@ -470,7 +530,13 @@ class GeneralSettingsPage(QWidget):
         crop = settings.get("camera_crop", {})
         distortion = settings.get("lens_distortion", {})
         
-        self.cap_thread = VideoCaptureThread(source, is_ip, crop_params=crop, distortion_params=distortion)
+        crop = settings.get("camera_crop", {})
+        distortion = settings.get("lens_distortion", {})
+        aspect = settings.get("aspect_ratio_correction", 1.0)
+        fw = settings.get("force_width", 0)
+        fh = settings.get("force_height", 0)
+        
+        self.cap_thread = VideoCaptureThread(source, is_ip, crop_params=crop, distortion_params=distortion, aspect_ratio_correction=aspect, force_width=fw, force_height=fh)
         self.cap_thread.frame_ready.connect(self.show_frame); self.cap_thread.start()
 
     def stop_preview(self):
@@ -609,6 +675,25 @@ class GeneralSettingsPage(QWidget):
             
         if hasattr(self, 'init_complete') and self.init_complete:
             self.update_live_params()
+
+    def parse_aspect_ratio_input(self, text):
+        """Parse text input like '16:9', '16/9', '1.77' into a float"""
+        if not text: return 1.0
+        try:
+            # Handle fraction (colon or slash)
+            if ':' in text:
+                parts = text.split(':')
+                if len(parts) == 2:
+                    return float(parts[0]) / float(parts[1])
+            elif '/' in text:
+                parts = text.split('/')
+                if len(parts) == 2:
+                    return float(parts[0]) / float(parts[1])
+            
+            # Handle direct float
+            return float(text)
+        except:
+            return 1.0
 
     def reset_camera_matrix(self):
         self.fx.setText("0.0"); self.fy.setText("0.0"); self.cx.setText("0.0"); self.cy.setText("0.0")

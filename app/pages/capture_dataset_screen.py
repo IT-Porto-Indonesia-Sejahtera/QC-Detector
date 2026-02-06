@@ -362,8 +362,11 @@ class CaptureDatasetScreen(QWidget):
         # Load params (ensure fresh)
         crop = self.settings.get("camera_crop", {})
         distortion = self.settings.get("lens_distortion", {})
+        aspect = self.settings.get("aspect_ratio_correction", 1.0)
+        fw = self.settings.get("force_width", 0)
+        fh = self.settings.get("force_height", 0)
         
-        self.cap_thread = VideoCaptureThread(cam_source, is_ip, crop_params=crop, distortion_params=distortion)
+        self.cap_thread = VideoCaptureThread(cam_source, is_ip, crop_params=crop, distortion_params=distortion, aspect_ratio_correction=aspect, force_width=fw, force_height=fh)
         self.cap_thread.frame_ready.connect(self.on_frame_received)
         self.cap_thread.start()
         

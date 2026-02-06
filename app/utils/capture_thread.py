@@ -9,7 +9,7 @@ class VideoCaptureThread(QThread):
     connection_failed = Signal(str)
     connection_lost = Signal()
 
-    def __init__(self, source, is_ip=False, crop_params=None, distortion_params=None):
+    def __init__(self, source, is_ip=False, crop_params=None, distortion_params=None, aspect_ratio_correction=1.0, force_width=0, force_height=0):
         super().__init__()
         self.source = source
         self.is_ip = is_ip
@@ -21,6 +21,13 @@ class VideoCaptureThread(QThread):
         self.crop_params = crop_params or {}
         # Distortion params: {k1, k2, p1, p2, k3, fx, fy, cx, cy}
         self.distortion_params = distortion_params or {}
+        # Aspect Ratio Correction (Default 1.0 = No change)
+        self.aspect_ratio_correction = aspect_ratio_correction
+        self.rotation = self.crop_params.get("rotation", 0) # 0, 90, 180, 270 (Degrees CW)
+        
+        # Force Resolution
+        self.force_width = force_width
+        self.force_height = force_height
         
         # Pre-calculate camera matrix and dist coeffs if possible
         self.camera_matrix = None
@@ -89,10 +96,10 @@ class VideoCaptureThread(QThread):
             # actually cv2.undistort simply applies it.
             # For better results we usually do:
             # newcameramtx, roi = cv2.getOptimalNewCameraMatrix(cam_mat, self.dist_coeffs, (w,h), 1, (w,h))
-             # dst = cv2.undistort(frame, cam_mat, self.dist_coeffs, None, newcameramtx)
-             # x, y, w, h = roi
-             # dst = dst[y:y+h, x:x+w]
-             # return dst
+            # dst = cv2.undistort(frame, cam_mat, self.dist_coeffs, None, newcameramtx)
+            # x, y, w, h = roi
+            # dst = dst[y:y+h, x:x+w]
+            # return dst
              
             # Simple undistort
             dst = cv2.undistort(frame, cam_mat, self.dist_coeffs, None, cam_mat)
@@ -100,6 +107,19 @@ class VideoCaptureThread(QThread):
         except Exception as e:
             print(f"[CaptureThread] Distortion Error: {e}")
             return frame
+
+    def apply_aspect_ratio_correction(self, frame):
+        """Apply manual aspect ratio correction by resizing width"""
+        if abs(self.aspect_ratio_correction - 1.0) < 0.01:
+            return frame
+            
+        h, w = frame.shape[:2]
+        new_w = int(w * self.aspect_ratio_correction)
+        
+        if new_w <= 0: return frame
+        
+        # Resize using linear interpolation (fast and decent)
+        return cv2.resize(frame, (new_w, h), interpolation=cv2.INTER_LINEAR)
 
     def apply_crop(self, frame):
         """Apply percentage-based cropping to the frame"""
@@ -120,9 +140,25 @@ class VideoCaptureThread(QThread):
             return frame  # Invalid crop, return original
         return frame[y1:y2, x1:x2]
 
+    def apply_rotation(self, frame):
+        """Rotate the frame by 90, 180, or 270 degrees CW"""
+        # Log once if not 0
+        if not hasattr(self, '_rot_log_done') and self.rotation != 0:
+            print(f"[CaptureThread] Applying ROI Rotation: {self.rotation} deg")
+            self._rot_log_done = True
+
+        if self.rotation == 90:
+            return cv2.rotate(frame, cv2.ROTATE_90_CLOCKWISE)
+        elif self.rotation == 180:
+            return cv2.rotate(frame, cv2.ROTATE_180)
+        elif self.rotation == 270:
+            return cv2.rotate(frame, cv2.ROTATE_90_COUNTERCLOCKWISE)
+            
+        return frame
+
     def run(self):
         try:
-            self.cap = open_video_capture(self.source)
+            self.cap = open_video_capture(self.source, force_width=self.force_width, force_height=self.force_height)
             if not self.cap or not self.cap.isOpened():
                 self.connection_failed.emit("Failed to open camera")
                 return
@@ -148,14 +184,24 @@ class VideoCaptureThread(QThread):
                 if not self.running: break
 
                 if ret:
+                    if self.last_frame is None: 
+                        h, w = frame.shape[:2]
+                        print(f"[CaptureThread] Source Resolution: {w}x{h} | Aspect Ratio: {w/h:.3f}")
+
                     # 1. Distortion Correction first (on full frame)
                     frame = self.apply_distortion_correction(frame)
+                    
+                    # 2. Aspect Ratio Correction
+                    frame = self.apply_aspect_ratio_correction(frame)
                     
                     # Store RAW uncropped frame for calibration
                     self.raw_frame = frame.copy()
                     
-                    # 2. Crop/Zoom
+                    # 3. Crop/Zoom
                     frame = self.apply_crop(frame)
+                    
+                    # 4. Rotation (applied on the cropped image)
+                    frame = self.apply_rotation(frame)
                     
                     self.last_frame = frame  # Store for calibration
                     self.frame_ready.emit(frame)
@@ -172,7 +218,7 @@ class VideoCaptureThread(QThread):
             if self.cap:
                 self.cap.release()
 
-    def update_params(self, crop_params=None, distortion_params=None):
+    def update_params(self, crop_params=None, distortion_params=None, aspect_ratio_correction=None):
         """Update crop and distortion parameters dynamically"""
         if crop_params is not None:
             self.crop_params = crop_params
@@ -180,6 +226,15 @@ class VideoCaptureThread(QThread):
         if distortion_params is not None:
             self.distortion_params = distortion_params
             self._prepare_distortion_matrices()
+            
+        if aspect_ratio_correction is not None:
+            self.aspect_ratio_correction = aspect_ratio_correction
+
+        if "rotation" in (crop_params or {}):
+             new_rot = crop_params["rotation"]
+             if new_rot != self.rotation:
+                 print(f"[CaptureThread] Rotation changed: {self.rotation} -> {new_rot} deg")
+                 self.rotation = new_rot
             
     def stop(self):
         self.running = False

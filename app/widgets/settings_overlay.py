@@ -438,23 +438,69 @@ class SettingsOverlay(BaseOverlay):
             help_text="Physical width of the ArUco marker"
         )
         aruco_layout.addLayout(marker_size_row)
-        
-        self.btn_run_calibration = QPushButton("Run Auto Calibration")
-        self.btn_run_calibration.setFixedHeight(UIScaling.scale(45))
-        self.btn_run_calibration.setStyleSheet(f"""
-            QPushButton {{
-                background-color: #9C27B0;
-                color: white;
-                border-radius: {UIScaling.scale(10)}px;
-                font-weight: bold;
-                font-size: {UIScaling.scale_font(14)}px;
-            }}
-            QPushButton:hover {{ background-color: #7B1FA2; }}
-        """)
-        self.btn_run_calibration.clicked.connect(self.run_auto_calibration)
+
+        cam_h_row, self.cam_height_input = self.create_input_row(
+            "Camera Height (mm)",
+            str(self.settings.get("mounting_height", 1000.0)),
+            help_text="Distance from lens to conveyor belt"
+        )
+        aruco_layout.addLayout(cam_h_row)
+
+        obj_h_row, self.obj_thickness_input = self.create_input_row(
+            "Object Thickness (mm)",
+            str(self.settings.get("sandal_thickness", 0.0)),
+            help_text="Approximate height of the object"
+        )
         aruco_layout.addWidget(self.btn_run_calibration)
         
+        # --- NEW: Camera Region of Interest (Crop & Rotation) ---
+        crop_card, crop_layout = self.create_card("Camera Region of Interest")
+        
+        crop_data = self.settings.get("camera_crop", {})
+        
+        # Grid for crops
+        crop_grid = QGridLayout()
+        
+        _, self.crop_left = self.create_input_row("Crop Left (%)", str(crop_data.get("left", 0)))
+        _, self.crop_right = self.create_input_row("Crop Right (%)", str(crop_data.get("right", 0)))
+        _, self.crop_top = self.create_input_row("Crop Top (%)", str(crop_data.get("top", 0)))
+        _, self.crop_bottom = self.create_input_row("Crop Bottom (%)", str(crop_data.get("bottom", 0)))
+        
+        crop_grid.addLayout(self.create_mini_v_input("Left", self.crop_left), 0, 0)
+        crop_grid.addLayout(self.create_mini_v_input("Right", self.crop_right), 0, 1)
+        crop_grid.addLayout(self.create_mini_v_input("Top", self.crop_top), 1, 0)
+        crop_grid.addLayout(self.create_mini_v_input("Bottom", self.crop_bottom), 1, 1)
+        
+        crop_layout.addLayout(crop_grid)
+        
+        # Rotation
+        rot_v = QVBoxLayout()
+        rot_lbl = QLabel("Image Rotation")
+        rot_lbl.setStyleSheet(f"font-weight: bold; font-size: {UIScaling.scale_font(13)}px; color: {self.theme['text_sub']};")
+        rot_v.addWidget(rot_lbl)
+        
+        self.rotation_combo = QComboBox()
+        self.rotation_combo.addItems(["0°", "90° CW", "180°", "90° CCW"])
+        self.rotation_combo.setItemData(0, 0); self.rotation_combo.setItemData(1, 90)
+        self.rotation_combo.setItemData(2, 180); self.rotation_combo.setItemData(3, 270)
+        self.rotation_combo.setStyleSheet(self.line_edit_style)
+        
+        # Set current rotation
+        current_rot = crop_data.get("rotation", 0)
+        idx = self.rotation_combo.findData(current_rot)
+        if idx != -1: self.rotation_combo.setCurrentIndex(idx)
+        
+        self.rotation_combo.currentIndexChanged.connect(self.update_live_params)
+        
+        # Connect crop inputs
+        for inp in [self.crop_left, self.crop_right, self.crop_top, self.crop_bottom]:
+            inp.textChanged.connect(self.update_live_params)
+            
+        rot_v.addWidget(self.rotation_combo)
+        crop_layout.addLayout(rot_v)
+        
         left_col.addWidget(aruco_card)
+        left_col.addWidget(crop_card)
         left_col.addStretch()
 
         # --- RIGHT COLUMN: Parameters & Paths ---
@@ -710,16 +756,21 @@ class SettingsOverlay(BaseOverlay):
         
         btn = QPushButton("📁")
         btn_size = UIScaling.scale(40)
-        btn_font_size = UIScaling.scale_font(18)
-        btn.setFixedSize(btn_size, btn_size)
-        btn.setStyleSheet(self.btn_secondary_style + f"padding: 0; font-size: {btn_font_size}px;")
-        
         row.addWidget(input_field, 1)
         row.addWidget(btn)
         container.addLayout(row)
         
         return (container, input_field)
     
+    def create_mini_v_input(self, label_text, input_field):
+        """Helper to create a small vertical label+input for grid layouts"""
+        vbox = QVBoxLayout()
+        lbl = QLabel(label_text)
+        lbl.setStyleSheet(f"font-size: {UIScaling.scale_font(11)}px; color: {self.theme['text_sub']};")
+        vbox.addWidget(lbl)
+        vbox.addWidget(input_field)
+        return vbox
+
     # -------------------------------------------------------------------------
     # Camera Logic
     # -------------------------------------------------------------------------
@@ -927,11 +978,35 @@ class SettingsOverlay(BaseOverlay):
         # Start background capture
         crop = self.settings.get("camera_crop", {})
         distortion = self.settings.get("lens_distortion", {})
-        self.cap_thread = VideoCaptureThread(source, is_ip, crop_params=crop, distortion_params=distortion)
+        aspect = self.settings.get("aspect_ratio_correction", 1.0)
+        fw = self.settings.get("force_width", 0)
+        fh = self.settings.get("force_height", 0)
+        
+        self.cap_thread = VideoCaptureThread(source, is_ip, crop_params=crop, distortion_params=distortion, aspect_ratio_correction=aspect, force_width=fw, force_height=fh)
         self.cap_thread.frame_ready.connect(self.on_frame_received)
         self.cap_thread.connection_failed.connect(self.on_connection_failed)
         self.cap_thread.connection_lost.connect(self.on_connection_lost)
         self.cap_thread.start()
+
+    def update_live_params(self):
+        """Update running capture thread with current UI values (real-time feedback)"""
+        if not self.cap_thread or not self.cap_thread.isRunning():
+            return
+            
+        try:
+            # Gather crop params
+            crop = {
+                "left": int(self.crop_left.text() or 0),
+                "right": int(self.crop_right.text() or 0),
+                "top": int(self.crop_top.text() or 0),
+                "bottom": int(self.crop_bottom.text() or 0),
+                "rotation": self.rotation_combo.currentData()
+            }
+            # Aspect & Distortion currently stay static in overlay for simplicity 
+            # as they are less frequently changed via overlay than crop/rotation.
+            self.cap_thread.update_params(crop_params=crop)
+        except Exception:
+            pass
 
     def on_frame_received(self, frame):
         # UI Housekeeping on first successful frame
@@ -1002,8 +1077,19 @@ class SettingsOverlay(BaseOverlay):
             self.settings["camera_index"] = source
             
         self.settings["aruco_marker_size"] = float(self.marker_size_input.text() or 50.0)
+        self.settings["mounting_height"] = float(self.cam_height_input.text() or 1000.0)
+        self.settings["sandal_thickness"] = float(self.obj_thickness_input.text() or 0.0)
         self.settings["mm_per_px"] = float(self.mmpx_input.text() or 0.21)
         self.settings["sensor_delay"] = float(self.delay_input.text() or 0.2)
+        
+        # Save Crop & Rotation
+        self.settings["camera_crop"] = {
+            "left": int(self.crop_left.text() or 0),
+            "right": int(self.crop_right.text() or 0),
+            "top": int(self.crop_top.text() or 0),
+            "bottom": int(self.crop_bottom.text() or 0),
+            "rotation": self.rotation_combo.currentData()
+        }
         
         # Save Layout Mode
         mode_idx = self.layout_combo.currentIndex()

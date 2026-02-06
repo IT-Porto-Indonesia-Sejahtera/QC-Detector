@@ -1,9 +1,9 @@
 {
     "camera_index": "ip",
-    "mm_per_px": 0.69142318,
+    "mm_per_px": 0.45270894838268955,
     "sensor_delay": 0.2123459,
     "fetch_status": "success",
-    "layout_mode": "classic",
+    "layout_mode": "split",
     "last_fetched": "06/01/2026 17:04",
     "paths": {
         "profile": "C://User/test/asd/",
@@ -45,13 +45,14 @@
     "plc_result_reg": 13,
     "aruco_marker_size": 50.0,
     "camera_crop": {
-        "left": 0,
-        "right": 0,
-        "top": 0,
-        "bottom": 0
+        "left": 10,
+        "right": 30,
+        "top": 12,
+        "bottom": 12,
+        "rotation": 270
     },
     "lens_distortion": {
-        "k1": 0.0,
+        "k1": -0.2,
         "k2": 0.0,
         "p1": 0.0,
         "p2": 0.0,
@@ -64,8 +65,11 @@
     "dataset_save_measurements": false,
     "last_dataset_path": "C:/QC Detector/QC-Detector/input/temp_assets",
     "detection_model": "standard",
-    "mounting_height": 790.0,
-    "sandal_thickness": 30.0,
+    "mounting_height": 380.0,
+    "sandal_thickness": 7.725,
     "aruco_layout_width": 371.0,
-    "aruco_layout_height": 201.0
+    "aruco_layout_height": 201.0,
+    "aspect_ratio_correction": 1.7777777777777777,
+    "force_width": 0,
+    "force_height": 0
 }

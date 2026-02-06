@@ -9,7 +9,7 @@ from PySide6.QtWidgets import (
     QComboBox, QFrame, QSizePolicy, QGridLayout, QMenu, QWidgetAction,
     QLineEdit, QScrollArea, QApplication, QScroller
 )
-from PySide6.QtCore import Qt, QTimer, QSize, QRect, Signal
+from PySide6.QtCore import Qt, QTimer, QSize, QRect, Signal, QThread, QThread
 from PySide6.QtGui import QPixmap, QImage, QColor, QPainter, QAction, QDoubleValidator, QFont
 
 import numpy as np
@@ -21,6 +21,7 @@ from app.utils.camera_utils import open_video_capture
 from app.utils.capture_thread import VideoCaptureThread
 from app.utils.ui_scaling import UIScaling
 from backend.size_categorization import categorize_measurement, get_category_color
+from app.widgets.settings_overlay import SettingsOverlay
 
 # Global list to hold stuck threads so they aren't garbage collected abruptly
 _zombie_threads = []
@@ -90,6 +91,29 @@ SKU_COLORS = {
     4: "#FF9800"  # Orange
 }
 
+# ---------------------------------------------------------------------
+# Auto Calibration Worker
+# ---------------------------------------------------------------------
+class AutoCalibrationWorker(QThread):
+    finished = Signal(dict)
+    
+    def __init__(self, frame, marker_size):
+        super().__init__()
+        self.frame = frame
+        self.marker_size = marker_size
+        
+    def run(self):
+        try:
+            from backend.aruco_utils import detect_aruco_markers
+            success, result = detect_aruco_markers(self.frame, self.marker_size)
+            if success:
+                self.finished.emit(result)
+            else:
+                self.finished.emit({"success": False})
+        except Exception as e:
+            print(f"[AutoCalib] Error: {e}")
+            self.finished.emit({"success": False})
+
 class LiveCameraScreen(QWidget):
     # Signal for sensor trigger (thread-safe)
     sensor_triggered = Signal()
@@ -134,6 +158,14 @@ class LiveCameraScreen(QWidget):
         self.live_frame = None
         self.captured_frame = None
         self.is_paused = False # If True, show captured_frame instead of live_frame
+
+        # Auto-Calibration State
+        self.autocalib_worker = None
+        self.frame_counter = 0
+        self.last_autocalib_time = 0
+        self.autocalib_cooldown = 5.0 # Seconds
+        self.autocalib_msg_timer = QTimer()
+        self.autocalib_msg_timer.timeout.connect(self.hide_autocalib_msg)
 
         # Process State (Added from instruction)
         self.camera_thread = None
@@ -198,9 +230,10 @@ class LiveCameraScreen(QWidget):
         if not PasswordDialog.authenticate(self, password_type="settings"):
             return  # Password incorrect or cancelled
         
-        # Navigate to General Settings Page
-        if self.parent_widget:
-            self.parent_widget.go_to_settings(from_live=True)
+        # Open Quick Settings Overlay
+        overlay = SettingsOverlay(self)
+        overlay.settings_saved.connect(self.refresh_data)
+        overlay.show_overlay()
 
     def init_ui(self):
         # Use theme variables
@@ -368,6 +401,14 @@ class LiveCameraScreen(QWidget):
         else:
             self.render_presets()
             self.update_info_bar()
+            
+        # Update running camera thread if active
+        if self.cap_thread and self.cap_thread.isRunning():
+            self.cap_thread.update_params(
+                crop_params=self.camera_crop,
+                distortion_params=self.lens_distortion,
+                aspect_ratio_correction=self.aspect_ratio_correction
+            )
 
     def update_info_bar(self):
         if self.active_profile_data:
@@ -395,6 +436,9 @@ class LiveCameraScreen(QWidget):
             self.detection_model = self.settings.get("detection_model", "standard")
             self.mounting_height = self.settings.get("mounting_height", 1000.0)
             self.sandal_thickness = self.settings.get("sandal_thickness", 15.0)
+            self.aspect_ratio_correction = self.settings.get("aspect_ratio_correction", 1.0)
+            self.force_width = self.settings.get("force_width", 0)
+            self.force_height = self.settings.get("force_height", 0)
         else:
             self.mm_per_px = 0.215984148
             self.camera_index = 0
@@ -407,6 +451,9 @@ class LiveCameraScreen(QWidget):
             self.detection_model = "standard"
             self.mounting_height = 1000.0
             self.sandal_thickness = 15.0
+            self.aspect_ratio_correction = 1.0
+            self.force_width = 0
+            self.force_height = 0
 
     def setup_minimal_layout(self):
         """Minimal Layout: Full-screen preview with overlay controls."""
@@ -1165,10 +1212,104 @@ class LiveCameraScreen(QWidget):
         """Called by VideoCaptureThread when a new frame is available"""
         self.live_frame = frame
         
-        # We don't display it live on the main preview, 
-        # but we could if we wanted to. 
-        # The logic here is that we only show the "Captured" (paused) frame.
-        pass
+        # Display live frame if not paused
+        if not self.is_paused:
+             self.show_image(frame)
+        
+        # ---------------------------------------------------------------------
+        # Auto-Recalibration Logic
+        # ---------------------------------------------------------------------
+        self.frame_counter += 1
+        if self.frame_counter % 10 == 0:  # Check every 10 frames
+            self.check_auto_calibration(frame)
+
+    def check_auto_calibration(self, frame):
+        import time
+        now = time.time()
+        
+        # Cooldown check
+        if (now - self.last_autocalib_time) < self.autocalib_cooldown:
+            return
+            
+        # Don't start if worker is busy
+        if self.autocalib_worker is not None and self.autocalib_worker.isRunning():
+            return
+            
+        marker_size = self.settings.get("aruco_marker_size", 50.0)
+        print(f"[AutoCalib] Checking... (Size: {marker_size})") # Debug log
+        
+        # Run in background
+        self.autocalib_worker = AutoCalibrationWorker(frame.copy(), marker_size)
+        self.autocalib_worker.finished.connect(self.on_autocalib_finished)
+        self.autocalib_worker.start()
+        
+    def on_autocalib_finished(self, result):
+        if not result.get("success", False):
+            return
+            
+        count = result.get("marker_count", 0)
+        print(f"[AutoCalib] Found {count} markers") 
+
+        # strict trigger: MUST be 8 markers
+        if count != 8:
+            return
+            
+        # Stability check
+        if result.get("stability", 0) < 60.0 or result.get("is_tilted", False):
+            print(f"[AutoCalib] looks tilted")
+            return
+            
+        raw_mmpx = result.get("mm_per_px", 0)
+        if raw_mmpx <= 0:
+            print(f"[AutoCalib] raw mm/px less than 0")
+            return
+
+        # Parallax Correction
+        cam_h = self.settings.get("mounting_height", 1000.0)
+        obj_h = self.settings.get("sandal_thickness", 0.0)
+        
+        if cam_h > 0:
+            effective_mmpx = raw_mmpx * ((cam_h - obj_h) / cam_h)
+        else:
+            effective_mmpx = raw_mmpx
+            
+        # Hysteresis (1% change threshold)
+        current = self.mm_per_px or 1.0  # Avoid div/0
+        diff_percent = abs(effective_mmpx - current) / current
+        print(f"[AutoCalib] diff percent : {diff_percent}")
+        
+        if diff_percent > 0.01:
+            import time
+            print(f"[AutoCalib] Updated: Raw={raw_mmpx:.4f}, Eff={effective_mmpx:.4f} (Diff: {diff_percent:.2%})")
+            self.mm_per_px = effective_mmpx
+            self.last_autocalib_time = time.time()
+            
+            # Update settings in memory and persist
+            self.settings["mm_per_px"] = effective_mmpx
+            
+            # Persist to disk
+            try:
+                # We need to construct the full dict to save, as self.settings might be incomplete or we want to be safe
+                # But self.settings is loaded from JsonUtility, so it should be fine.
+                JsonUtility.save_to_json(SETTINGS_FILE, self.settings)
+            except Exception as e:
+                print(f"[AutoCalib] Failed to save settings: {e}")
+                
+            # Show UI feedback
+            self.show_autocalib_msg(f"Auto-Calibrated: {effective_mmpx:.4f} mm/px")
+
+    def show_autocalib_msg(self, msg):
+        print(f"[AutoCalib] SHOW MSG: {msg}")
+        # Use show_status which uses the overlay widget
+        self.show_status(msg, is_error=False)
+        self.status_overlay.setStyleSheet("background-color: rgba(76, 175, 80, 0.9); color: white; border-radius: 8px; font-weight: bold; font-size: 24px; padding: 10px;")
+        
+        # Override the timer to hide it
+        self.autocalib_msg_timer.start(4000) 
+        
+    def hide_autocalib_msg(self):
+        self.autocalib_msg_timer.stop()
+        self.hide_status()
 
     def show_image(self, frame):
         if frame is None: return
@@ -1248,8 +1389,14 @@ class LiveCameraScreen(QWidget):
             
             is_ip = not isinstance(source, int)
             
+            
             # Start background capture with crop params
-            self.cap_thread = VideoCaptureThread(source, is_ip, crop_params=self.camera_crop, distortion_params=self.lens_distortion)
+            self.cap_thread = VideoCaptureThread(source, is_ip, 
+                                                 crop_params=self.camera_crop, 
+                                                 distortion_params=self.lens_distortion, 
+                                                 aspect_ratio_correction=getattr(self, 'aspect_ratio_correction', 1.0),
+                                                 force_width=getattr(self, 'force_width', 0),
+                                                 force_height=getattr(self, 'force_height', 0))
             self.cap_thread.frame_ready.connect(self.on_frame_received)
             self.cap_thread.connection_failed.connect(self.on_camera_connection_failed)
             self.cap_thread.start()

@@ -2,7 +2,7 @@ import os
 import cv2
 import platform
 
-def open_video_capture(source, buffer_size=1, timeout_ms=3000):
+def open_video_capture(source, buffer_size=1, timeout_ms=3000, force_width=0, force_height=0):
     """
     Unified function to open a cv2.VideoCapture with proper settings for RTSP, HTTP, and USB cameras.
     
@@ -10,6 +10,8 @@ def open_video_capture(source, buffer_size=1, timeout_ms=3000):
         source: Camera index (int), RTSP/HTTP URL (str), or a preset dict.
         buffer_size: Buffer size for the capture. Default is 1 for low latency.
         timeout_ms: Timeout in milliseconds for opening and reading.
+        force_width: Forced width (0 for auto).
+        force_height: Forced height (0 for auto).
         
     Returns:
         cv2.VideoCapture: The opened capture object.
@@ -82,6 +84,12 @@ def open_video_capture(source, buffer_size=1, timeout_ms=3000):
 
     # 5. Apply properties
     if cap.isOpened():
+        # Set Resolution if requested (Must be before buffer size for some backends)
+        if force_width > 0 and force_height > 0:
+            print(f"[DEBUG] CameraUtils: Forcing resolution to {force_width}x{force_height}")
+            cap.set(cv2.CAP_PROP_FRAME_WIDTH, force_width)
+            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, force_height)
+            
         cap.set(cv2.CAP_PROP_BUFFERSIZE, buffer_size)
         # These might still be useful for some backends
         cap.set(cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, timeout_ms)
