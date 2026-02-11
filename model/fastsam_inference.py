@@ -128,7 +128,7 @@ def segment_image(image, conf=0.4, iou=0.9):
     # Run inference
     results = model(
         img,
-        device='cpu',
+        device='cuda' if __import__('torch').cuda.is_available() else 'cpu',
         retina_masks=True,
         imgsz=inference_size,
         conf=conf,

@@ -80,7 +80,7 @@ def segment_image(image, conf=0.25):
     # Run inference
     results = model(
         img,
-        device='cpu',
+        device='cuda' if __import__('torch').cuda.is_available() else 'cpu',
         conf=conf,
         verbose=False
     )

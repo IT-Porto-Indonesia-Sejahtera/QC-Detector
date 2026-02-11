@@ -17,6 +17,18 @@ _yolo_model = None
 _sam_model = None
 
 
+def _get_device():
+    """Auto-detect CUDA GPU, fallback to CPU."""
+    try:
+        import torch
+        if torch.cuda.is_available():
+            print(f"[Advanced] Using GPU: {torch.cuda.get_device_name(0)}")
+            return 'cuda'
+    except ImportError:
+        pass
+    return 'cpu'
+
+
 def get_yolo_model():
     """
     Load YOLOv8-X detection model (lazy loading with caching).
@@ -123,7 +135,7 @@ def segment_image(image, conf=0.25):
 
     yolo_results = yolo_model(
         img,
-        device='cpu',
+        device=_get_device(),
         conf=conf,
         verbose=False
     )
