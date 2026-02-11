@@ -16,12 +16,13 @@ def find_largest_contours(mask, num_contours=2):
     cnts = sorted(cnts, key=lambda c: cv2.contourArea(c), reverse=True)
     return cnts[:num_contours]
 
-def measure_live_sandals(input_data, mm_per_px=None, draw_output=True, save_out=None, use_sam=False, use_yolo=False):
+def measure_live_sandals(input_data, mm_per_px=None, draw_output=True, save_out=None, use_sam=False, use_yolo=False, use_advanced=False):
     """
     Live camera measurement with improved detection.
     
     Args:
         use_yolo: If True, use YOLOv8-seg for detection (recommended)
+        use_advanced: If True, use YOLOv8-X + SAM pipeline
     
     Returns:
         results list, processed image array (with text drawn)
@@ -36,7 +37,22 @@ def measure_live_sandals(input_data, mm_per_px=None, draw_output=True, save_out=
 
     inference_time = 0
     
-    if use_yolo:
+    if use_advanced:
+        # Use Advanced (YOLOv8-X + SAM)
+        try:
+            from .advanced_inference import segment_image as advanced_segment
+            mask, contour, inference_time = advanced_segment(img)
+            if contour is not None:
+                contours = [contour]
+            else:
+                print("[LIVE] Advanced failed, using auto_select_mask")
+                mask = auto_select_mask(img)
+                contours = find_largest_contours(mask, num_contours=1)
+        except ImportError as e:
+            print(f"[LIVE] Advanced not available: {e}, using auto_select_mask")
+            mask = auto_select_mask(img)
+            contours = find_largest_contours(mask, num_contours=1)
+    elif use_yolo:
         # Use YOLO-Seg (recommended for all objects)
         try:
             from .yolo_inference import segment_image
@@ -97,7 +113,9 @@ def measure_live_sandals(input_data, mm_per_px=None, draw_output=True, save_out=
             pass_fail = "UNKNOWN"
 
         # Draw contour + box with method-specific colors
-        if use_yolo:
+        if use_advanced:
+            contour_color = (0, 255, 128)  # Green-Cyan for Advanced
+        elif use_yolo:
             contour_color = (0, 165, 255)  # Orange for YOLO
         elif use_sam:
             contour_color = (255, 0, 255)  # Magenta for SAM
@@ -115,7 +133,9 @@ def measure_live_sandals(input_data, mm_per_px=None, draw_output=True, save_out=
             cv2.rectangle(out, (10, 10), (320, 155), (0, 0, 0), -1)
 
             method_text = "Method: "
-            if use_yolo:
+            if use_advanced:
+                method_text += "Advanced (YOLO-X + SAM)"
+            elif use_yolo:
                 method_text += "YOLO-Seg (AI)"
             elif use_sam:
                 method_text += "FastSAM (AI)"
@@ -136,7 +156,7 @@ def measure_live_sandals(input_data, mm_per_px=None, draw_output=True, save_out=
                         0.5, (200, 200, 200), 1)
             
             inf_text = f"L: {real_length_cm:.2f}cm W: {real_width_cm:.2f}cm"
-            if use_sam and inference_time > 0:
+            if (use_sam or use_advanced) and inference_time > 0:
                 inf_text += f" ({inference_time:.0f}ms)"
             
             cv2.putText(out, inf_text,
@@ -152,7 +172,7 @@ def measure_live_sandals(input_data, mm_per_px=None, draw_output=True, save_out=
             "real_length_cm": float(real_length_cm) if real_length_cm else None,
             "real_width_cm": float(real_width_cm) if real_width_cm else None,
             "pass_fail": pass_fail,
-            "inference_time_ms": inference_time if use_sam else 0
+            "inference_time_ms": inference_time if (use_sam or use_advanced or use_yolo) else 0
         })
 
     if save_out:

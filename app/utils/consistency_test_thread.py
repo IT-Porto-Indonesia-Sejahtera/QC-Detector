@@ -20,7 +20,7 @@ class ConsistencyTestThread(QThread):
         super().__init__()
         self.video_thread = video_thread
         self.num_attempts = num_attempts
-        self.model_type = model_type  # 'standard', 'yolo', 'sam'
+        self.model_type = model_type  # 'standard', 'yolo', 'sam', 'advanced'
         self.output_dir = output_dir
         self.mm_per_px = mm_per_px
         self.capture_images = capture_images
@@ -77,6 +77,7 @@ class ConsistencyTestThread(QThread):
             # Determine flags based on model_type
             use_yolo = (self.model_type == 'yolo')
             use_sam = (self.model_type == 'sam')
+            use_advanced = (self.model_type == 'advanced')
             
             # Run measurement
             # Note: measure_live_sandals returns (results_list, processed_image)
@@ -85,7 +86,8 @@ class ConsistencyTestThread(QThread):
                 mm_per_px=self.mm_per_px, 
                 draw_output=True if self.capture_images else False, 
                 use_yolo=use_yolo, 
-                use_sam=use_sam
+                use_sam=use_sam,
+                use_advanced=use_advanced
             )
             
             entry = {

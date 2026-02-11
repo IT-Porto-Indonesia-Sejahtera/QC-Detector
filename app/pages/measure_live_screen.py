@@ -557,6 +557,7 @@ class LiveCameraScreen(QWidget):
         self.model_combo.addItem("YOLO-Seg (AI - Recommended)", "yolo")
         self.model_combo.addItem("Standard (Beige Ready)", "standard")
         self.model_combo.addItem("FastSAM (AI)", "sam")
+        self.model_combo.addItem("Advanced (YOLO-X + SAM)", "advanced")
         # Find index for current model
         idx = self.model_combo.findData(self.detection_model)
         if idx != -1: self.model_combo.setCurrentIndex(idx)
@@ -709,6 +710,7 @@ class LiveCameraScreen(QWidget):
         self.model_combo.addItem("YOLO-Seg (AI)", "yolo")
         self.model_combo.addItem("Standard", "standard")
         self.model_combo.addItem("FastSAM", "sam")
+        self.model_combo.addItem("Advanced (YOLO-X + SAM)", "advanced")
         self.model_combo.setFixedWidth(UIScaling.scale(120))
         self.model_combo.setFixedHeight(ctrl_btn_size)
         
@@ -1055,13 +1057,16 @@ class LiveCameraScreen(QWidget):
         # Determine model
         use_sam = False
         use_yolo = False
+        use_advanced = False
         if hasattr(self, 'model_combo'):
             current_model = self.model_combo.currentData()
             use_yolo = (current_model == "yolo")
             use_sam = (current_model == "sam")
+            use_advanced = (current_model == "advanced")
         else:
             use_yolo = (self.detection_model == "yolo")
             use_sam = (self.detection_model == "sam")
+            use_advanced = (self.detection_model == "advanced")
             
         try:
             # Apply Height Correction (Parallax)
@@ -1077,7 +1082,8 @@ class LiveCameraScreen(QWidget):
                 draw_output=True,
                 save_out=None, # Optional: save to file
                 use_sam=use_sam,
-                use_yolo=use_yolo
+                use_yolo=use_yolo,
+                use_advanced=use_advanced
             )
             
             self.captured_frame = processed
