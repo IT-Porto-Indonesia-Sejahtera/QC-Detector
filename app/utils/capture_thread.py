@@ -81,6 +81,13 @@ class VideoCaptureThread(QThread):
             fy = w # Square pixels usually
             cx = w / 2.0
             cy = h / 2.0
+            
+            if not hasattr(self, '_matrix_logged'):
+                print(f"[CaptureThread] Matrix Auto-Estimation (Live):")
+                print(f"  - Focal Length (fx/fy): {fx}")
+                print(f"  - Optical Center (cx/cy): {cx}, {cy}")
+                self._matrix_logged = True
+
             cam_mat = np.array([
                 [fx, 0, cx],
                 [0, fy, cy],

@@ -184,10 +184,11 @@ class GeneralSettingsPage(QWidget):
         # Camera Matrix
         dist_layout.addWidget(self.create_styled_label("Camera Matrix (Advanced):"))
         hbox_cam = QHBoxLayout()
-        self.btn_auto_matrix = QPushButton("Auto-Estimate Matrix")
+        self.btn_auto_matrix = QPushButton("Auto-Estimate Matrix: OFF")
+        self.btn_auto_matrix.setCheckable(True)
         self.style_button(self.btn_auto_matrix)
-        self.btn_auto_matrix.setToolTip("Set to 0.0 to allow auto-estimation based on image size")
-        self.btn_auto_matrix.clicked.connect(self.reset_camera_matrix)
+        self.btn_auto_matrix.setToolTip("Enable to automatically estimate center and focal length from resolution")
+        self.btn_auto_matrix.clicked.connect(self.on_auto_matrix_toggle)
         hbox_cam.addWidget(self.btn_auto_matrix)
         dist_layout.addLayout(hbox_cam)
 
@@ -367,6 +368,11 @@ class GeneralSettingsPage(QWidget):
         self.cx.setText(str(dist.get("cx", 0.0)))
         self.cy.setText(str(dist.get("cy", 0.0)))
 
+        # Load Auto-Matrix state
+        is_auto = s.get("auto_estimate_matrix", False)
+        self.btn_auto_matrix.setChecked(is_auto)
+        self.update_auto_matrix_ui(is_auto)
+
         self.update_preset_combo()
         cam_idx = s.get("camera_index", 0)
         if cam_idx == "ip": 
@@ -535,6 +541,8 @@ class GeneralSettingsPage(QWidget):
             }
         except:
              pass 
+
+        s["auto_estimate_matrix"] = self.btn_auto_matrix.isChecked()
              
         return s
 
@@ -719,8 +727,30 @@ class GeneralSettingsPage(QWidget):
         except:
             return 1.0
 
-    def reset_camera_matrix(self):
-        self.fx.setText("0.0"); self.fy.setText("0.0"); self.cx.setText("0.0"); self.cy.setText("0.0")
+    def on_auto_matrix_toggle(self, checked):
+        if checked:
+            # Clear fields and disable
+            self.fx.setText("0.0"); self.fy.setText("0.0"); self.cx.setText("0.0"); self.cy.setText("0.0")
+        
+        self.update_auto_matrix_ui(checked)
+        self.update_live_params()
+
+    def update_auto_matrix_ui(self, is_auto):
+        if is_auto:
+            self.btn_auto_matrix.setText("Auto-Estimate Matrix: ON")
+            self.btn_auto_matrix.setStyleSheet(self.btn_auto_matrix.styleSheet().replace("#E8E8ED", "#4CAF50").replace("#007AFF", "white"))
+        else:
+            self.btn_auto_matrix.setText("Auto-Estimate Matrix: OFF")
+            self.style_button(self.btn_auto_matrix)
+            
+        # Disable/Enable manual fields
+        for field in [self.fx, self.fy, self.cx, self.cy]:
+            field.setReadOnly(is_auto)
+            field.setEnabled(not is_auto)
+            if is_auto:
+                field.setStyleSheet(field.styleSheet().replace("background: white", f"background: {self.theme['bg_panel']}"))
+            else:
+                field.setStyleSheet(field.styleSheet().replace(f"background: {self.theme['bg_panel']}", "background: white"))
 
     def fetch_sku_data(self):
         """Fetch product SKU data from database asynchronously."""
