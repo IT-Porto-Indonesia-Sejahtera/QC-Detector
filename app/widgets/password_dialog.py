@@ -115,16 +115,7 @@ class PasswordDialog(BaseOverlay):
         btn_layout.addWidget(btn_cancel)
         btn_layout.addWidget(btn_ok)
         layout.addLayout(btn_layout)
-        
-        # Hint label - different for each type
-        if self.password_type == "preset":
-            hint = QLabel("Default password: admin")
-        else:
-            hint = QLabel("Default password: settings")
-        hint_font_size = UIScaling.scale_font(14)
-        hint.setStyleSheet(f"color: {self.theme['text_sub']}; font-size: {hint_font_size}px;")
-        hint.setAlignment(Qt.AlignCenter)
-        layout.addWidget(hint)
+        # Hint label removed as requested
         
         layout.addStretch()
         
@@ -132,35 +123,33 @@ class PasswordDialog(BaseOverlay):
         self.password_input.setFocus()
         
     def verify_password(self):
-        """Verify the entered password against stored hash"""
-        from project_utilities.json_utility import JsonUtility
-        import os
-        
-        # Load password hashes from settings
-        settings_file = os.path.join("output", "settings", "auth.json")
-        settings = JsonUtility.load_from_json(settings_file)
-        
-        # Check if we need to migrate from old format or create new
-        if not settings or "preset_hash" not in settings or "settings_hash" not in settings:
-            # First time or old format - set default passwords
-            preset_hash = hashlib.sha256("admin".encode()).hexdigest()
-            settings_hash = hashlib.sha256("settings".encode()).hexdigest()
-            settings = {
-                "preset_hash": preset_hash,
-                "settings_hash": settings_hash
-            }
-            JsonUtility.save_to_json(settings_file, settings)
+        """Verify the entered password against stored hash in environment"""
+        from app.utils.auth_utils import AuthUtils
         
         # Hash the entered password
         entered_password = self.password_input.text()
-        entered_hash = hashlib.sha256(entered_password.encode()).hexdigest()
         
         # Get the correct hash for this password type
-        hash_key = f"{self.password_type}_hash"
-        stored_hash = settings.get(hash_key)
+        if self.password_type == "preset":
+            stored_hash = AuthUtils.get_admin_hash()
+            default_password = "admin"
+        else:
+            stored_hash = AuthUtils.get_setting_hash()
+            default_password = "settings"
         
-        # Compare hashes
-        if entered_hash == stored_hash:
+        # Compare using AuthUtils
+        # Fallback to local default if env hash is not set (during transition)
+        if not stored_hash:
+            import hashlib
+            # Old logic fallback if .env is not yet configured with hashes
+            entered_hash = hashlib.sha256(entered_password.encode()).hexdigest()
+            # We still use the old "admin"/"settings" default if no hash in env
+            expected_hash = hashlib.sha256(default_password.encode()).hexdigest()
+            is_correct = (entered_hash == expected_hash)
+        else:
+            is_correct = AuthUtils.verify_password(entered_password, stored_hash)
+        
+        if is_correct:
             self.password_correct = True
             self.authenticated.emit()
             self.close_overlay()
