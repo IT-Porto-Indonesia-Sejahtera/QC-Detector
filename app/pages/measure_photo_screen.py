@@ -57,6 +57,7 @@ class MeasurePhotoScreen(QWidget):
         self.method_combo.addItem("Standard (Contour)", "standard")
         self.method_combo.addItem("SAM (AI - FastSAM)", "sam")
         self.method_combo.addItem("YOLO-Seg (AI - Recommended)", "yolo")
+        self.method_combo.addItem("Advanced (YOLO-X + SAM)", "advanced")
         self.method_combo.setMinimumWidth(UIScaling.scale(180))
         self.method_combo.setStyleSheet(f"""
             QComboBox {{
@@ -199,8 +200,11 @@ class MeasurePhotoScreen(QWidget):
         method = self.method_combo.currentData()
         use_sam = (method == "sam")
         use_yolo = (method == "yolo")
+        use_advanced = (method == "advanced")
         
-        if use_yolo:
+        if use_advanced:
+            method_name = "Advanced (YOLO-X + SAM)"
+        elif use_yolo:
             method_name = "YOLO-Seg (AI)"
         elif use_sam:
             method_name = "SAM (AI)"
@@ -215,11 +219,12 @@ class MeasurePhotoScreen(QWidget):
                 draw_output=False,
                 save_out=output_path,
                 use_sam=use_sam,
-                use_yolo=use_yolo
+                use_yolo=use_yolo,
+                use_advanced=use_advanced
             )
 
             # Show inference time if using AI methods
-            if (use_sam or use_yolo) and results and 'inference_time_ms' in results[0]:
+            if (use_sam or use_yolo or use_advanced) and results and 'inference_time_ms' in results[0]:
                 print(f"[{method_name}] Inference time: {results[0]['inference_time_ms']:.1f}ms")
             
             print("[RESULT]", results)

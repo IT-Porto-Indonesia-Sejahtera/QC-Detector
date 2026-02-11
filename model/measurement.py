@@ -176,7 +176,7 @@ def refined_endpoints(contour):
     length_px = right - left
     return length_px
 
-def measure_sandals(path, mm_per_px=None, draw_output=True, save_out=None, use_sam=False, use_yolo=False):
+def measure_sandals(path, mm_per_px=None, draw_output=True, save_out=None, use_sam=False, use_yolo=False, use_advanced=False):
     img = cv2.imread(path)
     if img is None:
         raise FileNotFoundError(f"Cannot read image: {path}")
@@ -184,8 +184,29 @@ def measure_sandals(path, mm_per_px=None, draw_output=True, save_out=None, use_s
     out = img.copy()
     results = []
     inference_time = 0
+    detection_method = 'standard'
     
-    if use_yolo:
+    if use_advanced:
+        detection_method = 'advanced (yolox+sam)'
+        try:
+            from .advanced_inference import segment_image as advanced_segment
+            mask, contour, inference_time = advanced_segment(img)
+            
+            if contour is not None:
+                contours = [contour]
+            else:
+                print("[Advanced] No contour found, falling back to standard method")
+                mask = auto_select_mask(img)
+                contours = find_largest_contours(mask, num_contours=1)
+                detection_method = 'standard (fallback)'
+                
+        except ImportError as e:
+            print(f"[Advanced] Not available: {e}, using standard method")
+            mask = auto_select_mask(img)
+            contours = find_largest_contours(mask, num_contours=1)
+            detection_method = 'standard (fallback)'
+    elif use_yolo:
+        detection_method = 'yolo-seg'
         try:
             from .yolo_inference import segment_image
             mask, contour, inference_time = segment_image(img)
@@ -226,7 +247,7 @@ def measure_sandals(path, mm_per_px=None, draw_output=True, save_out=None, use_s
             'real_length_mm': float(real_length) if real_length else None,
             'real_width_mm': float(real_width) if real_width else None,
             'contour_area_px': float(contour_area),
-            'detection_method': 'yolo-seg' if use_yolo else 'standard'
+            'detection_method': detection_method
         }
         
         if inference_time > 0:
