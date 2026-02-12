@@ -210,6 +210,124 @@ def run_app():
     QGuiApplication.setHighDpiScaleFactorRoundingPolicy(Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
 
     app = QApplication(sys.argv)
+    
+    # Global Stylesheet for consistent UI
+    # Focus on QComboBox, ScrollBars, and general app feel
+    app.setStyleSheet("""
+        /* Global Font/Base */
+        QWidget {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica', 'Arial', sans-serif;
+        }
+
+        /* --- Global QComboBox Styling --- */
+        QComboBox {
+            background-color: white;
+            border: 1px solid #D1D1D6;
+            border-radius: 8px;
+            padding: 5px 10px;
+            color: #1C1C1E;
+            font-size: 14px;
+        }
+
+        QComboBox:hover {
+            border: 1px solid #007AFF;
+            background-color: #F8F9FA;
+        }
+
+        QComboBox:on { /* shift the text when the popup opens */
+            padding-top: 3px;
+            padding-left: 4px;
+        }
+
+        QComboBox::drop-down {
+            subcontrol-origin: padding;
+            subcontrol-position: top right;
+            width: 30px;
+            border-left-width: 0px;
+            border-top-right-radius: 8px;
+            border-bottom-right-radius: 8px;
+            background: transparent; 
+        }
+
+        QComboBox::down-arrow {
+            /* Using none allows Qt to draw default arrow if image is none. 
+               Ideally use an SVG icon here for full customization. */
+            width: 12px;
+            height: 12px;
+            image: none;
+            border-image: none;
+        }
+        
+        /* THE POPUP LIST - FIX WHITE ON WHITE */
+        QComboBox QAbstractItemView {
+            border: 1px solid #D1D1D6;
+            background-color: white;   /* Light background */
+            color: #1C1C1E;            /* Dark text */
+            selection-background-color: #007AFF;
+            selection-color: white;
+            outline: none;
+            border-radius: 8px;
+            padding: 4px;
+        }
+        
+        /* CALENDAR / DATE EDIT SCROLLING FIX */
+        QCalendarWidget QWidget#qt_calendar_navigationbar { 
+            background-color: white; 
+        }
+        QCalendarWidget QToolButton {
+            color: black;
+            font-weight: bold;
+            icon-size: 24px;
+        }
+        QCalendarWidget QAbstractItemView {
+            background-color: white;
+            color: black;  /* Fix for invisible weekdays */
+            selection-background-color: #007AFF;
+            selection-color: white;
+        }
+
+        /* --- Global Scrollbar Styling (Minimalist) --- */
+        QScrollBar:vertical {
+            border: none;
+            background: #F2F2F7;
+            width: 10px;
+            margin: 0px;
+            border-radius: 5px;
+        }
+        QScrollBar:handle:vertical {
+            background: #D1D1D6;
+            min-height: 20px;
+            border-radius: 5px;
+        }
+        QScrollBar:handle:vertical:hover {
+            background: #A1A1A6;
+        }
+        QScrollBar:add-line:vertical, QScrollBar::sub-line:vertical {
+            border: none;
+            background: none;
+        }
+        
+        QScrollBar:horizontal {
+            border: none;
+            background: #F2F2F7;
+            height: 10px;
+            margin: 0px;
+            border-radius: 5px;
+        }
+        QScrollBar::handle:horizontal {
+            background: #D1D1D6;
+            min-width: 20px;
+            border-radius: 5px;
+        }
+        QScrollBar::handle:horizontal:hover {
+            background: #A1A1A6;
+        }
+        QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
+            border: none;
+            background: none;
+        }
+    """)
+
     window = MainWindow()
     window.showMaximized()
     sys.exit(app.exec())

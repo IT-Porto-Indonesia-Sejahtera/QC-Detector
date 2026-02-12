@@ -5,13 +5,15 @@ from datetime import datetime
 import cv2
 from PySide6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QLineEdit,
-    QComboBox, QFrame, QSizePolicy, QScrollArea, QWidget, QPlainTextEdit
+    QComboBox, QFrame, QSizePolicy, QScrollArea, QWidget, QPlainTextEdit,
+    QGridLayout, QCheckBox
 )
 from PySide6.QtCore import Qt, Signal, QTimer, QThread
 from PySide6.QtGui import QFont, QImage, QPixmap
 from app.widgets.base_overlay import BaseOverlay
 from app.utils.theme_manager import ThemeManager
 from app.utils.ip_camera_discovery import get_discovery, DiscoveredCamera
+from app.utils.camera_utils import open_video_capture
 from project_utilities.json_utility import JsonUtility
 from app.utils.capture_thread import VideoCaptureThread
 from app.utils.ui_scaling import UIScaling
@@ -19,6 +21,14 @@ from backend.get_product_sku import ProductSKUWorker
 from app.utils import fetch_logger
 from backend.aruco_utils import detect_aruco_marker
 from app.widgets.aruco_calibration_dialog import ArucoCalibrationDialog
+
+class VBoxWithLabel(QVBoxLayout):
+    def __init__(self, text, widget):
+        super().__init__()
+        lbl = QLabel(text)
+        lbl.setStyleSheet("color: #8B95A5; font-weight: bold; font-size: 11px; background: transparent; border: none;")
+        self.addWidget(lbl)
+        self.addWidget(widget)
 
 class SettingsOverlay(BaseOverlay):
     """Settings overlay for application configuration"""
@@ -30,6 +40,7 @@ class SettingsOverlay(BaseOverlay):
         self.theme = ThemeManager.get_colors()
         
         self.cap_thread = None
+        self.sku_worker = None
         
         # IP Camera Discovery State
         self.discovered_cameras = []
@@ -54,12 +65,26 @@ class SettingsOverlay(BaseOverlay):
         self.content_box.setMaximumSize(min(scaled_w, max_w), min(scaled_h, max_h))
         self.content_box.resize(min(scaled_w, max_w), min(scaled_h, max_h))
 
-        self.content_box.setStyleSheet(f"""
-            QFrame {{
-                background-color: {self.theme['bg_panel']}; 
-                border-radius: {UIScaling.scale(15)}px;
+        # Industrial palette constants
+        self._C = {
+            'bg': '#1B1F27', 'surface': '#252A34', 'surface_hover': '#2E3440',
+            'text': '#E8ECF1', 'text_sub': '#8B95A5',
+            'accent': '#3B82F6', 'accent_hover': '#2563EB',
+            'green': '#22C55E', 'danger': '#EF4444',
+            'input_bg': '#1E2330', 'input_border': '#3A4150',
+            'input_focus': '#3B82F6',
+        }
+        
+        self.btn_secondary_style = f"""
+            QPushButton {{
+                background-color: {self._C['surface']};
+                color: {self._C['accent']};
+                border: 1px solid {self._C['input_border']};
+                border-radius: 8px; padding: 12px;
+                font-weight: bold; font-size: 14px;
             }}
-        """)
+            QPushButton:hover {{ background-color: {self._C['surface_hover']}; }}
+        """
         
         self.load_settings()
         self.detect_available_cameras()  # Detect cameras before UI init
@@ -116,6 +141,69 @@ class SettingsOverlay(BaseOverlay):
         # Set current preset
         self.current_preset = next((p for p in self.ip_presets if p["id"] == active_id), self.ip_presets[0])
     
+    def load_settings_to_ui(self):
+        """Update UI fields with loaded settings"""
+        s = self.settings
+        self.mmpx_input.setText(str(s.get("mm_per_px", 0.21)))
+        
+        # Model
+        det_mode = s.get("detection_model", "standard")
+        idx = self.det_model.findData(det_mode)
+        if idx != -1: self.det_model.setCurrentIndex(idx)
+        
+        # Layout
+        lay_mode = s.get("layout_mode", "classic")
+        if lay_mode == "split": self.layout_combo.setCurrentIndex(1)
+        elif lay_mode == "minimal": self.layout_combo.setCurrentIndex(2)
+        else: self.layout_combo.setCurrentIndex(0)
+        
+        self.delay_input.setText(str(s.get("sensor_delay", 0.2)))
+        
+        # ArUco & Heights
+        self.marker_size_input.setText(str(s.get("aruco_marker_size", 50.0)))
+        self.cam_height_input.setText(str(s.get("mounting_height", 1000.0)))
+        self.obj_thickness_input.setText(str(s.get("sandal_thickness", 15.0)))
+        
+        # Crop
+        crop = s.get("camera_crop", {})
+        self.crop_left.setText(str(crop.get("left", 0)))
+        self.crop_right.setText(str(crop.get("right", 0)))
+        self.crop_top.setText(str(crop.get("top", 0)))
+        self.crop_bottom.setText(str(crop.get("bottom", 0)))
+        
+        rot = crop.get("rotation", 0)
+        ridx = self.rotation_combo.findData(rot)
+        if ridx != -1: self.rotation_combo.setCurrentIndex(ridx)
+        
+        self.aspect_ratio_input.setText(str(s.get("aspect_ratio_correction", 1.0)))
+        self.force_w.setText(str(s.get("force_width", 0)))
+        self.force_h.setText(str(s.get("force_height", 0)))
+        
+        # Distortion
+        dist = s.get("lens_distortion", {})
+        self.k1.setText(str(dist.get("k1", 0.0)))
+        self.k2.setText(str(dist.get("k2", 0.0)))
+        self.p1.setText(str(dist.get("p1", 0.0)))
+        self.p2.setText(str(dist.get("p2", 0.0)))
+        self.k3.setText(str(dist.get("k3", 0.0)))
+        self.fx.setText(str(dist.get("fx", 0.0)))
+        self.fy.setText(str(dist.get("fy", 0.0)))
+        self.cx.setText(str(dist.get("cx", 0.0)))
+        self.cy.setText(str(dist.get("cy", 0.0)))
+        
+        is_auto = s.get("auto_estimate_matrix", False)
+        self.btn_auto_matrix.setChecked(is_auto)
+        self.on_auto_matrix_toggle(is_auto)
+        
+        self.sensor_port_input.setText(s.get("sensor_port", ""))
+        self.plc_port_input.setText(s.get("plc_port", ""))
+        self.plc_trig_input.setText(str(s.get("plc_trigger_reg", 12)))
+        self.plc_res_input.setText(str(s.get("plc_result_reg", 13)))
+        
+        self.update_preset_combo()
+        cam_idx = s.get("camera_index", 0)
+        self.set_camera_ui_state(cam_idx)
+    
     def detect_available_cameras(self):
         """Quickly detect available USB cameras (runs at init)"""
         import time
@@ -148,660 +236,346 @@ class SettingsOverlay(BaseOverlay):
             if isinstance(saved_idx, int) and saved_idx >= 0:
                 self.available_cameras.append(saved_idx)
         
+    def update_content_size(self):
+        """Override base to allow wider settings area"""
+        parent = self.parent()
+        if not parent: return
+        p_size = parent.size()
+        self.resize(p_size)
+        
+        # We want 900x650 but not more than 95% of parent
+        scaled_w = UIScaling.scale(900)
+        scaled_h = UIScaling.scale(650)
+        max_w = int(p_size.width() * 0.95)
+        max_h = int(p_size.height() * 0.95)
+        
+        target_w = min(scaled_w, max_w)
+        target_h = min(scaled_h, max_h)
+        self.content_box.setFixedSize(target_w, target_h)
+
     def setup_settings_ui(self):
-        # Alias for backward compatibility if any external callers still use init_ui
+        # Alias for backward compatibility
         self.init_ui = self.setup_settings_ui
+        
+        C = self._C  # shorthand
+        
         # Use a scroll area for the entire settings content
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.NoFrame)
-        scroll.setStyleSheet("background: transparent;")
+        scroll.setStyleSheet(f"""
+            QScrollArea {{ background: transparent; border: none; }}
+            QScrollBar:vertical {{
+                background: {C['bg']}; width: 8px; border-radius: 4px;
+            }}
+            QScrollBar::handle:vertical {{
+                background: {C['input_border']}; border-radius: 4px; min-height: 30px;
+            }}
+            QScrollBar::handle:vertical:hover {{ background: {C['text_sub']}; }}
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0; }}
+        """)
+        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         
         scroll_content = QWidget()
         scroll_content.setStyleSheet("background: transparent;")
-        self.main_layout = QVBoxLayout(scroll_content)
-        self.main_layout.setContentsMargins(10, 10, 10, 10)
-        self.main_layout.setSpacing(20)
+        scroll_layout = QVBoxLayout(scroll_content)
+        scroll_layout.setContentsMargins(15, 15, 15, 15)
+        scroll_layout.setSpacing(20)
         
         scroll.setWidget(scroll_content)
-        
-        # Add the scroll area directly to the existing content_layout
         self.content_layout.setContentsMargins(0, 0, 0, 0)
         self.content_layout.addWidget(scroll)
         
-        # Styles
-        input_padding = UIScaling.scale(10)
-        input_radius = UIScaling.scale(8)
-        input_font_size = UIScaling.scale_font(14)
-        
-        self.line_edit_style = f"""
-            QLineEdit, QComboBox {{
-                padding: {input_padding}px;
-                border: 1px solid {self.theme['border']};
-                border-radius: {input_radius}px;
-                background-color: white;
-                color: #333333;
-                font-size: {input_font_size}px;
-            }}
-            QLineEdit:focus, QComboBox:focus {{
-                border: 1px solid #2196F3;
-            }}
-        """
-        
-        btn_sec_font_size = UIScaling.scale_font(14)
-        btn_sec_padding_v = UIScaling.scale(8)
-        btn_sec_padding_h = UIScaling.scale(15)
-        
-        self.btn_secondary_style = f"""
-            QPushButton {{
-                background-color: #F5F5F5;
-                border-radius: {input_radius}px;
-                color: #333333;
-                font-size: {btn_sec_font_size}px;
-                font-weight: bold;
-                padding: {btn_sec_padding_v}px {btn_sec_padding_h}px;
-            }}
-            QPushButton:hover {{
-                background-color: #EEEEEE;
-            }}
-        """
-
         # Header
-        header = QHBoxLayout()
-        header.setContentsMargins(10, 10, 10, 0)
+        header = QHBoxLayout(); header.setContentsMargins(10, 0, 10, 0)
         
-        btn_back = QPushButton("❮")
-        btn_back_size = UIScaling.scale(45)
-        btn_back_font_size = UIScaling.scale_font(20)
-        btn_back.setFixedSize(btn_back_size, btn_back_size)
-        btn_back.setStyleSheet(f"""
-            QPushButton {{
-                border: none; 
-                font-size: {btn_back_font_size}px; 
-                font-weight: bold; 
-                color: {self.theme['text_main']};
-                background-color: #F5F5F5;
-                border-radius: {btn_back_size // 2}px;
-            }}
-            QPushButton:hover {{ background-color: #EEEEEE; }}
-        """)
+        btn_back = QPushButton("❮ Back"); btn_back.setFixedHeight(UIScaling.scale(40))
+        btn_back.setCursor(Qt.PointingHandCursor)
+        btn_back.setStyleSheet(f"border: none; font-size: {UIScaling.scale_font(16)}px; font-weight: bold; color: {C['accent']}; background: transparent;")
         btn_back.clicked.connect(self.close_overlay)
-        
-        lbl_title = QLabel("Application Settings")
-        title_font_size = UIScaling.scale_font(24)
-        lbl_title.setStyleSheet(f"font-size: {title_font_size}px; font-weight: bold; color: {self.theme['text_main']}; margin-left: 10px;")
-        
-        btn_apply = QPushButton("Apply")
-        btn_apply_w = UIScaling.scale(100)
-        btn_apply_h = UIScaling.scale(45)
-        btn_apply.setFixedSize(btn_apply_w, btn_apply_h)
-        btn_apply.setStyleSheet(self.btn_secondary_style)
-        btn_apply.clicked.connect(self.apply_settings_clicked)
-
-        btn_save = QPushButton("Save & Exit")
-        btn_save_w = UIScaling.scale(140)
-        btn_save_h = UIScaling.scale(45)
-        btn_save_font_size = UIScaling.scale_font(16)
-        btn_save.setFixedSize(btn_save_w, btn_save_h)
-        btn_save.setStyleSheet(f"""
-            QPushButton {{
-                background-color: #2196F3;
-                border-radius: {UIScaling.scale(10)}px;
-                font-weight: bold;
-                color: white;
-                font-size: {btn_save_font_size}px;
-            }}
-            QPushButton:hover {{ background-color: #1E88E5; }}
-        """)
-        btn_save.clicked.connect(self.save_settings_clicked)
-        
         header.addWidget(btn_back)
-        header.addWidget(lbl_title)
-        header.addStretch()
-        header.addWidget(btn_apply)
         header.addSpacing(10)
-        header.addWidget(btn_save)
-        self.main_layout.addLayout(header)
-
-        # Content - Split into two columns
-        columns = QHBoxLayout()
-        columns.setSpacing(20)
         
-        left_col = QVBoxLayout()
-        left_col.setSpacing(20)
+        lbl_title = QLabel("System Settings")
+        lbl_title.setStyleSheet(f"font-size: {UIScaling.scale_font(24)}px; font-weight: bold; color: {C['text']};")
+        header.addWidget(lbl_title); header.addStretch()
         
-        right_col = QVBoxLayout()
-        right_col.setSpacing(20)
+        btn_apply = QPushButton("Apply"); self.style_button(btn_apply); btn_apply.clicked.connect(self.apply_settings_clicked)
+        btn_save = QPushButton("Save && Exit"); self.style_button(btn_save, True); btn_save.clicked.connect(self.save_settings_clicked)
+        header.addWidget(btn_apply); header.addSpacing(10); header.addWidget(btn_save); scroll_layout.addLayout(header)
         
-        # --- LEFT COLUMN: Camera & Preview ---
-        camera_card, card_layout = self.create_card("Camera Configuration")
-
-        # Preview placeholder
-        self.preview_box = QLabel("Test Camera\nPreview")
-        self.preview_box.setAlignment(Qt.AlignCenter)
+        # Content Layout
+        columns = QHBoxLayout(); columns.setSpacing(20)
+        left_col = QVBoxLayout(); left_col.setSpacing(20)
+        right_col = QVBoxLayout(); right_col.setSpacing(20)
+        
+        # --- LEFT: Camera & IP ---
+        cam_card, cam_layout = self.create_card("Camera Configuration")
+        self.preview_box = QLabel("Test Feed"); self.preview_box.setAlignment(Qt.AlignCenter)
         self.preview_box.setFixedSize(UIScaling.scale(400), UIScaling.scale(250))
-        preview_font_size = UIScaling.scale_font(16)
-        self.preview_box.setStyleSheet(f"""
-            background-color: #2D2D2D; 
-            border-radius: {UIScaling.scale(10)}px;
-            color: #CCCCCC;
-            font-size: {preview_font_size}px; 
-            font-weight: bold;
-        """)
-        card_layout.addWidget(self.preview_box, 0, Qt.AlignCenter)
+        self.preview_box.setStyleSheet(f"background: {C['input_bg']}; border-radius: 10px; color: {C['text_sub']}; font-weight: bold; border: 1px solid {C['input_border']};")
+        cam_layout.addWidget(self.preview_box, 0, Qt.AlignHCenter)
+        self.btn_preview = QPushButton("Start Test Feed"); self.style_button(self.btn_preview, True); self.btn_preview.clicked.connect(self.toggle_preview); cam_layout.addWidget(self.btn_preview)
         
-        self.btn_preview = QPushButton("Start Test Feed")
-        self.btn_preview.setFixedHeight(UIScaling.scale(40))
-        self.btn_preview.setStyleSheet(f"""
-            QPushButton {{
-                background-color: #4CAF50;
-                color: white;
-                border-radius: {UIScaling.scale(8)}px;
-                font-weight: bold;
-            }}
-            QPushButton:hover {{ background-color: #43A047; }}
-        """)
-        self.btn_preview.clicked.connect(self.toggle_preview)
-        card_layout.addWidget(self.btn_preview)
-
-        # Camera selector
-        lbl_camera = QLabel("Camera Source Selection")
-        lbl_cam_font_size = UIScaling.scale_font(13)
-        lbl_camera.setStyleSheet(f"color: {self.theme['text_sub']}; font-size: {lbl_cam_font_size}px; font-weight: bold;")
-        card_layout.addWidget(lbl_camera)
-        
-        self.camera_combo = QComboBox()
+        cam_layout.addWidget(self.create_styled_label("Camera Source:"))
+        self.camera_combo = QComboBox(); self.camera_combo.addItem("IP Network Camera", "ip")
         if self.available_cameras:
-            for idx in self.available_cameras:
-                self.camera_combo.addItem(f"USB Camera {idx}", idx)
-        else:
-            self.camera_combo.addItem("No USB cameras detected", -1)
-        self.camera_combo.addItem("IP Network Camera", "ip")
-        self.camera_combo.setStyleSheet(self.line_edit_style)
-        self.camera_combo.currentIndexChanged.connect(self.on_camera_combo_change)
-        card_layout.addWidget(self.camera_combo)
+            for idx in self.available_cameras: self.camera_combo.insertItem(0, f"USB Camera {idx}", idx)
+        self.style_input(self.camera_combo); self.camera_combo.currentIndexChanged.connect(self.on_camera_combo_change); cam_layout.addWidget(self.camera_combo)
+        cam_layout.addStretch()
+        left_col.addWidget(cam_card)
         
-        left_col.addWidget(camera_card)
-
-        # IP Camera Section (Hidden by default)
-        self.ip_camera_section, ip_layout = self.create_card("IP Camera Details", is_sub_card=True)
-
-        # Preset Row
-        preset_row = QHBoxLayout()
-        self.ip_preset_combo = QComboBox()
-        self.ip_preset_combo.setStyleSheet(self.line_edit_style)
+        self.ip_camera_section, ip_layout = self.create_card("IP Camera Details")
+        h_preset = QHBoxLayout(); self.ip_preset_combo = QComboBox(); self.style_input(self.ip_preset_combo)
         self.ip_preset_combo.currentIndexChanged.connect(self.on_ip_preset_change)
+        btn_new = QPushButton("+ New"); self.style_button(btn_new); btn_new.clicked.connect(self.add_new_preset)
+        h_preset.addWidget(self.ip_preset_combo, 1); h_preset.addWidget(btn_new); ip_layout.addLayout(h_preset)
+        self.ip_address_input = QLineEdit(); self.style_input(self.ip_address_input); ip_layout.addWidget(self.create_styled_label("Address")); ip_layout.addWidget(self.ip_address_input)
+        h_params = QHBoxLayout()
+        self.protocol_combo = QComboBox(); self.protocol_combo.addItems(["rtsp", "http"]); self.style_input(self.protocol_combo)
+        self.ip_port_input = QLineEdit(); self.ip_port_input.setPlaceholderText("554"); self.style_input(self.ip_port_input)
+        self.transport_combo = QComboBox(); self.transport_combo.addItems(["tcp", "udp"]); self.style_input(self.transport_combo)
         
-        self.btn_new_preset = QPushButton("+ New")
-        self.btn_new_preset.setStyleSheet(self.btn_secondary_style)
-        self.btn_new_preset.clicked.connect(self.add_new_preset)
+        h_params.addLayout(VBoxWithLabel("Proto", self.protocol_combo))
+        h_params.addLayout(VBoxWithLabel("Port", self.ip_port_input))
+        h_params.addLayout(VBoxWithLabel("Transport", self.transport_combo))
+        ip_layout.addLayout(h_params)
         
-        preset_row.addWidget(self.ip_preset_combo, 1)
-        preset_row.addWidget(self.btn_new_preset)
-        ip_layout.addLayout(preset_row)
-
-        # Connection Params
-        params_grid = QHBoxLayout()
-        
-        proto_v = QVBoxLayout()
-        proto_v.addWidget(QLabel("Protocol"))
-        self.protocol_combo = QComboBox()
-        self.protocol_combo.addItems(["rtsp", "http", "https", "rtmp", "rtmps"])
-        self.protocol_combo.setStyleSheet(self.line_edit_style)
-        proto_v.addWidget(self.protocol_combo)
-        params_grid.addLayout(proto_v, 1)
-
-        trans_v = QVBoxLayout()
-        trans_v.addWidget(QLabel("Transport"))
-        self.transport_combo = QComboBox()
-        self.transport_combo.addItems(["tcp", "udp"])
-        self.transport_combo.setStyleSheet(self.line_edit_style)
-        trans_v.addWidget(self.transport_combo)
-        params_grid.addLayout(trans_v, 1)
-        
-        ip_layout.addLayout(params_grid)
-
-        # Host & Port
-        host_row = QHBoxLayout()
-        host_v = QVBoxLayout()
-        host_v.addWidget(QLabel("IP Address / Hostname"))
-        self.ip_address_input = QLineEdit()
-        self.ip_address_input.setPlaceholderText("192.168.1.100")
-        self.ip_address_input.setStyleSheet(self.line_edit_style)
-        host_v.addWidget(self.ip_address_input)
-        host_row.addLayout(host_v, 3)
-
-        port_v = QVBoxLayout()
-        port_v.addWidget(QLabel("Port"))
-        self.ip_port_input = QLineEdit()
-        self.ip_port_input.setPlaceholderText("554")
-        self.ip_port_input.setStyleSheet(self.line_edit_style)
-        port_v.addWidget(self.ip_port_input)
-        host_row.addLayout(port_v, 1)
-        ip_layout.addLayout(host_row)
-
-        # Path
-        path_v = QVBoxLayout()
-        path_v.addWidget(QLabel("RTSP Path"))
-        self.ip_path_input = QLineEdit()
-        self.ip_path_input.setPlaceholderText("/live/ch1")
-        self.ip_path_input.setStyleSheet(self.line_edit_style)
-        path_v.addWidget(self.ip_path_input)
-        ip_layout.addLayout(path_v)
-
-        # Auth
-        auth_row = QHBoxLayout()
-        user_v = QVBoxLayout()
-        user_v.addWidget(QLabel("Username"))
-        self.ip_username_input = QLineEdit()
-        self.ip_username_input.setStyleSheet(self.line_edit_style)
-        user_v.addWidget(self.ip_username_input)
-        auth_row.addLayout(user_v)
-
-        pass_v = QVBoxLayout()
-        pass_v.addWidget(QLabel("Password"))
-        self.ip_password_input = QLineEdit()
-        self.ip_password_input.setEchoMode(QLineEdit.Password)
-        self.ip_password_input.setStyleSheet(self.line_edit_style)
-        pass_v.addWidget(self.ip_password_input)
-        auth_row.addLayout(pass_v)
-        ip_layout.addLayout(auth_row)
-
-        disc_group = QHBoxLayout()
-        self.btn_scan_cameras = QPushButton("🔍 Scan Network")
-        self.btn_scan_cameras.setFixedHeight(UIScaling.scale(40))
-        self.btn_scan_cameras.setStyleSheet(f"""
-            QPushButton {{
-                background-color: #2196F3;
-                color: white;
-                border-radius: {UIScaling.scale(8)}px;
-                font-weight: bold;
-                padding: 0 {UIScaling.scale(15)}px;
-            }}
-            QPushButton:hover {{ background-color: #1E88E5; }}
-        """)
-        self.btn_scan_cameras.clicked.connect(self.scan_for_cameras)
-        
-        self.discovered_combo = QComboBox()
-        self.discovered_combo.addItem("-- Discovered Cameras --")
-        self.discovered_combo.setStyleSheet(self.line_edit_style)
-        self.discovered_combo.currentIndexChanged.connect(self.on_discovered_camera_selected)
-        
-        disc_group.addWidget(self.btn_scan_cameras)
-        disc_group.addWidget(self.discovered_combo, 1)
-        ip_layout.addLayout(disc_group)
-        
-        self.connection_status = QLabel("")
-        conn_status_font_size = UIScaling.scale_font(11)
-        self.connection_status.setStyleSheet(f"color: #666666; font-size: {conn_status_font_size}px;")
-        ip_layout.addWidget(self.connection_status)
-
+        self.ip_path_input = QLineEdit(); self.ip_path_input.setPlaceholderText("/live/ch1"); self.style_input(self.ip_path_input); ip_layout.addWidget(self.create_styled_label("Path")); ip_layout.addWidget(self.ip_path_input)
+        h_auth = QHBoxLayout(); self.ip_username_input = QLineEdit(); self.ip_username_input.setPlaceholderText("User"); self.style_input(self.ip_username_input)
+        self.ip_password_input = QLineEdit(); self.ip_password_input.setEchoMode(QLineEdit.Password); self.ip_password_input.setPlaceholderText("Pass"); self.style_input(self.ip_password_input)
+        h_auth.addWidget(self.ip_username_input); h_auth.addWidget(self.ip_password_input); ip_layout.addLayout(h_auth)
+        h_disc = QHBoxLayout(); self.btn_scan_cameras = QPushButton("🔍 Scan Network"); self.style_button(self.btn_scan_cameras); self.btn_scan_cameras.clicked.connect(self.scan_for_cameras)
+        self.discovered_combo = QComboBox(); self.discovered_combo.addItem("-- Discovered --"); self.style_input(self.discovered_combo); self.discovered_combo.currentIndexChanged.connect(self.on_discovered_camera_selected)
+        h_disc.addWidget(self.btn_scan_cameras); h_disc.addWidget(self.discovered_combo, 1); ip_layout.addLayout(h_disc)
+        self.connection_status = QLabel(""); self.connection_status.setStyleSheet(f"color: {C['text_sub']}; font-size: 11px;"); ip_layout.addWidget(self.connection_status)
+        ip_layout.addStretch()
         left_col.addWidget(self.ip_camera_section)
+        left_col.addStretch(1)
         
-        # --- NEW: Auto Calibration System ---
+        # --- RIGHT: Params & HW ---
+        p_card, p_layout = self.create_card("Application Parameters")
+        p_layout.addWidget(self.create_styled_label("Resolution (mm/px):"))
+        self.mmpx_input = QLineEdit(); self.style_input(self.mmpx_input); p_layout.addWidget(self.mmpx_input)
+        p_layout.addWidget(self.create_styled_label("Detection Model:"))
+        self.det_model = QComboBox(); self.det_model.addItem("Standard (Contour)", "standard"); self.det_model.addItem("SAM (AI)", "sam"); self.style_input(self.det_model); p_layout.addWidget(self.det_model)
+        p_layout.addWidget(self.create_styled_label("Layout Mode:"))
+        self.layout_combo = QComboBox(); self.layout_combo.addItems(["Classic", "Split", "Minimal"]); self.style_input(self.layout_combo); p_layout.addWidget(self.layout_combo)
+        p_layout.addWidget(self.create_styled_label("Sensor Delay (s):"))
+        self.delay_input = QLineEdit(); self.style_input(self.delay_input); p_layout.addWidget(self.delay_input)
+        p_layout.addStretch()
+        right_col.addWidget(p_card)
+        
         aruco_card, aruco_layout = self.create_card("Auto Calibration System")
+        aruco_layout.addWidget(self.create_styled_label("Marker Size (mm):"))
+        self.marker_size_input = QLineEdit(); self.style_input(self.marker_size_input); aruco_layout.addWidget(self.marker_size_input)
+        h_height = QHBoxLayout(); self.cam_height_input = QLineEdit(); self.style_input(self.cam_height_input); self.obj_thickness_input = QLineEdit(); self.style_input(self.obj_thickness_input)
+        h_height.addLayout(VBoxWithLabel("Mount Height", self.cam_height_input)); h_height.addLayout(VBoxWithLabel("Sandal Thick", self.obj_thickness_input)); aruco_layout.addLayout(h_height)
+        h_ctrl = QHBoxLayout(); self.btn_run_calibration = QPushButton("Run Auto Calibration"); self.style_button(self.btn_run_calibration, True); self.btn_run_calibration.clicked.connect(self.run_auto_calibration)
+        self.btn_debug_aruco = QPushButton("🔍 Debug Off"); self.style_button(self.btn_debug_aruco); self.btn_debug_aruco.setFixedWidth(UIScaling.scale(120)); self.btn_debug_aruco.clicked.connect(self.toggle_aruco_debug); self.aruco_debug_active = False
+        h_ctrl.addWidget(self.btn_run_calibration, 1); h_ctrl.addWidget(self.btn_debug_aruco); aruco_layout.addLayout(h_ctrl)
+        aruco_layout.addStretch()
+        right_col.addWidget(aruco_card)
         
-        marker_size_row, self.marker_size_input = self.create_input_row(
-            "Marker Size (mm)", 
-            str(self.settings.get("aruco_marker_size", 50.0)),
-            help_text="Physical width of the ArUco marker"
-        )
-        aruco_layout.addLayout(marker_size_row)
-
-        cam_h_row, self.cam_height_input = self.create_input_row(
-            "Camera Height (mm)",
-            str(self.settings.get("mounting_height", 1000.0)),
-            help_text="Distance from lens to conveyor belt"
-        )
-        aruco_layout.addLayout(cam_h_row)
-
-        obj_h_row, self.obj_thickness_input = self.create_input_row(
-            "Object Thickness (mm)",
-            str(self.settings.get("sandal_thickness", 0.0)),
-            help_text="Approximate height of the object"
-        )
-        aruco_layout.addWidget(self.btn_run_calibration)
-        
-        # --- NEW: Camera Region of Interest (Crop & Rotation) ---
         crop_card, crop_layout = self.create_card("Camera Region of Interest")
+        crop_layout.addWidget(self.create_styled_label("Crop L/R/T/B (%):"))
+        h_crop1 = QHBoxLayout(); self.crop_left = QLineEdit(); self.style_input(self.crop_left); self.crop_right = QLineEdit(); self.style_input(self.crop_right)
+        h_crop1.addWidget(self.crop_left); h_crop1.addWidget(self.crop_right); crop_layout.addLayout(h_crop1)
+        h_crop2 = QHBoxLayout(); self.crop_top = QLineEdit(); self.style_input(self.crop_top); self.crop_bottom = QLineEdit(); self.style_input(self.crop_bottom)
+        h_crop2.addWidget(self.crop_top); h_crop2.addWidget(self.crop_bottom); crop_layout.addLayout(h_crop2)
+        crop_layout.addWidget(self.create_styled_label("Rotation:"))
+        self.rotation_combo = QComboBox(); self.rotation_combo.addItems(["0°", "90° CW", "180°", "90° CCW"]); self.rotation_combo.setItemData(0, 0); self.rotation_combo.setItemData(1, 90); self.rotation_combo.setItemData(2, 180); self.rotation_combo.setItemData(3, 270); self.style_input(self.rotation_combo); self.rotation_combo.currentIndexChanged.connect(self.update_live_params); crop_layout.addWidget(self.rotation_combo)
+        crop_layout.addStretch()
+        crop_layout.addWidget(self.create_styled_label("Aspect Ratio / Resolution:"))
+        self.aspect_ratio_input = QLineEdit(); self.style_input(self.aspect_ratio_input); crop_layout.addWidget(self.aspect_ratio_input)
+        h_res = QHBoxLayout(); self.force_w = QLineEdit(); self.style_input(self.force_w); self.force_h = QLineEdit(); self.style_input(self.force_h)
+        h_res.addLayout(VBoxWithLabel("W", self.force_w)); h_res.addLayout(VBoxWithLabel("H", self.force_h)); crop_layout.addLayout(h_res)
+        right_col.addWidget(crop_card)
         
-        crop_data = self.settings.get("camera_crop", {})
+        dist_card, dist_layout = self.create_card("Lens Distortion Correction")
+        self.dist_preset = QComboBox(); self.dist_preset.addItems(["Custom", "No Distortion", "Mild Barrel", "Medium Barrel", "Strong Barrel"]); self.style_input(self.dist_preset); self.dist_preset.currentIndexChanged.connect(self.on_dist_preset_change); dist_layout.addWidget(self.create_styled_label("Preset")); dist_layout.addWidget(self.dist_preset)
+        h_k = QHBoxLayout()
+        self.k1 = QLineEdit(); self.style_input(self.k1)
+        self.k2 = QLineEdit(); self.style_input(self.k2)
+        self.p1 = QLineEdit(); self.style_input(self.p1)
+        self.p2 = QLineEdit(); self.style_input(self.p2)
+        self.k3 = QLineEdit(); self.style_input(self.k3)
+        h_k.addLayout(VBoxWithLabel("k1", self.k1)); h_k.addLayout(VBoxWithLabel("k2", self.k2)); h_k.addLayout(VBoxWithLabel("p1", self.p1))
+        h_k.addLayout(VBoxWithLabel("p2", self.p2)); h_k.addLayout(VBoxWithLabel("k3", self.k3))
+        dist_layout.addLayout(h_k)
         
-        # Grid for crops
-        crop_grid = QGridLayout()
+        h_mat_ctrl = QHBoxLayout(); self.btn_auto_matrix = QPushButton("Auto Matrix: OFF"); self.btn_auto_matrix.setCheckable(True); self.style_button(self.btn_auto_matrix); self.btn_auto_matrix.clicked.connect(self.on_auto_matrix_toggle); h_mat_ctrl.addWidget(self.btn_auto_matrix); dist_layout.addLayout(h_mat_ctrl)
+        h_mat = QHBoxLayout(); self.fx = QLineEdit(); self.style_input(self.fx); self.fy = QLineEdit(); self.style_input(self.fy); self.cx = QLineEdit(); self.style_input(self.cx); self.cy = QLineEdit(); self.style_input(self.cy)
+        h_mat.addLayout(VBoxWithLabel("fx", self.fx)); h_mat.addLayout(VBoxWithLabel("fy", self.fy)); dist_layout.addLayout(h_mat)
+        h_mat2 = QHBoxLayout(); h_mat2.addLayout(VBoxWithLabel("cx", self.cx)); h_mat2.addLayout(VBoxWithLabel("cy", self.cy)); dist_layout.addLayout(h_mat2)
+        dist_layout.addStretch()
+        right_col.addWidget(dist_card)
         
-        _, self.crop_left = self.create_input_row("Crop Left (%)", str(crop_data.get("left", 0)))
-        _, self.crop_right = self.create_input_row("Crop Right (%)", str(crop_data.get("right", 0)))
-        _, self.crop_top = self.create_input_row("Crop Top (%)", str(crop_data.get("top", 0)))
-        _, self.crop_bottom = self.create_input_row("Crop Bottom (%)", str(crop_data.get("bottom", 0)))
-        
-        crop_grid.addLayout(self.create_mini_v_input("Left", self.crop_left), 0, 0)
-        crop_grid.addLayout(self.create_mini_v_input("Right", self.crop_right), 0, 1)
-        crop_grid.addLayout(self.create_mini_v_input("Top", self.crop_top), 1, 0)
-        crop_grid.addLayout(self.create_mini_v_input("Bottom", self.crop_bottom), 1, 1)
-        
-        crop_layout.addLayout(crop_grid)
-        
-        # Rotation
-        rot_v = QVBoxLayout()
-        rot_lbl = QLabel("Image Rotation")
-        rot_lbl.setStyleSheet(f"font-weight: bold; font-size: {UIScaling.scale_font(13)}px; color: {self.theme['text_sub']};")
-        rot_v.addWidget(rot_lbl)
-        
-        self.rotation_combo = QComboBox()
-        self.rotation_combo.addItems(["0°", "90° CW", "180°", "90° CCW"])
-        self.rotation_combo.setItemData(0, 0); self.rotation_combo.setItemData(1, 90)
-        self.rotation_combo.setItemData(2, 180); self.rotation_combo.setItemData(3, 270)
-        self.rotation_combo.setStyleSheet(self.line_edit_style)
-        
-        # Set current rotation
-        current_rot = crop_data.get("rotation", 0)
-        idx = self.rotation_combo.findData(current_rot)
-        if idx != -1: self.rotation_combo.setCurrentIndex(idx)
-        
-        self.rotation_combo.currentIndexChanged.connect(self.update_live_params)
-        
-        # Connect crop inputs
-        for inp in [self.crop_left, self.crop_right, self.crop_top, self.crop_bottom]:
-            inp.textChanged.connect(self.update_live_params)
-            
-        rot_v.addWidget(self.rotation_combo)
-        crop_layout.addLayout(rot_v)
-        
-        left_col.addWidget(aruco_card)
-        left_col.addWidget(crop_card)
-        left_col.addStretch()
-
-        # --- RIGHT COLUMN: Parameters & Paths ---
-        # Parameters Card
-        params_card, p_layout = self.create_card("Application Parameters")
-
-        # Layout Mode
-        layout_v = QVBoxLayout()
-        layout_lbl = QLabel("App Layout Mode")
-        l_font = UIScaling.scale_font(14)
-        layout_lbl.setStyleSheet(f"color: {self.theme['text_main']}; font-size: {l_font}px; font-weight: bold;")
-        layout_v.addWidget(layout_lbl)
-
-        self.layout_combo = QComboBox()
-        self.layout_combo.addItems(["Classic (2-Panel)", "Split (3-Panel)"])
-        self.layout_combo.setStyleSheet(self.line_edit_style)
-        # Set current value
-        current_mode = self.settings.get("layout_mode", "classic")
-        idx = 1 if current_mode == "split" else 0
-        self.layout_combo.setCurrentIndex(idx)
-        layout_v.addWidget(self.layout_combo)
-        p_layout.addLayout(layout_v)
-
-        mmpx_row, self.mmpx_input = self.create_input_row("Resolution (mm/px)", str(self.settings.get("mm_per_px", 0.21)), help_text="Pixel to real-world size conversion")
-        p_layout.addLayout(mmpx_row)
-
-        delay_row, self.delay_input = self.create_input_row("Sensor Delay (ms)", str(self.settings.get("sensor_delay", 0.2)), help_text="Time to wait for conveyor stability")
-        p_layout.addLayout(delay_row)
-        
-        right_col.addWidget(params_card)
-
-        # Path Settings Card
-        paths_card, path_layout = self.create_card("Storage & Directories")
-
-        paths = self.settings.get("paths", {})
-        
-        p_row, self.profile_input = self.create_path_row("Device Profiles", paths.get("profile", ""))
-        path_layout.addLayout(p_row)
-        
-        s_row, self.settings_input = self.create_path_row("Configuration", paths.get("settings", ""))
-        path_layout.addLayout(s_row)
-        
-        db_row, self.db_input = self.create_path_row("Database", paths.get("db", ""))
-        path_layout.addLayout(db_row)
-        
-        r_row, self.results_input = self.create_path_row("Analysis Results", paths.get("results", ""))
-        path_layout.addLayout(r_row)
-        
-        right_col.addWidget(paths_card)
-
-        # System Info Card
-        info_card, info_layout = self.create_card("System Information")
-        
-        status_row = self.create_info_row("Cloud Sync Status", self.settings.get("fetch_status", "Offline"))
-        info_layout.addLayout(status_row)
-        
-        last_fetch = self.settings.get("last_fetched", "Never")
-        self.last_fetch_label = QLabel(f"Last Updated: {last_fetch}")
-        lbl_font_size = UIScaling.scale_font(13)
-        self.last_fetch_label.setStyleSheet(f"color: {self.theme['text_main']}; font-size: {lbl_font_size}px; font-weight: bold;")
-        
-        self.btn_fetch = QPushButton("Refresh Now")
-        self.btn_fetch.setStyleSheet(self.btn_secondary_style)
-        self.btn_fetch.clicked.connect(self.start_fetch_sku)
-        
-        fetch_row = QHBoxLayout()
-        fetch_row.setContentsMargins(5, 5, 5, 5)
-        fetch_row.addWidget(self.last_fetch_label, 1)
-        fetch_row.addWidget(self.btn_fetch)
-        info_layout.addLayout(fetch_row)
-        
-        # Worker reference
-        self.sku_worker = None
-
-        right_col.addWidget(info_card)
-        
-        # Hardware Integration Card
         hw_card, hw_layout = self.create_card("Hardware Integration")
-        
-        s_port_row, self.sensor_port_input = self.create_input_row("Sensor Serial Port", self.settings.get("sensor_port", ""), help_text="e.g. COM6 or /dev/ttyUSB0")
-        hw_layout.addLayout(s_port_row)
-        
-        p_port_row, self.plc_port_input = self.create_input_row("PLC Serial Port", self.settings.get("plc_port", ""), help_text="e.g. COM7 or /dev/ttyUSB1")
-        hw_layout.addLayout(p_port_row)
-        
-        hw_regs = QHBoxLayout()
-        trig_v, self.plc_trig_input = self.create_input_row("Trigger Reg", str(self.settings.get("plc_trigger_reg", 12)))
-        hw_regs.addLayout(trig_v)
-        
-        res_v, self.plc_res_input = self.create_input_row("Result Reg", str(self.settings.get("plc_result_reg", 13)))
-        hw_regs.addLayout(res_v)
-        hw_layout.addLayout(hw_regs)
-        
+        self.sensor_port_input = QLineEdit(); self.style_input(self.sensor_port_input); self.plc_port_input = QLineEdit(); self.style_input(self.plc_port_input)
+        hw_layout.addLayout(VBoxWithLabel("Sensor Port", self.sensor_port_input)); hw_layout.addLayout(VBoxWithLabel("PLC Port", self.plc_port_input))
+        h_regs = QHBoxLayout(); self.plc_trig_input = QLineEdit(); self.style_input(self.plc_trig_input); self.plc_res_input = QLineEdit(); self.style_input(self.plc_res_input)
+        h_regs.addLayout(VBoxWithLabel("Trig Reg", self.plc_trig_input)); h_regs.addLayout(VBoxWithLabel("Res Reg", self.plc_res_input)); hw_layout.addLayout(h_regs)
+        hw_layout.addStretch()
         right_col.addWidget(hw_card)
         
-        # Fetch Log Viewer Card
-        log_card, log_layout = self.create_card("Fetch Activity Log")
+        sync_card, sync_layout = self.create_card("Database Sync")
+        self.btn_fetch = QPushButton("🔄 Fetch SKU Data"); self.style_button(self.btn_fetch, True); self.btn_fetch.clicked.connect(self.start_fetch_sku); sync_layout.addWidget(self.btn_fetch)
         
-        # Log viewer text area
-        self.log_viewer = QPlainTextEdit()
-        self.log_viewer.setReadOnly(True)
-        self.log_viewer.setFixedHeight(UIScaling.scale(120))
-        log_font_size = UIScaling.scale_font(11)
-        self.log_viewer.setStyleSheet(f"""
-            QPlainTextEdit {{
-                background-color: #1E1E1E;
-                color: #D4D4D4;
-                border: 1px solid {self.theme['border']};
-                border-radius: {UIScaling.scale(6)}px;
-                font-family: 'Menlo', 'Monaco', 'Consolas', monospace;
-                font-size: {log_font_size}px;
-                padding: {UIScaling.scale(8)}px;
+        h_sync_info = QHBoxLayout()
+        self.last_fetch_label = QLabel("Last Updated: Never"); self.last_fetch_label.setStyleSheet(f"color: {C['text_sub']}; font-size: 11px;")
+        self.log_stats_label = QLabel(""); self.log_stats_label.setStyleSheet(f"color: {C['text_sub']}; font-size: 11px;")
+        h_sync_info.addWidget(self.last_fetch_label); h_sync_info.addStretch(); h_sync_info.addWidget(self.log_stats_label)
+        sync_layout.addLayout(h_sync_info)
+        
+        self.log_viewer = QPlainTextEdit(); self.log_viewer.setReadOnly(True); self.log_viewer.setFixedHeight(UIScaling.scale(100))
+        self.log_viewer.setStyleSheet(f"background: {C['input_bg']}; color: {C['green']}; font-family: 'Menlo', 'Courier New'; font-size: 10px; border-radius: 8px; border: 1px solid {C['input_border']};")
+        sync_layout.addWidget(self.log_viewer)
+        sync_layout.addStretch()
+        right_col.addWidget(sync_card)
+        
+        right_col.addStretch(1)
+        
+        columns.addLayout(left_col, 1); columns.addLayout(right_col, 1); scroll_layout.addLayout(columns)
+        self.refresh_log_viewer(); self.load_settings_to_ui()
+
+    def style_button(self, btn, primary=False):
+        C = self._C
+        if primary:
+            bg, fg, hover = C['accent'], '#FFFFFF', C['accent_hover']
+        else:
+            bg, fg, hover = C['surface'], C['accent'], C['surface_hover']
+        btn.setCursor(Qt.PointingHandCursor)
+        btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {bg};
+                color: {fg};
+                border-radius: 8px;
+                padding: 12px;
+                font-weight: bold;
+                font-size: {UIScaling.scale_font(14)}px;
+                border: {'none' if primary else f'1px solid {C["input_border"]}'};
+            }}
+            QPushButton:hover {{
+                background-color: {hover};
+            }}
+            QPushButton:disabled {{
+                background-color: {C['surface']};
+                color: {C['input_border']};
             }}
         """)
-        log_layout.addWidget(self.log_viewer)
-        
-        # Log controls row
-        log_controls = QHBoxLayout()
-        
-        self.log_stats_label = QLabel("")
-        stats_font_size = UIScaling.scale_font(11)
-        self.log_stats_label.setStyleSheet(f"color: {self.theme['text_sub']}; font-size: {stats_font_size}px;")
-        log_controls.addWidget(self.log_stats_label, 1)
-        
-        btn_refresh_log = QPushButton("↻ Refresh")
-        btn_refresh_log.setStyleSheet(self.btn_secondary_style)
-        btn_refresh_log.clicked.connect(self.refresh_log_viewer)
-        log_controls.addWidget(btn_refresh_log)
-        
-        btn_clear_log = QPushButton("🗑 Clear Log")
-        btn_clear_log.setStyleSheet(self.btn_secondary_style)
-        btn_clear_log.clicked.connect(self.clear_fetch_log)
-        log_controls.addWidget(btn_clear_log)
-        
-        log_layout.addLayout(log_controls)
-        
-        right_col.addWidget(log_card)
-        right_col.addStretch()
 
-        columns.addLayout(left_col, 1)
-        columns.addLayout(right_col, 1)
-        self.main_layout.addLayout(columns)
-        
-        # Initialize visibility
-        self.update_preset_combo()
-        curr_idx = self.settings.get("camera_index", 0)
-        self.set_camera_ui_state(curr_idx)
-        
-        # Load existing logs
-        self.refresh_log_viewer()
+    def style_input(self, widget):
+        C = self._C
+        cls = widget.__class__.__name__
+        widget.setStyleSheet(f"""
+            {cls} {{
+                border: 1px solid {C['input_border']};
+                border-radius: 8px;
+                padding: 10px;
+                background: {C['input_bg']};
+                color: {C['text']};
+                font-size: {UIScaling.scale_font(14)}px;
+            }}
+            {cls}:focus {{
+                border: 2px solid {C['input_focus']};
+                padding: 9px;
+            }}
+            QComboBox::drop-down {{
+                border: 0px;
+            }}
+            QComboBox QAbstractItemView {{
+                background: {C['surface']};
+                color: {C['text']};
+                selection-background-color: {C['accent']};
+                selection-color: white;
+                border: 1px solid {C['input_border']};
+                border-radius: 4px;
+                padding: 4px;
+                outline: none;
+            }}
+            QComboBox QAbstractItemView::item {{
+                padding: 8px;
+                min-height: 28px;
+            }}
+            QComboBox QAbstractItemView::item:hover {{
+                background: {C['surface_hover']};
+            }}
+        """)
+        # Force non-native popup on macOS so stylesheet applies to dropdown
+        if isinstance(widget, QComboBox):
+            from PySide6.QtWidgets import QListView
+            view = QListView()
+            view.setStyleSheet(f"""
+                QListView {{
+                    background: {C['surface']};
+                    color: {C['text']};
+                    border: 1px solid {C['input_border']};
+                    border-radius: 4px;
+                    outline: none;
+                    padding: 4px;
+                }}
+                QListView::item {{
+                    padding: 8px;
+                    min-height: 28px;
+                    border-radius: 4px;
+                }}
+                QListView::item:hover {{
+                    background: {C['surface_hover']};
+                }}
+                QListView::item:selected {{
+                    background: {C['accent']};
+                    color: white;
+                }}
+            """)
+            widget.setView(view)
+        if isinstance(widget, QLineEdit):
+            widget.textChanged.connect(self.update_live_params)
 
     def create_card(self, title, is_sub_card=False):
+        C = self._C
         card = QFrame()
-        bg = "#FFFFFF" if not is_sub_card else "#F8F9FA"
-        border = self.theme['border'] if not is_sub_card else "#E9ECEF"
+        card.setObjectName("cardFrame")
         card.setStyleSheet(f"""
-            QFrame {{
-                background-color: {bg};
-                border: 1px solid {border};
-                border-radius: {UIScaling.scale(12)}px;
+            QFrame#cardFrame {{
+                background: {C['surface']};
+                border-radius: 12px;
+                border: 1px solid {C['input_border']};
             }}
-            QLabel {{ border: none; background: transparent; }}
+            QLabel {{
+                border: none;
+                background: transparent;
+            }}
         """)
-        
-        layout = QVBoxLayout(card)
-        layout.setContentsMargins(15, 15, 15, 15)
-        layout.setSpacing(12)
-        
-        if title:
-            title_lbl = QLabel(title.upper())
-            title_font_size = UIScaling.scale_font(11)
-            title_lbl.setStyleSheet(f"""
-                color: #2196F3; 
-                font-size: {title_font_size}px; 
-                font-weight: bold; 
-                margin-bottom: {UIScaling.scale(5)}px;
-                letter-spacing: 1.2px;
-            """)
-            layout.addWidget(title_lbl)
-            
-        return card, layout
+        l = QVBoxLayout(card)
+        l.setContentsMargins(20, 20, 20, 20)
+        l.setSpacing(12)
+        lbl = QLabel(title.upper())
+        lbl.setStyleSheet(f"color: {C['accent']}; font-weight: bold; font-size: 11px; letter-spacing: 0.5px; border: none !important; background: transparent !important;")
+        l.addWidget(lbl)
+        return card, l
 
-    def create_info_row(self, label_text, value_text, button_text=""):
-        """Create a row with label, value, and optional button"""
-        row = QHBoxLayout()
-        row.setContentsMargins(5, 5, 5, 5)
-        
-        lbl = QLabel(label_text)
-        font_size = UIScaling.scale_font(13)
-        lbl.setStyleSheet(f"color: {self.theme['text_main']}; font-size: {font_size}px; font-weight: bold;")
-        
-        row.addWidget(lbl, 1)
-        
-        if value_text:
-            value = QLabel(value_text)
-            value.setStyleSheet(f"color: #2196F3; font-weight: bold; font-size: {font_size}px;")
-            row.addWidget(value)
-        
-        if button_text:
-            btn = QPushButton(button_text)
-            btn.setStyleSheet(self.btn_secondary_style)
-            row.addWidget(btn)
-        
-        return row
-    
-    def create_input_row(self, label_text, value, suffix="", help_text=""):
-        """Create a styled input row with label and optional help text"""
-        container = QVBoxLayout()
-        container.setSpacing(4)
-        
-        lbl_row = QHBoxLayout()
-        lbl = QLabel(label_text)
-        lbl_font_size = UIScaling.scale_font(14)
-        lbl.setStyleSheet(f"color: {self.theme['text_main']}; font-size: {lbl_font_size}px; font-weight: bold;")
-        lbl_row.addWidget(lbl)
-        
-        if suffix:
-            suff = QLabel(suffix)
-            suff_font_size = UIScaling.scale_font(12)
-            suff.setStyleSheet(f"color: #999999; font-size: {suff_font_size}px;")
-            lbl_row.addWidget(suff)
-        
-        lbl_row.addStretch()
-        container.addLayout(lbl_row)
-        
-        if help_text:
-            h_lbl = QLabel(help_text)
-            h_font_size = UIScaling.scale_font(11)
-            h_lbl.setStyleSheet(f"color: #888888; font-size: {h_font_size}px;")
-            container.addWidget(h_lbl)
-            
-        input_field = QLineEdit()
-        input_field.setText(value)
-        input_field.setStyleSheet(self.line_edit_style)
-        container.addWidget(input_field)
-        
-        return (container, input_field)
-    
-    def create_path_row(self, label_text, value):
-        """Create a row for path selection"""
-        container = QVBoxLayout()
-        container.setSpacing(4)
-        
-        lbl = QLabel(label_text)
-        lbl_font_size = UIScaling.scale_font(14)
-        lbl.setStyleSheet(f"color: {self.theme['text_main']}; font-size: {lbl_font_size}px; font-weight: bold;")
-        container.addWidget(lbl)
-        
-        row = QHBoxLayout()
-        input_field = QLineEdit()
-        input_field.setText(value)
-        input_field.setStyleSheet(self.line_edit_style)
-        
-        btn = QPushButton("📁")
-        btn_size = UIScaling.scale(40)
-        row.addWidget(input_field, 1)
-        row.addWidget(btn)
-        container.addLayout(row)
-        
-        return (container, input_field)
-    
-    def create_mini_v_input(self, label_text, input_field):
-        """Helper to create a small vertical label+input for grid layouts"""
-        vbox = QVBoxLayout()
-        lbl = QLabel(label_text)
-        lbl.setStyleSheet(f"font-size: {UIScaling.scale_font(11)}px; color: {self.theme['text_sub']};")
-        vbox.addWidget(lbl)
-        vbox.addWidget(input_field)
-        return vbox
+    def create_styled_label(self, text):
+        C = self._C
+        lbl = QLabel(text)
+        lbl.setStyleSheet(f"color: {C['text']}; font-weight: bold; font-size: 13px; background: transparent; border: none;")
+        return lbl
 
-    # -------------------------------------------------------------------------
-    # Camera Logic
-    # -------------------------------------------------------------------------
-    
     def set_camera_ui_state(self, val):
         """Populate UI based on current settings value"""
         if isinstance(val, int) and val >= 0:
-            # USB Camera
             for i in range(self.camera_combo.count()):
                 if self.camera_combo.itemData(i) == val:
                     self.camera_combo.setCurrentIndex(i)
                     break
-            self.ip_camera_section.setVisible(False)
+            if hasattr(self, 'ip_camera_section'): self.ip_camera_section.setVisible(False)
         else:
-            # IP Camera
             for i in range(self.camera_combo.count()):
                 if self.camera_combo.itemData(i) == "ip":
                     self.camera_combo.setCurrentIndex(i)
                     break
-            self.ip_camera_section.setVisible(True)
-            
-            # If val is a dict (internal use) or the active_ip_preset_id
+            if hasattr(self, 'ip_camera_section'): self.ip_camera_section.setVisible(True)
             active_id = self.settings.get("active_ip_preset_id")
             for i in range(self.ip_preset_combo.count()):
                 if self.ip_preset_combo.itemData(i) == active_id:
@@ -810,55 +584,34 @@ class SettingsOverlay(BaseOverlay):
 
     def on_camera_combo_change(self, index):
         current_data = self.camera_combo.currentData()
-        if current_data == "ip":  # IP Camera
-            self.ip_camera_section.setVisible(True)
-            # Auto-trigger scan if no cameras found yet
-            if not self.discovered_cameras:
-                self.scan_for_cameras()
+        if current_data == "ip":
+            if hasattr(self, 'ip_camera_section'): self.ip_camera_section.setVisible(True)
+            if not self.discovered_cameras: self.scan_for_cameras()
         else:
-            self.ip_camera_section.setVisible(False)
-            
-        # Restart preview if running
-        if self.cap_thread is not None:
-            self.stop_preview()
-            self.start_preview()
+            if hasattr(self, 'ip_camera_section'): self.ip_camera_section.setVisible(False)
+        if self.cap_thread is not None: self.stop_preview(); self.start_preview()
     
     def scan_for_cameras(self):
-        """Scan network for IP cameras"""
-        if self.is_scanning:
-            return
-            
+        if self.is_scanning: return
         self.is_scanning = True
         self.btn_scan_cameras.setText("⏳ Scanning...")
         self.btn_scan_cameras.setEnabled(False)
         self.connection_status.setText("Scanning network for cameras...")
         self.connection_status.setStyleSheet("color: #2196F3; font-size: 12px; font-style: italic;")
-        
-        # Run discovery in background
         discovery = get_discovery()
-        discovery.discover_cameras_async(
-            timeout=5.0,
-            callback=self._on_cameras_discovered
-        )
+        discovery.discover_cameras_async(timeout=5.0, callback=self._on_cameras_discovered)
     
     def _on_cameras_discovered(self, cameras):
-        """Callback when camera discovery completes"""
         self.discovered_cameras = cameras
         self.is_scanning = False
-        
-        # Update UI (must be done via timer for thread safety)
         QTimer.singleShot(0, self._update_discovered_cameras_ui)
     
     def _update_discovered_cameras_ui(self):
-        """Update the discovered cameras dropdown"""
         self.btn_scan_cameras.setText("🔍 Scan Network")
         self.btn_scan_cameras.setEnabled(True)
-        
         self.discovered_combo.clear()
-        
         if self.discovered_cameras:
-            for cam in self.discovered_cameras:
-                self.discovered_combo.addItem(str(cam), cam)
+            for cam in self.discovered_cameras: self.discovered_combo.addItem(str(cam), cam)
             self.connection_status.setText(f"Found {len(self.discovered_cameras)} camera(s)")
             self.connection_status.setStyleSheet("color: #4CAF50; font-size: 12px; font-style: italic;")
         else:
@@ -997,6 +750,50 @@ class SettingsOverlay(BaseOverlay):
         self.cap_thread.connection_lost.connect(self.on_connection_lost)
         self.cap_thread.start()
 
+    def on_dist_preset_change(self):
+        txt = self.dist_preset.currentText()
+        if "No Distortion" in txt:
+            self.k1.setText("0.0"); self.k2.setText("0.0"); self.p1.setText("0.0"); self.p2.setText("0.0"); self.k3.setText("0.0")
+        elif "Mild Barrel" in txt:
+            self.k1.setText("-0.08"); self.k2.setText("0.0"); self.p1.setText("0.0"); self.p2.setText("0.0"); self.k3.setText("0.0")
+        elif "Medium Barrel" in txt:
+            self.k1.setText("-0.15"); self.k2.setText("0.0"); self.p1.setText("0.0"); self.p2.setText("0.0"); self.k3.setText("0.0")
+        elif "Strong Barrel" in txt:
+            self.k1.setText("-0.35"); self.k2.setText("0.0"); self.p1.setText("0.0"); self.p2.setText("0.0"); self.k3.setText("0.0")
+        self.update_live_params()
+
+    def on_auto_matrix_toggle(self, checked):
+        if checked:
+            self.btn_auto_matrix.setText("Auto Matrix: ON")
+            self.btn_auto_matrix.setStyleSheet(self.btn_auto_matrix.styleSheet().replace("#E8E8ED", "#4CAF50").replace("#007AFF", "white"))
+            for f in [self.fx, self.fy, self.cx, self.cy]: f.setEnabled(False)
+        else:
+            self.btn_auto_matrix.setText("Auto Matrix: OFF")
+            self.style_button(self.btn_auto_matrix)
+            for f in [self.fx, self.fy, self.cx, self.cy]: f.setEnabled(True)
+        self.update_live_params()
+
+    def toggle_aruco_debug(self):
+        self.aruco_debug_active = not self.aruco_debug_active
+        if self.aruco_debug_active:
+            self.btn_debug_aruco.setText("🔍 Debug On")
+            self.btn_debug_aruco.setStyleSheet(self.btn_debug_aruco.styleSheet().replace("#E8E8ED", "#FF9800").replace("#007AFF", "white"))
+        else:
+            self.btn_debug_aruco.setText("🔍 Debug Off")
+            self.style_button(self.btn_debug_aruco)
+
+    def parse_aspect_ratio_input(self, text):
+        if not text: return 1.0
+        try:
+            if ':' in text:
+                parts = text.split(':')
+                return float(parts[0]) / float(parts[1]) if len(parts) == 2 else 1.0
+            elif '/' in text:
+                parts = text.split('/')
+                return float(parts[0]) / float(parts[1]) if len(parts) == 2 else 1.0
+            return float(text)
+        except: return 1.0
+
     def update_live_params(self):
         """Update running capture thread with current UI values (real-time feedback)"""
         if not self.cap_thread or not self.cap_thread.isRunning():
@@ -1011,9 +808,20 @@ class SettingsOverlay(BaseOverlay):
                 "bottom": int(self.crop_bottom.text() or 0),
                 "rotation": self.rotation_combo.currentData()
             }
-            # Aspect & Distortion currently stay static in overlay for simplicity 
-            # as they are less frequently changed via overlay than crop/rotation.
-            self.cap_thread.update_params(crop_params=crop)
+            # Distortion params
+            dist = {
+                "k1": float(self.k1.text() or 0),
+                "k2": float(self.k2.text() or 0),
+                "p1": float(self.p1.text() or 0),
+                "p2": float(self.p2.text() or 0),
+                "k3": float(self.k3.text() or 0),
+                "fx": float(self.fx.text() or 0),
+                "fy": float(self.fy.text() or 0),
+                "cx": float(self.cx.text() or 0),
+                "cy": float(self.cy.text() or 0)
+            }
+            aspect = self.parse_aspect_ratio_input(self.aspect_ratio_input.text())
+            self.cap_thread.update_params(crop_params=crop, distortion_params=dist, aspect_ratio_correction=aspect)
         except Exception:
             pass
 
@@ -1023,13 +831,30 @@ class SettingsOverlay(BaseOverlay):
             self.btn_preview.setEnabled(True)
             self.btn_preview.setText("Stop Test Feed")
             self.btn_preview.setStyleSheet("""
-                QPushButton { background-color: #F44336; color: white; border-radius: 8px; font-weight: bold; }
-                QPushButton:hover { background-color: #D32F2F; }
+                QPushButton { background-color: #EF4444; color: white; border-radius: 8px; font-weight: bold; }
+                QPushButton:hover { background-color: #DC2626; }
             """)
             
+        out_frame = frame
+        if hasattr(self, 'aruco_debug_active') and self.aruco_debug_active:
+            try:
+                ms = float(self.marker_size_input.text() or 50.0)
+                success, res = detect_aruco_marker(frame, ms)
+                if success:
+                    out_frame = res['annotated_frame']
+                    count = res.get('marker_count', 1)
+                    tilt_txt = ' (TILTED!)' if res.get('is_tilted') else ''
+                    self.connection_status.setText(f"Live: {res['mm_per_px']:.6f} mm/px | {count} markers{tilt_txt}")
+                    self.connection_status.setStyleSheet("color: #22C55E; font-weight: bold;")
+                else:
+                    self.connection_status.setText(f"Searching: {res['error']}")
+                    self.connection_status.setStyleSheet("color: #8B95A5;")
+            except Exception as e:
+                self.connection_status.setText(f"Error: {str(e)[:50]}")
+
         # Convert to Pixmap and Display
         try:
-            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            frame_rgb = cv2.cvtColor(out_frame, cv2.COLOR_BGR2RGB)
             h, w, ch = frame_rgb.shape
             qimg = QImage(frame_rgb.data, w, h, ch * w, QImage.Format_RGB888)
             pix = QPixmap.fromImage(qimg)
@@ -1041,12 +866,12 @@ class SettingsOverlay(BaseOverlay):
         self.btn_preview.setEnabled(True)
         self.btn_preview.setText("Start Test Feed")
         self.preview_box.setText(f"Connection failed:\n{error_msg}")
-        self.preview_box.setStyleSheet("background-color: #FFF2F2; border: 1px solid #FFCDD2; color: #D32F2F; border-radius: 10px; font-weight: bold;")
+        self.preview_box.setStyleSheet("background-color: #3B1515; border: 1px solid #EF4444; color: #EF4444; border-radius: 10px; font-weight: bold;")
 
     def on_connection_lost(self):
         self.stop_preview()
         self.preview_box.setText("Connection lost.\nCheck camera or network.")
-        self.preview_box.setStyleSheet("background-color: #FFF3E0; border-radius: 10px; color: #E65100; font-weight: bold;")
+        self.preview_box.setStyleSheet("background-color: #3B2B10; border-radius: 10px; color: #F59E0B; font-weight: bold;")
 
     def stop_preview(self):
         if self.cap_thread:
@@ -1054,12 +879,12 @@ class SettingsOverlay(BaseOverlay):
             self.cap_thread = None
             
         self.preview_box.setText("Camera\nPreview")
-        self.preview_box.setStyleSheet(f"background-color: #2D2D2D; border-radius: 10px; color: #CCCCCC; font-size: 16px; font-weight: bold;")
+        self.preview_box.setStyleSheet(f"background-color: #1E2330; border-radius: 10px; color: #8B95A5; font-size: 16px; font-weight: bold; border: 1px solid #3A4150;")
         self.preview_box.setPixmap(QPixmap())
         self.btn_preview.setText("Start Test Feed")
         self.btn_preview.setStyleSheet("""
-            QPushButton { background-color: #4CAF50; color: white; border-radius: 8px; font-weight: bold; }
-            QPushButton:hover { background-color: #43A047; }
+            QPushButton { background-color: #3B82F6; color: white; border-radius: 8px; font-weight: bold; }
+            QPushButton:hover { background-color: #2563EB; }
         """)
         
     
@@ -1115,19 +940,26 @@ class SettingsOverlay(BaseOverlay):
             "rotation": self.rotation_combo.currentData()
         }
         
-        # Save Layout Mode
+        # Save Aspect & Resolution
+        self.settings["aspect_ratio_correction"] = self.parse_aspect_ratio_input(self.aspect_ratio_input.text())
+        self.settings["force_width"] = int(self.force_w.text() or 0)
+        self.settings["force_height"] = int(self.force_h.text() or 0)
+
+        # Save Distortion
+        self.settings["lens_distortion"] = {
+            "k1": float(self.k1.text() or 0), "k2": float(self.k2.text() or 0),
+            "p1": float(self.p1.text() or 0), "p2": float(self.p2.text() or 0), "k3": float(self.k3.text() or 0),
+            "fx": float(self.fx.text() or 0), "fy": float(self.fy.text() or 0),
+            "cx": float(self.cx.text() or 0), "cy": float(self.cy.text() or 0)
+        }
+        self.settings["auto_estimate_matrix"] = self.btn_auto_matrix.isChecked()
+
+        # Save Layout & Model
         mode_idx = self.layout_combo.currentIndex()
-        self.settings["layout_mode"] = "split" if mode_idx == 1 else "classic"
+        self.settings["layout_mode"] = ["classic", "split", "minimal"][mode_idx]
+        self.settings["detection_model"] = self.det_model.currentData()
         
         self.settings["ip_camera_presets"] = self.ip_presets
-        
-        self.settings["paths"] = {
-            "profile": self.profile_input.text(),
-            "settings": self.settings_input.text(),
-            "db": self.db_input.text(),
-            "results": self.results_input.text()
-        }
-        
         self.settings["sensor_port"] = self.sensor_port_input.text().strip()
         self.settings["plc_port"] = self.plc_port_input.text().strip()
         try:
@@ -1155,12 +987,13 @@ class SettingsOverlay(BaseOverlay):
         self.btn_fetch.setEnabled(False)
         self.btn_fetch.setStyleSheet(f"""
             QPushButton {{
-                background-color: #E0E0E0;
+                background-color: #252A34;
                 border-radius: {UIScaling.scale(8)}px;
-                color: #666666;
+                color: #8B95A5;
                 font-size: {UIScaling.scale_font(14)}px;
                 font-weight: bold;
                 padding: {UIScaling.scale(8)}px {UIScaling.scale(15)}px;
+                border: 1px solid #3A4150;
             }}
         """)
         
@@ -1345,10 +1178,10 @@ class SettingsOverlay(BaseOverlay):
             new_mmpx = dialog.get_result()
             self.mmpx_input.setText(f"{new_mmpx:.8f}")
             self.connection_status.setText(f"Calibrated: {new_mmpx:.6f} mm/px applied")
-            self.connection_status.setStyleSheet("color: #4CAF50; font-weight: bold;")
+            self.connection_status.setStyleSheet("color: #22C55E; font-weight: bold;")
         else:
             self.connection_status.setText("Calibration cancelled by user")
-            self.connection_status.setStyleSheet("color: #666666;")
+            self.connection_status.setStyleSheet("color: #8B95A5;")
 
         self.btn_run_calibration.setEnabled(True)
         self.btn_run_calibration.setText("Run Auto Calibration")

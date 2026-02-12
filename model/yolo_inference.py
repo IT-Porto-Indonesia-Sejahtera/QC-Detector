@@ -202,6 +202,13 @@ def segment_image(image, conf=0.25):
     
     return mask_binary, largest_contour, inference_time
 
-def get_mask_and_contour(image_path):
-    mask, contour, inference_time = segment_image(image_path)
     return contour, mask, inference_time
+
+
+def is_available():
+    """Check if YOLO dependencies are available."""
+    try:
+        from ultralytics import YOLO
+        return True
+    except ImportError:
+        return False
