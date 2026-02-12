@@ -1,0 +1,87 @@
+2026-02-06 14:19:27,323 - ERROR - main - Uncaught exception:
+Traceback (most recent call last):
+  File "/Users/porto-mac/Documents/GitHub/QC-Detector/main.py", line 118, in <module>
+    run_ui_mode()
+  File "/Users/porto-mac/Documents/GitHub/QC-Detector/main.py", line 56, in run_ui_mode
+    app.run_app()
+  File "/Users/porto-mac/Documents/GitHub/QC-Detector/app/main_windows.py", line 176, in run_app
+    window = MainWindow()
+  File "/Users/porto-mac/Documents/GitHub/QC-Detector/app/main_windows.py", line 28, in __init__
+    self.dataset_page = CaptureDatasetScreen(parent=self)
+  File "/Users/porto-mac/Documents/GitHub/QC-Detector/app/pages/capture_dataset_screen.py", line 185, in __init__
+    self.test_btn.clicked.connect(self.start_consistency_test)
+AttributeError: 'CaptureDatasetScreen' object has no attribute 'start_consistency_test'
+
+2026-02-06 14:19:51,802 - ERROR - main - Uncaught exception:
+Traceback (most recent call last):
+  File "/Users/porto-mac/Documents/GitHub/QC-Detector/main.py", line 118, in <module>
+    run_ui_mode()
+  File "/Users/porto-mac/Documents/GitHub/QC-Detector/main.py", line 56, in run_ui_mode
+    app.run_app()
+  File "/Users/porto-mac/Documents/GitHub/QC-Detector/app/main_windows.py", line 176, in run_app
+    window = MainWindow()
+  File "/Users/porto-mac/Documents/GitHub/QC-Detector/app/main_windows.py", line 28, in __init__
+    self.dataset_page = CaptureDatasetScreen(parent=self)
+  File "/Users/porto-mac/Documents/GitHub/QC-Detector/app/pages/capture_dataset_screen.py", line 185, in __init__
+    self.test_btn.clicked.connect(self.start_consistency_test)
+AttributeError: 'CaptureDatasetScreen' object has no attribute 'start_consistency_test'
+
+2026-02-06 16:11:52,660 - ERROR - main - Uncaught exception:
+Traceback (most recent call last):
+  File "/Users/porto-mac/Documents/GitHub/QC-Detector/app/pages/measure_live_screen.py", line 1017, in <lambda>
+    btn.clicked.connect(lambda _, idx=global_idx: self.on_preset_clicked(idx))
+  File "/Users/porto-mac/Documents/GitHub/QC-Detector/app/pages/measure_live_screen.py", line 1037, in on_preset_clicked
+    self.current_otorisasi = float(p.get("otorisasi", 0) or 0)
+ValueError: could not convert string to float: 'pas'
+
+2026-02-06 16:11:54,049 - ERROR - main - Uncaught exception:
+Traceback (most recent call last):
+  File "/Users/porto-mac/Documents/GitHub/QC-Detector/app/pages/measure_live_screen.py", line 1017, in <lambda>
+    btn.clicked.connect(lambda _, idx=global_idx: self.on_preset_clicked(idx))
+  File "/Users/porto-mac/Documents/GitHub/QC-Detector/app/pages/measure_live_screen.py", line 1037, in on_preset_clicked
+    self.current_otorisasi = float(p.get("otorisasi", 0) or 0)
+ValueError: could not convert string to float: 'pas'
+
+2026-02-06 16:11:54,769 - ERROR - main - Uncaught exception:
+Traceback (most recent call last):
+  File "/Users/porto-mac/Documents/GitHub/QC-Detector/app/pages/measure_live_screen.py", line 1017, in <lambda>
+    btn.clicked.connect(lambda _, idx=global_idx: self.on_preset_clicked(idx))
+  File "/Users/porto-mac/Documents/GitHub/QC-Detector/app/pages/measure_live_screen.py", line 1037, in on_preset_clicked
+    self.current_otorisasi = float(p.get("otorisasi", 0) or 0)
+ValueError: could not convert string to float: 'pas'
+
+2026-02-06 16:11:55,365 - ERROR - main - Uncaught exception:
+Traceback (most recent call last):
+  File "/Users/porto-mac/Documents/GitHub/QC-Detector/app/pages/measure_live_screen.py", line 1017, in <lambda>
+    btn.clicked.connect(lambda _, idx=global_idx: self.on_preset_clicked(idx))
+  File "/Users/porto-mac/Documents/GitHub/QC-Detector/app/pages/measure_live_screen.py", line 1037, in on_preset_clicked
+    self.current_otorisasi = float(p.get("otorisasi", 0) or 0)
+ValueError: could not convert string to float: 'pas'
+
+2026-02-06 17:15:51,497 - ERROR - main - Uncaught exception:
+Traceback (most recent call last):
+  File "/Users/porto-mac/Documents/GitHub/QC-Detector/app/pages/general_settings_page.py", line 445, in on_camera_change
+    return s
+NameError: name 's' is not defined
+
+2026-02-06 17:40:38,821 - ERROR - fetch_logger - Simulated Fetch Error: division by zero
+2026-02-06 17:40:51,761 - ERROR - main - Uncaught exception:
+Traceback (most recent call last):
+  File "/Users/porto-mac/Documents/GitHub/QC-Detector/test_lark_crash.py", line 28, in <module>
+    test_crash_handler()
+  File "/Users/porto-mac/Documents/GitHub/QC-Detector/test_lark_crash.py", line 25, in test_crash_handler
+    raise RuntimeError("This is a simulated system-wide crash!")
+RuntimeError: This is a simulated system-wide crash!
+
+2026-02-06 17:44:35,488 - CRITICAL - main - Uncaught exception: name 's' is not defined
+Traceback (most recent call last):
+  File "/Users/porto-mac/Documents/GitHub/QC-Detector/app/pages/general_settings_page.py", line 445, in on_camera_change
+    return s
+NameError: name 's' is not defined
+
+2026-02-06 17:45:39,591 - CRITICAL - main - Uncaught exception: name 's' is not defined
+Traceback (most recent call last):
+  File "/Users/porto-mac/Documents/GitHub/QC-Detector/app/pages/general_settings_page.py", line 445, in on_camera_change
+    return s
+NameError: name 's' is not defined
+

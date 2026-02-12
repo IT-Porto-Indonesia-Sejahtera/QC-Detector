@@ -10,18 +10,18 @@ class BaseOverlay(QFrame):
     closed = Signal()  # Emitted when overlay closes
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setStyleSheet("background-color: rgba(100, 100, 100, 240);") # Darker dimmer for better visibility
+        self.setStyleSheet("background-color: rgba(10, 12, 18, 220);")  # Deep industrial dimmer
         
         # Main Layout to center the content
         self.main_layout = QVBoxLayout(self)
         self.main_layout.setAlignment(Qt.AlignCenter)
         self.main_layout.setContentsMargins(20, 20, 20, 20)
         
-        # The white box
+        # Dark industrial content box
         self.content_box = QFrame()
         self.content_box.setStyleSheet("""
             QFrame {
-                background-color: white; 
+                background-color: #1B1F27; 
                 border-radius: 15px;
             }
         """)
@@ -79,6 +79,11 @@ class BaseOverlay(QFrame):
         if obj == self.parent() and event.type() == QEvent.Resize:
             self.update_content_size()
         return super().eventFilter(obj, event)
+
+    def show_overlay(self):
+        """Show the overlay"""
+        self.show()
+        self.raise_()
 
     def close_overlay(self):
         self.closed.emit()  # Emit signal before closing

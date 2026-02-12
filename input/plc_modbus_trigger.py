@@ -9,6 +9,7 @@ Requires: pymodbus library
 
 import threading
 import time
+import logging
 from typing import Optional, Callable, List
 from dataclasses import dataclass
 
@@ -65,6 +66,15 @@ class PLCModbusTrigger:
         self.running = False
         self.last_value: Optional[int] = None
         
+        # Suppress pymodbus internal logging (which can be very noisy)
+        # It's better to manage our own logging and only show what's relevant to the UI
+        pymodbus_logger = logging.getLogger("pymodbus")
+        pymodbus_logger.setLevel(logging.CRITICAL)
+        
+        # Connectivity state tracking
+        self._last_error_time = 0
+        self._error_cooldown = 10.0 # Don't log same error more than once every 10 seconds
+        
         # Callback when trigger condition met (rising edge 0->1)
         self.on_trigger: Optional[Callable[[], None]] = None
         # Callback for value updates (for UI display)
@@ -109,10 +119,22 @@ class PLCModbusTrigger:
                 self._notify_connection(True, f"Connected to {connection_str}")
                 return True
             else:
+                # Throttle connection failure logging
+                current_time = time.time()
+                if current_time - self._last_error_time > self._error_cooldown:
+                    print(f"[PLC] Failed to connect to {connection_str}")
+                    self._last_error_time = current_time
+                    
                 self._notify_connection(False, f"Failed to connect to {connection_str}")
                 return False
                 
         except Exception as e:
+            # Throttle connection error logging to avoid spamming the console/Lark
+            current_time = time.time()
+            if current_time - self._last_error_time > self._error_cooldown:
+                print(f"[PLC] Connection error: {str(e)}")
+                self._last_error_time = current_time
+            
             self._notify_connection(False, f"Connection error: {str(e)}")
             return False
     

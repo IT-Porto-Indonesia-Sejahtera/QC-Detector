@@ -232,7 +232,7 @@ class GeneralSettingsPage(QWidget):
         from PySide6.QtWidgets import QTextEdit
         self.log_display = QTextEdit(); self.log_display.setReadOnly(True)
         self.log_display.setFixedHeight(UIScaling.scale(120))
-        self.log_display.setStyleSheet(f"background: #1C1C1E; color: #00FF00; font-family: monospace; font-size: {UIScaling.scale_font(11)}px; padding: 8px; border-radius: 8px;")
+        self.log_display.setStyleSheet(f"background: #1C1C1E; color: #00FF00; font-family: 'Menlo', 'Courier New'; font-size: {UIScaling.scale_font(11)}px; padding: 8px; border-radius: 8px;")
         sync_layout.addWidget(self.log_display)
         right.addWidget(sync_card)
         

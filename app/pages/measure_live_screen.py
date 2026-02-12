@@ -1436,6 +1436,9 @@ class LiveCameraScreen(QWidget):
                     pass
                     
                 self.cap_thread.setParent(None)
+                # CRITICAL FIX: Keep a reference to the thread so it's not garbage collected while running
+                # If GC happens while the C++ thread is stuck in a syscall (like cv2.read), it causes SIGABRT.
+                _zombie_threads.append(self.cap_thread)
             
             self.cap_thread = None
         

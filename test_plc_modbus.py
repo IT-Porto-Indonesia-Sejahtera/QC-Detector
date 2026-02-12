@@ -3,6 +3,10 @@ import serial.tools.list_ports
 import random
 import time
 
+from input.plc_modbus_trigger import (
+    ModbusConfig, PLCModbusTrigger, check_pymodbus_available
+)
+
 # Check if pymodbus is installed
 if not check_pymodbus_available():
     print("ERROR: pymodbus is not installed!")

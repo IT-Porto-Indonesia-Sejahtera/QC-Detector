@@ -287,6 +287,15 @@ def segment_image(image, conf=0.25):
     return mask_binary, largest_contour, total_time
 
 
+def is_available():
+    """Check if Advanced Model dependencies are available."""
+    try:
+        from ultralytics import YOLO, SAM
+        return True
+    except ImportError:
+        return False
+
+
 def get_mask_and_contour(image_path):
     """Convenience function matching the interface of other inference modules."""
     mask, contour, inference_time = segment_image(image_path)

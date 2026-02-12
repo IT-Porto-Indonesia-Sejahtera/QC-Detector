@@ -49,5 +49,20 @@ class ModelWarmupWorker(QThread):
         except Exception as e:
             self.logger.error(f"Failed to warmup FastSAM: {e}")
 
+        # 3. Warmup Advanced Model (YOLOv8-X + SAM)
+        try:
+            from .advanced_inference import get_yolo_model as get_adv_yolo, get_sam_model as get_adv_sam, is_available as is_adv_available
+            if is_adv_available():
+                self.progress.emit("Loading Advanced Model (YOLOv8-X + SAM)...")
+                start = time.time()
+                # Load both components
+                get_adv_yolo() 
+                get_adv_sam()
+                self.logger.info(f"Advanced Model warmed up in {time.time() - start:.2f}s")
+            else:
+                self.logger.warning("Advanced Model dependencies not available")
+        except Exception as e:
+            self.logger.error(f"Failed to warmup Advanced Model: {e}")
+
         self.logger.info("AI Model Warmup complete.")
         self.finished.emit()
