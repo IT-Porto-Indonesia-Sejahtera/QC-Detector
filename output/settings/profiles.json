@@ -2,184 +2,163 @@
     {
         "id": "2ddd15e6-ce5d-48e0-a68b-f706b1a70c44",
         "name": "Shift 2",
-        "sub_label": "Team A",
+        "sub_label": "Left (Kiri)",
         "sku_label": "E1068M",
-        "last_updated": "22/12/2025, 15:24:05",
+        "last_updated": "22/12/2025, 10:41:24",
         "presets": [
             {
                 "sku": "E1068M",
                 "size": "40",
                 "color_idx": 1,
-                "team": "Team A",
+                "team": "Left (Kiri)",
                 "otorisasi": 0
             },
             {
                 "sku": "E1068M",
                 "size": "41",
                 "color_idx": 1,
-                "team": "Team A",
+                "team": "Left (Kiri)",
                 "otorisasi": 0
             },
             {
                 "sku": "E1068M",
                 "size": "42",
                 "color_idx": 1,
-                "team": "Team A",
+                "team": "Left (Kiri)",
                 "otorisasi": 0
             },
             {
                 "sku": "E1068M",
                 "size": "43",
                 "color_idx": 1,
-                "team": "Team A",
+                "team": "Left (Kiri)",
                 "otorisasi": 0
             },
             {
                 "sku": "E1068M",
                 "size": "44",
                 "color_idx": 1,
-                "team": "Team A",
+                "team": "Left (Kiri)",
                 "otorisasi": 0
             },
             {
                 "sku": "E1068M",
                 "size": "45",
                 "color_idx": 1,
-                "team": "Team A",
+                "team": "Left (Kiri)",
                 "otorisasi": 0
             },
             {
                 "sku": "E6003M-Beige",
                 "size": "37",
                 "color_idx": 2,
-                "team": "Team A",
+                "team": "Right (Kanan)",
                 "otorisasi": 0
             },
             {
                 "sku": "E6003M-Beige",
                 "size": "38",
                 "color_idx": 2,
-                "team": "Team A",
+                "team": "Right (Kanan)",
                 "otorisasi": 0
             },
             {
                 "sku": "E6003M-Beige",
                 "size": "39",
                 "color_idx": 2,
-                "team": "Team A",
+                "team": "Right (Kanan)",
                 "otorisasi": 0
             },
             {
                 "sku": "E6003M-Beige",
                 "size": "40",
                 "color_idx": 2,
-                "team": "Team A",
+                "team": "Right (Kanan)",
                 "otorisasi": 0
             },
             {
                 "sku": "E6003M-Beige",
                 "size": "41",
                 "color_idx": 2,
-                "team": "Team A",
+                "team": "Right (Kanan)",
                 "otorisasi": 0
             },
             {
                 "sku": "E6003M-Beige",
                 "size": "42",
                 "color_idx": 2,
-                "team": "Team A",
+                "team": "Right (Kanan)",
                 "otorisasi": 0
             },
             {
                 "sku": "E6003M-Beige",
                 "size": "43",
                 "color_idx": 2,
-                "team": "Team A",
+                "team": "Right (Kanan)",
                 "otorisasi": 0
             },
             {
                 "sku": "E6003M-Beige",
                 "size": "44",
                 "color_idx": 2,
-                "team": "Team A",
+                "team": "Right (Kanan)",
                 "otorisasi": 0
             },
             {
-                "sku": "EVA Porto 1002M",
-                "size": "39",
+                "sku": "E1006K-6",
+                "size": "24",
                 "color_idx": 3,
-                "team": "Team B",
-                "otorisasi": "pas"
+                "team": "Left (Kiri)",
+                "otorisasi": 0
             },
             {
-                "sku": "EVA Porto 1002M",
-                "size": "40",
+                "sku": "E1006K-6",
+                "size": "25",
                 "color_idx": 3,
-                "team": "Team B",
-                "otorisasi": "pas"
+                "team": "Left (Kiri)",
+                "otorisasi": 0
             },
             {
-                "sku": "EVA Porto 1002M",
-                "size": "41",
+                "sku": "E1006K-6",
+                "size": "26",
                 "color_idx": 3,
-                "team": "Team B",
-                "otorisasi": "pas"
+                "team": "Left (Kiri)",
+                "otorisasi": 0
             },
             {
-                "sku": "EVA Porto 1002M",
-                "size": "42",
+                "sku": "E1006K-6",
+                "size": "27",
                 "color_idx": 3,
-                "team": "Team B",
-                "otorisasi": "pas"
+                "team": "Left (Kiri)",
+                "otorisasi": 0
             },
             {
-                "sku": "EVA Porto 1002M",
-                "size": "43",
+                "sku": "E1006K-6",
+                "size": "28",
                 "color_idx": 3,
-                "team": "Team B",
-                "otorisasi": "pas"
+                "team": "Left (Kiri)",
+                "otorisasi": 0
             },
             {
-                "sku": "EVA Porto 1006B",
-                "size": "30",
-                "color_idx": 4,
-                "team": "Team B",
-                "otorisasi": "+1.0"
+                "sku": "E1006K-6",
+                "size": "29",
+                "color_idx": 3,
+                "team": "Left (Kiri)",
+                "otorisasi": 0
             },
             {
-                "sku": "EVA Porto 1006B",
-                "size": "31",
+                "sku": "E0604T-2",
+                "size": "21",
                 "color_idx": 4,
-                "team": "Team B",
-                "otorisasi": "+1.0"
+                "team": "Right (Kanan)",
+                "otorisasi": 0
             },
             {
-                "sku": "EVA Porto 1006B",
-                "size": "32",
+                "sku": "E0604T-2",
+                "size": "23",
                 "color_idx": 4,
-                "team": "Team B",
-                "otorisasi": "+1.0"
-            },
-            {
-                "sku": "EVA Porto 1006B",
-                "size": "33",
-                "color_idx": 4,
-                "team": "Team B",
-                "otorisasi": "+1.0"
-            },
-            {
-                "sku": "EVA Porto 1006B",
-                "size": "34",
-                "color_idx": 4,
-                "team": "Team B",
-                "otorisasi": "+1.0"
-            },
-            {
-                "sku": "EVA Porto 1006B",
-                "size": "35",
-                "color_idx": 4,
-                "team": "Team B",
-                "otorisasi": "+1.0"
+                "team": "Right (Kanan)",
+                "otorisasi": 0
             }
         ],
         "selected_skus": [
@@ -191,7 +170,7 @@
                 "kategori": "EVA1",
                 "otorisasi": 0,
                 "sizes": "40-45",
-                "team": "Team A"
+                "team": "Left (Kiri)"
             },
             {
                 "code": "E6003M-Beige",
@@ -201,28 +180,37 @@
                 "kategori": "EVA1",
                 "otorisasi": 0,
                 "sizes": "37-44",
-                "team": "Team A"
+                "team": "Right (Kanan)"
             },
             {
-                "code": "EVA Porto 1002M",
-                "coeff": "EVA Porto 1002M",
-                "default_code": "EVA Porto 1002M",
-                "gdrive_id": "110ysuBRfCF4Wu-3g3BzMYg8VrJmJjlq5",
-                "kategori": "Sandal EVA",
-                "otorisasi": "pas",
-                "sizes": "39-43",
-                "team": "Team B"
+                "code": "E1006K-6",
+                "coeff": "E1006K-6",
+                "default_code": "E1006K-6",
+                "gdrive_id": "https://lh3.googleusercontent.com/d/1F98iZCIoW-nH7u4d7DkIQ6wQYXTtVGD3=s600",
+                "kategori": "EVA1",
+                "otorisasi": 0,
+                "sizes": "24-29",
+                "team": "Left (Kiri)"
             },
             {
-                "code": "EVA Porto 1006B",
-                "coeff": "EVA Porto 1006B",
-                "default_code": "EVA Porto 1006B",
-                "gdrive_id": "1hb813Kwtqw4HG08BdKdqTvLXZsph_N4e",
-                "kategori": "Sandal EVA",
-                "otorisasi": "+1.0",
-                "sizes": "30-35",
-                "team": "Team B"
+                "code": "E0604T-2",
+                "coeff": "E0604T-2",
+                "default_code": "E0604T-2",
+                "gdrive_id": "https://lh3.googleusercontent.com/d/1-VD9ZnTw5RKtOCNyCmYSPdzwSzEk4ssr=s600",
+                "kategori": "EVA1",
+                "otorisasi": 0,
+                "sizes": "20/21, 22/23",
+                "team": "Right (Kanan)"
             }
         ]
+    },
+    {
+        "id": "14c21503-4bd7-492d-a7a0-1a1540128f59",
+        "name": "Shift 3",
+        "sub_label": "No Position",
+        "presets": [],
+        "last_updated": "19/12/2025, 10:40:52",
+        "sku_label": "",
+        "selected_skus": []
     }
 ]

@@ -367,12 +367,12 @@ class ProfileEditorOverlay(BaseOverlay):
         sku_row.addWidget(btn_select)
         
         team_row = QHBoxLayout()
-        lbl_team = QLabel("Team")
+        lbl_team = QLabel("Pos.")
         lbl_team.setFixedWidth(sku_lbl_w)
         lbl_team.setStyleSheet(f"color: {self.theme['text_main']}; font-size: {UIScaling.scale_font(13)}px;")
         
         cmb_team = QComboBox()
-        cmb_team.addItems(["", "Team A", "Team B", "Team C", "Team D"])
+        cmb_team.addItems(["", "Left (Kiri)", "Right (Kanan)"])
         
         # Create and set custom white list view to override black dropdown
         list_view = QListView()
@@ -436,7 +436,13 @@ class ProfileEditorOverlay(BaseOverlay):
             if i < 4:
                 self.sku_rows[i]["data"] = data
                 self.sku_rows[i]["sku_val"].setText(str(data.get("code", "")))
-                self.sku_rows[i]["team_cmb"].setCurrentText(data.get("team", ""))
+                # Map legacy team names to new position names
+                team_val = data.get("team", "")
+                if team_val in ["Team A", "A"]:
+                    team_val = "Left (Kiri)"
+                elif team_val in ["Team B", "B"]:
+                    team_val = "Right (Kanan)"
+                self.sku_rows[i]["team_cmb"].setCurrentText(team_val)
                 self.sku_rows[i]["img"].setStyleSheet("background-color: #2196F3; border-radius: 8px;")
 
     def select_sku(self, index):
@@ -449,26 +455,69 @@ class ProfileEditorOverlay(BaseOverlay):
         overlay.sku_selected.connect(self.on_sku_selected)
         
     def on_sku_selected(self, sku_data):
-        index = self.pending_index
-        row = self.sku_rows[index]
+        idx = getattr(self, 'pending_index', -1)
+        if idx < 0 or idx >= len(self.sku_rows):
+            print(f"[ProfileEditor] Invalid pending_index: {idx}")
+            return
+        if not sku_data:
+            return
+        row = self.sku_rows[idx]
         row["data"] = sku_data
         row["sku_val"].setText(str(sku_data.get("code", "")))
         row["img"].setStyleSheet("background-color: #2196F3; border-radius: 8px;")
 
+    def _parse_sizes(self, size_str, code=""):
+        """Parse sizes from SKU data — handles ranges, slashes, commas."""
+        if not size_str:
+            if any(x in code.upper() for x in ["S","M","L","XL"]):
+                return ["S", "M", "L", "XL"]
+            return ["36","37","38","39","40","41","42","43","44"]
+            
+        s = str(size_str).strip().upper()
+        
+        if "," in s:
+            items = [x.strip() for x in s.split(",")]
+            result = []
+            for item in items:
+                if "/" in item and "MM" not in item:
+                    parts = item.split("/")
+                    result.append(parts[-1].strip())
+                else:
+                    result.append(item)
+            return result
+
+        if any(x in s for x in ["SMALL", "MEDIUM", "LARGE", "MM"]):
+            return [s]
+
+        def resolve_slash(val):
+            if "/" in val:
+                parts = val.split("/")
+                return parts[-1].strip() 
+            return val
+
+        if "-" in s:
+            parts = s.split("-")
+            if len(parts) == 2:
+                start_s = resolve_slash(parts[0].strip())
+                end_s = resolve_slash(parts[1].strip())
+                if start_s.isdigit() and end_s.isdigit():
+                    start = int(start_s)
+                    end = int(end_s)
+                    if start < end:
+                        return [str(i) for i in range(start, end + 1)]
+            
+        if "/" in s:
+            return [resolve_slash(s)]
+            
+        return [s]
+
     def on_save(self):
         has_sku = False
         selected_skus = []
-        generated_presets = [] # Flattened list for main screen
+        generated_presets = []
         
         first_valid_team = ""
         first_valid_sku_label = ""
-        
-        # Helper to decide sizes based on SKU code
-        def get_sizes_for_sku(code):
-            c = code.upper()
-            if "S" in c or "M" in c or "L" in c or "XL" in c:
-               return ["S", "M", "L", "XL"]
-            return ["36", "37", "38", "39", "40", "41", "42", "43", "44"]
 
         for idx, row in enumerate(self.sku_rows):
             data = row["data"]
@@ -481,18 +530,21 @@ class ProfileEditorOverlay(BaseOverlay):
                 selected_skus.append(item)
                 
                 sku_code = data.get("code", "UNKNOWN")
+                otorisasi = data.get("otorisasi", 0)
                 if not first_valid_team and team: first_valid_team = team
                 if not first_valid_sku_label: first_valid_sku_label = sku_code
                 
-                # Generate Presets for this SKU
-                color_index = (idx % 4) + 1 # 1..4 based on row
-                sizes = get_sizes_for_sku(sku_code)
+                # Generate Presets for this SKU using proper size parsing
+                color_index = (idx % 4) + 1
+                sizes = self._parse_sizes(data.get("sizes", ""), sku_code)
                 
                 for s in sizes:
                     generated_presets.append({
                         "sku": sku_code,
                         "size": s,
-                        "color_idx": color_index
+                        "color_idx": color_index,
+                        "team": team,
+                        "otorisasi": otorisasi
                     })
         
         if not has_sku:
@@ -506,10 +558,10 @@ class ProfileEditorOverlay(BaseOverlay):
         result_data = {
             "name": tag,
             "last_updated": f"{date_str}, {timestamp}",
-            "sub_label": first_valid_team or "No Team", 
+            "sub_label": first_valid_team or "No Position", 
             "sku_label": first_valid_sku_label,
             "selected_skus": selected_skus,
-            "presets": generated_presets # CRITICAL: Contains the button definitions
+            "presets": generated_presets
         }
         
         if self.profile_data:

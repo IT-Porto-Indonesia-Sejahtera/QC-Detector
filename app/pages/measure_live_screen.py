@@ -143,6 +143,8 @@ class LiveCameraScreen(QWidget):
         self.active_profile_id = None
         self.active_profile_data = {}
         self.presets = DEFAULT_PRESETS
+        self._preset_click_guard = False  # Prevent double-click on presets
+        self._render_debounce = False  # Prevent rapid re-renders
         
         # UI Layout Containers (initialized to None)
         self.left_presets_layout = None
@@ -217,9 +219,8 @@ class LiveCameraScreen(QWidget):
         self.render_presets()
     
     def on_profile_selected(self, profile_data):
-        # Update active profile - logic might need update if active profile changes externally
-        # But since we go to a page and come back, we should reload in showEvent or manually
-        pass 
+        # A profile was selected from the overlay — refresh live screen
+        self.refresh_data()
 
     # ... (skipping some methods not shown here, will target show_settings_menu below)
 
@@ -690,11 +691,11 @@ class LiveCameraScreen(QWidget):
         btn_edit.setStyleSheet(f"background-color: #F5F5F5; border-radius: {info_bar_radius}px; color: #333333; border: 1px solid #E0E0E0; font-size: {btn_edit_font_size}px;")
         btn_edit.clicked.connect(self.open_profile_dialog)
         
-        # Switch Button (Arrows)
-        self.btn_switch = QPushButton("⇄")
-        self.btn_switch.setFixedSize(ctrl_btn_size, ctrl_btn_size)
-        self.btn_switch.setStyleSheet(f"QPushButton {{ background: #E3F2FD; color: #1565C0; border-radius: {ctrl_btn_radius}px; font-size: {ctrl_btn_font_size}px; border: 1px solid #BBDEFB; }} QPushButton:hover {{ background: #BBDEFB; }}")
-        self.btn_switch.clicked.connect(self.on_switch_sides)
+        # Switch Button (Arrows) - REMOVED
+        # self.btn_switch = QPushButton("⇄")
+        # self.btn_switch.setFixedSize(ctrl_btn_size, ctrl_btn_size)
+        # self.btn_switch.setStyleSheet(f"QPushButton {{ background: #E3F2FD; color: #1565C0; border-radius: {ctrl_btn_radius}px; font-size: {ctrl_btn_font_size}px; border: 1px solid #BBDEFB; }} QPushButton:hover {{ background: #BBDEFB; }}")
+        # self.btn_switch.clicked.connect(self.on_switch_sides)
         
         # Settings
         self.settings_btn = QPushButton("⚙️")
@@ -733,7 +734,8 @@ class LiveCameraScreen(QWidget):
         top_ctrl_layout.addWidget(self.model_combo)
 
         top_ctrl_layout.addWidget(btn_edit)
-        top_ctrl_layout.addWidget(self.btn_switch)
+        # Switch button removed (Position is now explicit Left/Right)
+        # top_ctrl_layout.addWidget(self.btn_switch)
         top_ctrl_layout.addWidget(self.settings_btn)
         
         layout.addLayout(top_ctrl_layout)
@@ -844,14 +846,20 @@ class LiveCameraScreen(QWidget):
 
 
     def render_presets(self):
-        # Handle Layout Modes
+        # Debounce rapid re-render calls
+        if self._render_debounce:
+            return
+        self._render_debounce = True
+        QTimer.singleShot(50, self._do_render_presets)
+    
+    def _do_render_presets(self):
+        self._render_debounce = False
         if self.layout_mode == "minimal":
             return # Minimal mode has no presets to render
             
         if self.layout_mode == "classic":
-            # CLASSIC MODE: All presets in left panel, but split by Team A (Left) and B (Right)
-            if hasattr(self, 'btn_switch'): 
-                self.btn_switch.setVisible(False)
+            # CLASSIC MODE: All presets in left panel, but split by Position
+            # We treat Left as Top/First and Right as Bottom/Second
                 
             self._clear_layout(self.classic_presets_layout)
             
@@ -861,76 +869,76 @@ class LiveCameraScreen(QWidget):
             h_split.setContentsMargins(0, 0, 0, 0)
             h_split.setSpacing(10)
             
-            # Team A Container
-            container_A = QWidget()
-            layout_A = QVBoxLayout(container_A)
-            layout_A.setContentsMargins(0, 0, 0, 0)
+            # Left (Kiri) Container
+            container_L = QWidget()
+            layout_L = QVBoxLayout(container_L)
+            layout_L.setContentsMargins(0, 0, 0, 0)
             
-            # Team B Container
-            container_B = QWidget()
-            layout_B = QVBoxLayout(container_B)
-            layout_B.setContentsMargins(0, 0, 0, 0)
+            # Right (Kanan) Container
+            container_R = QWidget()
+            layout_R = QVBoxLayout(container_R)
+            layout_R.setContentsMargins(0, 0, 0, 0)
             
             # Filter Presets
-            def is_team_match(p, target):
-                team = str(p.get("team", "A")).upper().strip()
-                target = str(target).upper().strip()
-                # Match "Team A" with "A", or just "A" with "A"
-                return team == target or team.endswith(" " + target)
-
-            presets_A = [p for p in self.presets if is_team_match(p, "A")]
-            presets_B = [p for p in self.presets if is_team_match(p, "B")]
+            presets_L = []
+            presets_R = []
+            
+            for p in self.presets:
+                # Map Team to Position if needed
+                pos = str(p.get("team", "")).lower().strip()
+                sub = str(p.get("sub_label", "")).lower().strip()
+                
+                # Logic: Explicit Left/Right OR fallback A->Left, B->Right
+                is_left = "left" in pos or "kiri" in pos or "team a" in pos or pos == "a"
+                is_right = "right" in pos or "kanan" in pos or "team b" in pos or pos == "b"
+                
+                if is_left: presets_L.append(p)
+                elif is_right: presets_R.append(p)
+                else: presets_L.append(p) # Default to Left if undefined
             
             # Render to respective layouts
-            self._render_presets_auto_fit(presets_A, layout_A)
-            self._render_presets_auto_fit(presets_B, layout_B)
+            self._render_presets_auto_fit(presets_L, layout_L)
+            self._render_presets_auto_fit(presets_R, layout_R)
             
             # Add to Split Layout (50/50 split within the 55% panel)
-            h_split.addWidget(container_A, 50)
-            h_split.addWidget(container_B, 50)
+            h_split.addWidget(container_L, 50)
+            h_split.addWidget(container_R, 50)
             
             # Add Split Widget to Main Classic Layout
             self.classic_presets_layout.addWidget(h_split_widget)
 
         else:
-            # SPLIT MODE: Team A/B Logic
+            # SPLIT MODE: Left/Right Logic
+            # Switch button is removed as per requirement
+            
             if hasattr(self, 'btn_switch'): 
-                self.btn_switch.setVisible(True)
+                self.btn_switch.setVisible(False)
                 
-            # 1. Determine which team goes where
-            # Default: A is Left, B is Right
-            left_team = "A"
-            right_team = "B"
+            # Update Headers
+            self.lbl_left_team.setText("Left (Kiri)")
+            self.lbl_right_team.setText("Right (Kanan)")
             
-            if self.team_layout_order == "B_LEFT":
-                left_team = "B"
-                right_team = "A"
-                
-            # 2. Update Headers
-            self.lbl_left_team.setText(f"Team {left_team}")
-            self.lbl_right_team.setText(f"Team {right_team}")
-            
-            # 3. Filter Presets
+            # Filter Presets
             presets_left = []
             presets_right = []
             
-            def is_team_match(p, target):
-                team = str(p.get("team", "A")).upper().strip()
-                target = str(target).upper().strip()
-                # Match "Team A" with "A", or just "A" with "A"
-                return team == target or team.endswith(" " + target)
-
             for p in self.presets:
-                if is_team_match(p, left_team):
-                    presets_left.append(p)
-                elif is_team_match(p, right_team):
-                    presets_right.append(p)
-                    
-            # 4. Clear existing items
+                # Map Team to Position if needed
+                pos = str(p.get("team", "")).lower().strip()
+                
+                # Logic: Explicit Left/Right OR fallback A->Left, B->Right
+                is_left = "left" in pos or "kiri" in pos or "team a" in pos or pos == "a"
+                is_right = "right" in pos or "kanan" in pos or "team b" in pos or pos == "b"
+                
+                if is_left: presets_left.append(p)
+                elif is_right: presets_right.append(p)
+                else: presets_left.append(p) # Default to Left if undefined
+                
+            # Clear existing items
             self._clear_layout(self.left_presets_layout)
             self._clear_layout(self.right_presets_layout)
             
-            # 5. Render to layouts
+            # Render to layouts
             self._render_presets_auto_fit(presets_left, self.left_presets_layout)
             self._render_presets_auto_fit(presets_right, self.right_presets_layout)
         
@@ -1030,6 +1038,12 @@ class LiveCameraScreen(QWidget):
         parent_layout.addStretch()
 
     def on_preset_clicked(self, idx):
+        # Prevent double-click (300ms cooldown)
+        if self._preset_click_guard:
+            return
+        self._preset_click_guard = True
+        QTimer.singleShot(300, self._reset_preset_guard)
+        
         if idx < 0 or idx >= len(self.presets):
             return
             
@@ -1043,6 +1057,9 @@ class LiveCameraScreen(QWidget):
         if hasattr(self, 'val_detail_oto'):
             self.val_detail_oto.setText(f"{self.current_otorisasi:+.1f}")
         print(f"Selected Preset {idx}: {self.current_sku} / {self.current_size} (+{self.current_otorisasi})")
+    
+    def _reset_preset_guard(self):
+        self._preset_click_guard = False
 
     def capture_frame(self):
         if self.live_frame is None:
@@ -1120,11 +1137,10 @@ class LiveCameraScreen(QWidget):
                     print(f"[CAPTURE] Size: {selected_size} | Otorisasi: {otorisasi} | Target: {cat_result['target_length_mm']} mm")
                     print(f"[CAPTURE] Deviation: {deviation_mm:.2f} mm ({cat_result['deviation_size']:.4f} size units) => {detail}")
                 else:
-                    # Fallback to old PASS/FAIL if no size selected
-                    pf = r.get("pass_fail", "FAIL")
-                    category = "GOOD" if pf == "PASS" else "REJECT"
-                    detail = category
-                    print(f"[CAPTURE] No size selected, using legacy PASS/FAIL: {pf}")
+                    # Logic Change: Force REJECT (BS) if no size selected
+                    category = "REJECT"
+                    detail = "No Size Selected"
+                    print(f"[CAPTURE] No size selected, defaulting to REJECT/BS")
                 
                 self.val_detail_len.setText(f"{length_mm:.2f} mm")
                 self.val_detail_wid.setText(f"{width_mm:.2f} mm")
