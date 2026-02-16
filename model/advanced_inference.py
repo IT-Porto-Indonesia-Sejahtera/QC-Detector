@@ -87,7 +87,7 @@ def get_sam_model():
         return None
 
 
-def segment_image(image, conf=0.25):
+def segment_image(image, conf=0.15):
     """
     Advanced two-model segmentation pipeline.
 
@@ -196,7 +196,7 @@ def segment_image(image, conf=0.25):
         x1, y1, x2, y2 = best_box
         box_w = x2 - x1
         box_h = y2 - y1
-        margin = 0.10
+        margin = 0.03
         x1_exp = max(0, int(x1 - box_w * margin))
         y1_exp = max(0, int(y1 - box_h * margin))
         x2_exp = min(w, int(x2 + box_w * margin))
@@ -261,6 +261,33 @@ def segment_image(image, conf=0.25):
 
     # Convert to binary mask (0 or 255)
     mask_binary = (best_sam_mask * 255).astype(np.uint8)
+    from .measurement import evaluate_mask_quality
+
+    # score = evaluate_mask_quality(mask_binary)
+    # quality_thresh = 0.60 if best_box is not None else 0.45
+    # if score < quality_thresh:
+    #     print(f"[Advanced] Low-quality SAM mask (score={score:.2f}) → fallback")
+    #     return None, None, total_time
+    from .measurement import evaluate_mask_quality, dark_object_mask
+
+    score = evaluate_mask_quality(mask_binary)
+    
+    quality_thresh = 0.60 if best_box is not None else 0.45
+    
+    if score < quality_thresh:
+        print(f"[Advanced] Low-quality SAM mask (score={score:.2f}) → trying dark-object rescue")
+    
+        dark_mask = dark_object_mask(img)
+        dark_score = evaluate_mask_quality(dark_mask)
+    
+        print(f"[Advanced] Dark-mask score = {dark_score:.2f}")
+    
+        if dark_score > score and dark_score > 0.45:
+            print("[Advanced] Using dark-object fallback mask")
+            mask_binary = dark_mask
+        else:
+            return None, None, total_time
+    
 
     # Light morphological cleanup (SAM is already precise, minimal cleanup)
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))

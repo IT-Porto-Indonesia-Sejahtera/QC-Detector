@@ -134,9 +134,42 @@ def find_largest_contours(mask, num_contours=2):
     cnts = sorted(cnts, key=lambda c: cv2.contourArea(cv2.convexHull(c)), reverse=True)
     return cnts[:num_contours]
 
+# def auto_select_mask(img):
+#     # Standard fallback logic
+#     return strong_mask(img)
+
 def auto_select_mask(img):
-    # Standard fallback logic
-    return strong_mask(img)
+    mask = strong_mask(img)
+    score = evaluate_mask_quality(mask)
+
+    # Rescue logic for black objects
+    if score < 0.50:
+        dark_mask = dark_object_mask(img)
+        dark_score = evaluate_mask_quality(dark_mask)
+
+        if dark_score > score:
+            return dark_mask
+
+    return mask
+
+
+def dark_object_mask(img):
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+    # Adaptive threshold isolates dark object
+    mask = cv2.adaptiveThreshold(
+        gray, 255,
+        cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+        cv2.THRESH_BINARY_INV,
+        41, 5
+    )
+
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7,7))
+    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel, iterations=3)
+    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel, iterations=2)
+
+    return mask
+
 
 def principal_axis(contour):
     pts = contour.reshape(-1, 2).astype(np.float32)
@@ -230,6 +263,19 @@ def measure_sandals(path, mm_per_px=None, draw_output=True, save_out=None, use_s
         contour_area = cv2.contourArea(cnt)
         if contour_area < 2000:
             continue
+        
+        rect = cv2.minAreaRect(cnt)
+        (w, h) = rect[1]
+        
+        if min(w, h) == 0:
+            continue
+        
+        aspect_ratio = max(w, h) / min(w, h)
+    
+        # Sandal shape sanity filter
+        if aspect_ratio < 2.0 or aspect_ratio > 6.0:
+            continue
+    
 
         box, w, h, angle = endpoints_via_minrect(cnt)
         px_length = refined_endpoints(cnt)

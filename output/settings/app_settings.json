@@ -45,8 +45,8 @@
     "plc_result_reg": 13,
     "aruco_marker_size": 50.0,
     "camera_crop": {
-        "left": 0,
-        "right": 0,
+        "left": 35,
+        "right": 30,
         "top": 0,
         "bottom": 0,
         "rotation": 0
