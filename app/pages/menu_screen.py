@@ -13,7 +13,7 @@ class MenuScreen(QWidget):
         layout.setAlignment(Qt.AlignCenter)
 
         title_font_size = UIScaling.scale_font(28)
-        title = QLabel("QC Sandal Detection System")
+        title = QLabel("Sistem Deteksi Sandal QC")
         title.setAlignment(Qt.AlignCenter)
         title.setStyleSheet(f"font-size: {title_font_size}px; font-weight: bold; margin-bottom: 30px; color: #1C1C1E;")
 
@@ -25,7 +25,7 @@ class MenuScreen(QWidget):
         btn_min_h = UIScaling.scale(70)
         
         # Primary Action: RUN
-        run_btn = QPushButton("▶  Run Detection")
+        run_btn = QPushButton("▶  Mulai Deteksi")
         run_btn.setMinimumSize(btn_min_w, btn_min_h)
         run_btn.setStyleSheet(f"""
             QPushButton {{
@@ -43,14 +43,14 @@ class MenuScreen(QWidget):
         run_btn.clicked.connect(self.parent.go_to_live)
         
         # Secondary Action: PRESETS
-        presets_btn = QPushButton("📋  Manage Presets")
+        presets_btn = QPushButton("📋  Kelola Preset")
         presets_btn.setMinimumSize(btn_min_w, btn_min_h)
         presets_btn.setStyleSheet(self.secondary_button_style(btn_font_size))
         presets_btn.setCursor(Qt.PointingHandCursor)
         presets_btn.clicked.connect(self.go_to_presets)
         
         # Secondary Action: SETTINGS
-        settings_btn = QPushButton("⚙️  System Settings")
+        settings_btn = QPushButton("⚙️  Pengaturan Sistem")
         settings_btn.setMinimumSize(btn_min_w, btn_min_h)
         settings_btn.setStyleSheet(self.secondary_button_style(btn_font_size))
         settings_btn.setCursor(Qt.PointingHandCursor)

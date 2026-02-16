@@ -123,7 +123,7 @@ class LiveCameraScreen(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.parent_widget = parent
-        self.setWindowTitle("Live Camera QC")
+        self.setWindowTitle("QC Kamera Langsung")
         
         self.theme = ThemeManager.get_colors() # Initialize theme here
         
@@ -279,7 +279,7 @@ class LiveCameraScreen(QWidget):
         self.left_presets_layout.setContentsMargins(0, 0, 0, 0)
         
         # Header for Left Panel (e.g. "Team A")
-        self.lbl_left_team = QLabel("Team A")
+        self.lbl_left_team = QLabel("Tim A")
         self.lbl_left_team.setAlignment(Qt.AlignCenter)
         team_font_size = UIScaling.scale_font(20)
         self.lbl_left_team.setStyleSheet(f"font-weight: bold; font-size: {team_font_size}px; color: {self.theme['text_main']}; padding: 5px;")
@@ -302,7 +302,7 @@ class LiveCameraScreen(QWidget):
         self.right_presets_layout.setContentsMargins(0, 0, 0, 0)
         
         # Header for Right Panel (e.g. "Team B")
-        self.lbl_right_team = QLabel("Team B")
+        self.lbl_right_team = QLabel("Tim B")
         self.lbl_right_team.setAlignment(Qt.AlignCenter)
         self.lbl_right_team.setStyleSheet(f"font-weight: bold; font-size: {team_font_size}px; color: {self.theme['text_main']}; padding: 5px;")
         
@@ -472,7 +472,7 @@ class LiveCameraScreen(QWidget):
         content_layout.setSpacing(0)
 
         # Full-screen Preview Label
-        self.preview_label = QLabel("Waiting for Capture...")
+        self.preview_label = QLabel("Menunggu Pengambilan...")
         self.preview_label.setAlignment(Qt.AlignCenter)
         preview_font_size = UIScaling.scale_font(48)
         self.preview_label.setStyleSheet(f"""
@@ -540,14 +540,14 @@ class LiveCameraScreen(QWidget):
         btn_back.setFixedSize(btn_size, btn_size)
         btn_back.setStyleSheet(btn_style)
         btn_back.setCursor(Qt.PointingHandCursor)
-        btn_back.setToolTip("Back to Menu")
+        btn_back.setToolTip("Kembali ke Menu")
         btn_back.clicked.connect(self.go_back)
         
         btn_settings = QPushButton("⚙️")
         btn_settings.setFixedSize(btn_size, btn_size)
         btn_settings.setStyleSheet(btn_style)
         btn_settings.setCursor(Qt.PointingHandCursor)
-        btn_settings.setToolTip("Open settings")
+        btn_settings.setToolTip("Buka Pengaturan")
         btn_settings.clicked.connect(self.show_settings_menu)
         
         top_bar.addWidget(btn_back)
@@ -555,10 +555,10 @@ class LiveCameraScreen(QWidget):
         
         # Model Selection Dropdown (overlay style)
         self.model_combo = QComboBox()
-        self.model_combo.addItem("YOLO-Seg (AI - Recommended)", "yolo")
-        self.model_combo.addItem("Standard (Beige Ready)", "standard")
+        self.model_combo.addItem("YOLO-Seg (AI - Disarankan)", "yolo")
+        self.model_combo.addItem("Standar (Siap Beige)", "standard")
         self.model_combo.addItem("FastSAM (AI)", "sam")
-        self.model_combo.addItem("Advanced (YOLO-X + SAM)", "advanced")
+        self.model_combo.addItem("Lanjutan (YOLO-X + SAM)", "advanced")
         # Find index for current model
         idx = self.model_combo.findData(self.detection_model)
         if idx != -1: self.model_combo.setCurrentIndex(idx)
@@ -620,7 +620,7 @@ class LiveCameraScreen(QWidget):
         self.left_layout.setSpacing(10)
         
         # Header for Presets
-        lbl_presets_header = QLabel("Presets")
+        lbl_presets_header = QLabel("Preset")
         lbl_presets_header.setAlignment(Qt.AlignCenter)
         header_font_size = UIScaling.scale_font(20)
         lbl_presets_header.setStyleSheet(f"font-weight: bold; font-size: {header_font_size}px; color: {self.theme['text_main']}; padding: 5px;")
@@ -677,7 +677,7 @@ class LiveCameraScreen(QWidget):
         self.back_button.clicked.connect(self.go_back)
         
         # Info Bar (Compact)
-        self.info_bar = QLabel(" Loading... ")
+        self.info_bar = QLabel(" Memuat... ")
         info_bar_font_size = UIScaling.scale_font(12) 
         info_bar_radius = UIScaling.scale(5)
         self.info_bar.setAlignment(Qt.AlignCenter)
@@ -685,7 +685,7 @@ class LiveCameraScreen(QWidget):
         self.info_bar.setFixedHeight(ctrl_btn_size)
         
         # Edit Button
-        btn_edit = QPushButton("Edit")
+        btn_edit = QPushButton("Ubah")
         btn_edit.setFixedSize(UIScaling.scale(60), ctrl_btn_size)
         btn_edit_font_size = UIScaling.scale_font(12)
         btn_edit.setStyleSheet(f"background-color: #F5F5F5; border-radius: {info_bar_radius}px; color: #333333; border: 1px solid #E0E0E0; font-size: {btn_edit_font_size}px;")
@@ -709,9 +709,9 @@ class LiveCameraScreen(QWidget):
         # Model selection for standard layouts
         self.model_combo = QComboBox()
         self.model_combo.addItem("YOLO-Seg (AI)", "yolo")
-        self.model_combo.addItem("Standard", "standard")
+        self.model_combo.addItem("Standar", "standard")
         self.model_combo.addItem("FastSAM", "sam")
-        self.model_combo.addItem("Advanced (YOLO-X + SAM)", "advanced")
+        self.model_combo.addItem("Lanjutan (YOLO-X + SAM)", "advanced")
         self.model_combo.setFixedWidth(UIScaling.scale(120))
         self.model_combo.setFixedHeight(ctrl_btn_size)
         
@@ -741,7 +741,7 @@ class LiveCameraScreen(QWidget):
         layout.addLayout(top_ctrl_layout)
         
         # Preview Label
-        self.preview_label = QLabel("Review\nFrameshot")
+        self.preview_label = QLabel("Tinjau\nHasil Foto")
         self.preview_label.setAlignment(Qt.AlignCenter)
         preview_font_size = UIScaling.scale_font(36)
         preview_radius = UIScaling.scale(8)
@@ -762,7 +762,7 @@ class LiveCameraScreen(QWidget):
         counter_height = UIScaling.scale(100) # Smaller height
         counter_radius = UIScaling.scale(5)
         
-        self.lbl_good = QLabel(f"{self.good_count}\nGood")
+        self.lbl_good = QLabel(f"{self.good_count}\nBagus")
         self.lbl_good.setAlignment(Qt.AlignCenter)
         self.lbl_good.setFixedHeight(counter_height)
         self.lbl_good.setStyleSheet(f"background-color: #66BB6A; color: white; font-weight: bold; font-size: {counter_font_size}px; border-radius: {counter_radius}px;")
@@ -778,7 +778,7 @@ class LiveCameraScreen(QWidget):
         layout.addLayout(counters_layout)
         
         # Big Result
-        self.lbl_big_result = QLabel("-\nIDLE")
+        self.lbl_big_result = QLabel("-\nSIAP")
         self.lbl_big_result.setAlignment(Qt.AlignCenter)
         self.lbl_big_result.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         big_result_font_size = UIScaling.scale_font(48)
@@ -789,15 +789,15 @@ class LiveCameraScreen(QWidget):
         
         # Details Box
         details_layout = QGridLayout()
-        self.lbl_detail_sku = QLabel("SKU/Size :")
+        self.lbl_detail_sku = QLabel("SKU/Ukuran :")
         self.val_detail_sku = QLabel("---/---")
-        self.lbl_detail_len = QLabel("Length :")
+        self.lbl_detail_len = QLabel("Panjang :")
         self.val_detail_len = QLabel("-")
-        self.lbl_detail_wid = QLabel("Width :")
+        self.lbl_detail_wid = QLabel("Lebar :")
         self.val_detail_wid = QLabel("-")
-        self.lbl_detail_oto = QLabel("Auto-Oto :")
+        self.lbl_detail_oto = QLabel("Otorisasi :")
         self.val_detail_oto = QLabel("-")
-        self.lbl_detail_res = QLabel("Result :")
+        self.lbl_detail_res = QLabel("Hasil :")
         self.val_detail_res = QLabel("-")
         
         detail_font_size = UIScaling.scale_font(18)
@@ -915,8 +915,8 @@ class LiveCameraScreen(QWidget):
                 self.btn_switch.setVisible(False)
                 
             # Update Headers
-            self.lbl_left_team.setText("Left (Kiri)")
-            self.lbl_right_team.setText("Right (Kanan)")
+            self.lbl_left_team.setText("Kiri")
+            self.lbl_right_team.setText("Kanan")
             
             # Filter Presets
             presets_left = []
@@ -963,7 +963,7 @@ class LiveCameraScreen(QWidget):
             return
         
         if not presets:
-            lbl_empty = QLabel("No Presets")
+            lbl_empty = QLabel("Tidak Ada Preset")
             lbl_empty.setAlignment(Qt.AlignCenter)
             parent_layout.addWidget(lbl_empty)
             return
@@ -1066,7 +1066,7 @@ class LiveCameraScreen(QWidget):
             return
             
         # Show Loading Indicator
-        self.show_status("Processing...", is_error=False)
+        self.show_status("Memproses...", is_error=False)
         QApplication.processEvents() # Force UI update
         
         self.is_paused = True # Freeze preview
@@ -1158,7 +1158,7 @@ class LiveCameraScreen(QWidget):
                 
                 if category == "GOOD":
                     self.good_count += 1
-                    self.lbl_big_result.setText(f"{display_size}\nGOOD")
+                    self.lbl_big_result.setText(f"{display_size}\nBAGUS")
                     self.lbl_big_result.setStyleSheet(f"color: white; background-color: {bg_color}; padding: {res_padding}px; border-radius: {res_radius}px; border: none; font-size: {res_font_size}px; font-weight: 900;")
                     self._write_plc_result(is_good=True)
                 elif category == "OVEN":
@@ -1168,7 +1168,7 @@ class LiveCameraScreen(QWidget):
                     # TODO: Determine PLC behavior for OVEN
                 else:  # REJECT
                     self.bs_count += 1
-                    self.lbl_big_result.setText(f"{display_size}\nREJECT")
+                    self.lbl_big_result.setText(f"{display_size}\nBS")
                     self.lbl_big_result.setStyleSheet(f"color: white; background-color: {bg_color}; padding: {res_padding}px; border-radius: {res_radius}px; border: none; font-size: {res_font_size}px; font-weight: 900;")
                     self._write_plc_result(is_good=False)
                     
@@ -1178,7 +1178,7 @@ class LiveCameraScreen(QWidget):
                 self.val_detail_res.setText("-")
                 self.val_detail_len.setText("-")
                 self.val_detail_wid.setText("-")
-                self.lbl_big_result.setText("-\nIDLE")
+                self.lbl_big_result.setText("-\nSIAP")
                 # Idle: Grey text on white
                 res_font_size = UIScaling.scale_font(48)
                 res_padding = UIScaling.scale(20)

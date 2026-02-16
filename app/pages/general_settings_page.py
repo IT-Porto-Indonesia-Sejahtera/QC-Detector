@@ -42,11 +42,11 @@ class GeneralSettingsPage(QWidget):
         header.setStyleSheet(f"background-color: {self.theme['bg_panel']}; border-bottom: 1px solid {self.theme['border']};")
         h_layout = QHBoxLayout(header); h_layout.setContentsMargins(20, 0, 20, 0)
         
-        btn_back = QPushButton("❮ Back"); btn_back.setFixedHeight(UIScaling.scale(40))
+        btn_back = QPushButton("❮ Kembali"); btn_back.setFixedHeight(UIScaling.scale(40))
         btn_back.setStyleSheet(f"border: none; font-size: {UIScaling.scale_font(16)}px; font-weight: bold; color: {self.theme['text_main']}; background: transparent;")
         btn_back.clicked.connect(self.go_back)
         
-        lbl_title = QLabel("System Settings"); lbl_title.setStyleSheet(f"font-size: {UIScaling.scale_font(24)}px; font-weight: bold; color: {self.theme['text_main']};")
+        lbl_title = QLabel("Pengaturan Sistem"); lbl_title.setStyleSheet(f"font-size: {UIScaling.scale_font(24)}px; font-weight: bold; color: {self.theme['text_main']};")
         
         h_layout.addWidget(btn_back); h_layout.addSpacing(20); h_layout.addWidget(lbl_title); h_layout.addStretch()
         layout.addWidget(header)
@@ -58,55 +58,55 @@ class GeneralSettingsPage(QWidget):
         
         # --- LEFT: Camera ---
         left = QVBoxLayout(); left.setSpacing(20)
-        cam_card, cam_layout = self.create_card("Camera Configuration")
-        self.preview_box = QLabel("Test Feed"); self.preview_box.setAlignment(Qt.AlignCenter); self.preview_box.setFixedSize(UIScaling.scale(400), UIScaling.scale(250)); self.preview_box.setStyleSheet("background: #2D2D2D; border-radius: 10px; color: #CCC;")
+        cam_card, cam_layout = self.create_card("Konfigurasi Kamera")
+        self.preview_box = QLabel("Umpan Uji"); self.preview_box.setAlignment(Qt.AlignCenter); self.preview_box.setFixedSize(UIScaling.scale(400), UIScaling.scale(250)); self.preview_box.setStyleSheet("background: #2D2D2D; border-radius: 10px; color: #CCC;")
         cam_layout.addWidget(self.preview_box, 0, Qt.AlignCenter)
-        self.btn_preview = QPushButton("Start Test Feed"); self.style_button(self.btn_preview, True); self.btn_preview.clicked.connect(self.toggle_preview); cam_layout.addWidget(self.btn_preview)
+        self.btn_preview = QPushButton("Mulai Umpan Uji"); self.style_button(self.btn_preview, True); self.btn_preview.clicked.connect(self.toggle_preview); cam_layout.addWidget(self.btn_preview)
         
-        cam_layout.addWidget(QLabel("Camera Source:"))
+        cam_layout.addWidget(QLabel("Sumber Kamera:"))
         self.camera_combo = QComboBox(); self.camera_combo.addItem("IP Network Camera", "ip"); self.camera_combo.currentIndexChanged.connect(self.on_camera_change); self.style_input(self.camera_combo); cam_layout.addWidget(self.camera_combo)
         left.addWidget(cam_card)
         
-        self.ip_section, ip_layout = self.create_card("IP Camera Details")
-        h_preset = QHBoxLayout(); self.ip_preset_combo = QComboBox(); self.ip_preset_combo.currentIndexChanged.connect(self.on_ip_preset_change); self.style_input(self.ip_preset_combo); btn_new = QPushButton("+ New"); self.style_button(btn_new); btn_new.clicked.connect(self.add_new_preset)
+        self.ip_section, ip_layout = self.create_card("Detail Kamera IP")
+        h_preset = QHBoxLayout(); self.ip_preset_combo = QComboBox(); self.ip_preset_combo.currentIndexChanged.connect(self.on_ip_preset_change); self.style_input(self.ip_preset_combo); btn_new = QPushButton("+ Baru"); self.style_button(btn_new); btn_new.clicked.connect(self.add_new_preset)
         h_preset.addWidget(self.ip_preset_combo, 1); h_preset.addWidget(btn_new); ip_layout.addLayout(h_preset)
-        self.ip_addr = QLineEdit(); self.style_input(self.ip_addr); ip_layout.addWidget(QLabel("Address")); ip_layout.addWidget(self.ip_addr)
+        self.ip_addr = QLineEdit(); self.style_input(self.ip_addr); ip_layout.addWidget(QLabel("Alamat")); ip_layout.addWidget(self.ip_addr)
         h_params = QHBoxLayout(); self.proto = QComboBox(); self.proto.addItems(["rtsp", "http"]); self.style_input(self.proto); self.port = QLineEdit(); self.port.setPlaceholderText("554"); self.style_input(self.port)
         h_params.addWidget(QLabel("Proto:")); h_params.addWidget(self.proto); h_params.addWidget(QLabel("Port:")); h_params.addWidget(self.port); ip_layout.addLayout(h_params)
         self.path = QLineEdit(); self.path.setPlaceholderText("/live/ch1"); self.style_input(self.path); ip_layout.addWidget(QLabel("Path")); ip_layout.addWidget(self.path)
-        h_auth = QHBoxLayout(); self.user = QLineEdit(); self.user.setPlaceholderText("User"); self.style_input(self.user); self.passwd = QLineEdit(); self.passwd.setEchoMode(QLineEdit.Password); self.passwd.setPlaceholderText("Pass"); self.style_input(self.passwd)
+        h_auth = QHBoxLayout(); self.user = QLineEdit(); self.user.setPlaceholderText("User"); self.style_input(self.user); self.passwd = QLineEdit(); self.passwd.setEchoMode(QLineEdit.Password); self.passwd.setPlaceholderText("Sandi"); self.style_input(self.passwd)
         h_auth.addWidget(self.user); h_auth.addWidget(self.passwd); ip_layout.addLayout(h_auth)
         left.addWidget(self.ip_section); left.addStretch()
         scroll_layout.addLayout(left, 1)
         
         # --- RIGHT: Params & HW ---
         right = QVBoxLayout(); right.setSpacing(20)
-        p_card, p_layout = self.create_card("Application Parameters")
+        p_card, p_layout = self.create_card("Parameter Aplikasi")
         p_layout.addWidget(self.create_styled_label("Resolution (mm/px):"))
         self.mm_px = QLineEdit(); self.style_input(self.mm_px); p_layout.addWidget(self.mm_px)
         
-        p_layout.addWidget(self.create_styled_label("Default Detection Model:"))
+        p_layout.addWidget(self.create_styled_label("Model Deteksi Default:"))
         self.det_model = QComboBox(); self.det_model.addItem("Standard (Contour)", "standard"); self.det_model.addItem("SAM (AI)", "sam"); self.style_input(self.det_model); p_layout.addWidget(self.det_model)
         
-        p_layout.addWidget(self.create_styled_label("Layout Mode:"))
+        p_layout.addWidget(self.create_styled_label("Mode Tata Letak:"))
         self.lay_mode = QComboBox(); self.lay_mode.addItems(["Classic", "Split", "Minimal"]); self.style_input(self.lay_mode); p_layout.addWidget(self.lay_mode)
         right.addWidget(p_card)
         
         # Auto Calibration Card
-        aruco_card, aruco_layout = self.create_card("Auto Calibration System")
-        aruco_layout.addWidget(self.create_styled_label("ArUco Marker Size (mm):"))
+        aruco_card, aruco_layout = self.create_card("Sistem Kalibrasi Otomatis")
+        aruco_layout.addWidget(self.create_styled_label("Ukuran Marker ArUco (mm):"))
         self.marker_size = QLineEdit("50.0"); self.style_input(self.marker_size); aruco_layout.addWidget(self.marker_size)
         
         # Height Correction Fields
         h_height = QHBoxLayout()
-        v_h1 = QVBoxLayout(); v_h1.addWidget(self.create_styled_label("Mounting Height (mm)")); self.mount_h = QLineEdit("1000.0"); self.style_input(self.mount_h); v_h1.addWidget(self.mount_h)
-        v_h2 = QVBoxLayout(); v_h2.addWidget(self.create_styled_label("Sandal Thickness (mm)")); self.sandal_t = QLineEdit("15.0"); self.style_input(self.sandal_t); v_h2.addWidget(self.sandal_t)
+        v_h1 = QVBoxLayout(); v_h1.addWidget(self.create_styled_label("Tinggi Pemasangan (mm)")); self.mount_h = QLineEdit("1000.0"); self.style_input(self.mount_h); v_h1.addWidget(self.mount_h)
+        v_h2 = QVBoxLayout(); v_h2.addWidget(self.create_styled_label("Ketebalan Sandal (mm)")); self.sandal_t = QLineEdit("15.0"); self.style_input(self.sandal_t); v_h2.addWidget(self.sandal_t)
         h_height.addLayout(v_h1); h_height.addLayout(v_h2)
         aruco_layout.addLayout(h_height)
         
         h_ctrl = QHBoxLayout()
-        self.btn_calibrate = QPushButton("Run Auto Calibration"); self.style_button(self.btn_calibrate, True); self.btn_calibrate.clicked.connect(self.run_auto_calibration)
-        self.btn_debug_aruco = QPushButton("🔍 Debug Off"); self.style_button(self.btn_debug_aruco); self.btn_debug_aruco.setFixedWidth(UIScaling.scale(120))
+        self.btn_calibrate = QPushButton("Jalankan Kalibrasi Otomatis"); self.style_button(self.btn_calibrate, True); self.btn_calibrate.clicked.connect(self.run_auto_calibration)
+        self.btn_debug_aruco = QPushButton("🔍 Debug Mati"); self.style_button(self.btn_debug_aruco); self.btn_debug_aruco.setFixedWidth(UIScaling.scale(120))
         self.btn_debug_aruco.clicked.connect(self.toggle_aruco_debug)
         self.aruco_debug_active = False
         
@@ -117,17 +117,17 @@ class GeneralSettingsPage(QWidget):
         right.addWidget(aruco_card)
         
         # Camera Crop/Zoom Card
-        crop_card, crop_layout = self.create_card("Camera Region of Interest")
-        crop_layout.addWidget(self.create_styled_label("Crop Left (%):"))
+        crop_card, crop_layout = self.create_card("Area Minat Kamera (ROI)")
+        crop_layout.addWidget(self.create_styled_label("Potong Kiri (%):"))
         self.crop_left = QLineEdit("0"); self.style_input(self.crop_left); crop_layout.addWidget(self.crop_left)
-        crop_layout.addWidget(self.create_styled_label("Crop Right (%):"))
+        crop_layout.addWidget(self.create_styled_label("Potong Kanan (%):"))
         self.crop_right = QLineEdit("0"); self.style_input(self.crop_right); crop_layout.addWidget(self.crop_right)
-        crop_layout.addWidget(self.create_styled_label("Crop Top (%):"))
+        crop_layout.addWidget(self.create_styled_label("Potong Atas (%):"))
         self.crop_top = QLineEdit("0"); self.style_input(self.crop_top); crop_layout.addWidget(self.crop_top)
         self.crop_bottom = QLineEdit("0"); self.style_input(self.crop_bottom); crop_layout.addWidget(self.crop_bottom)
         
         # Rotation
-        crop_layout.addWidget(self.create_styled_label("Image Rotation:"))
+        crop_layout.addWidget(self.create_styled_label("Rotasi Gambar:"))
         self.rotation_combo = QComboBox()
         self.rotation_combo.addItems(["0°", "90° CW", "180°", "90° CCW"])
         self.rotation_combo.setItemData(0, 0); self.rotation_combo.setItemData(1, 90)
@@ -141,11 +141,11 @@ class GeneralSettingsPage(QWidget):
             inp.textChanged.connect(self.update_live_params)
         
         # Aspect Ratio Correction
-        crop_layout.addWidget(self.create_styled_label("Aspect Ratio Correction (e.g. 1.0, 16:9, 4:3):"))
+        crop_layout.addWidget(self.create_styled_label("Koreksi Rasio Aspek (mis. 1.0, 16:9, 4:3):"))
         self.aspect_ratio = QLineEdit("1.0"); self.style_input(self.aspect_ratio); crop_layout.addWidget(self.aspect_ratio)
         
         # Force Resolution
-        crop_layout.addWidget(self.create_styled_label("Force Resolution (0 = Auto):"))
+        crop_layout.addWidget(self.create_styled_label("Paksa Resolusi (0 = Otomatis):"))
         h_res = QHBoxLayout()
         self.force_w = QLineEdit("0"); self.style_input(self.force_w); self.force_w.setPlaceholderText("Width")
         self.force_h = QLineEdit("0"); self.style_input(self.force_h); self.force_h.setPlaceholderText("Height")
@@ -156,10 +156,10 @@ class GeneralSettingsPage(QWidget):
         right.addWidget(crop_card)
 
         # Lens Distortion Card
-        dist_card, dist_layout = self.create_card("Lens Distortion Correction")
+        dist_card, dist_layout = self.create_card("Koreksi Distorsi Lensa")
         
         # Preset Combo
-        dist_layout.addWidget(self.create_styled_label("Distortion Profile:"))
+        dist_layout.addWidget(self.create_styled_label("Profil Distorsi:"))
         self.dist_preset = QComboBox()
         self.dist_preset.addItems(["Custom", "No Distortion (Default)", "Mild Barrel (Standard Webcam)", "Medium Barrel (Wide Lens)", "Strong Barrel (Fisheye)"])
         self.style_input(self.dist_preset)
@@ -167,24 +167,24 @@ class GeneralSettingsPage(QWidget):
         dist_layout.addWidget(self.dist_preset)
         
         # Coefficients
-        dist_layout.addWidget(self.create_styled_label("Advanced Parameters:"))
+        dist_layout.addWidget(self.create_styled_label("Parameter Lanjutan:"))
         h_k = QHBoxLayout()
-        v_k1 = QVBoxLayout(); v_k1.addWidget(self.create_styled_label("k1 (Main Curvature)")); self.k1 = QLineEdit("0.0"); self.style_input(self.k1); v_k1.addWidget(self.k1)
+        v_k1 = QVBoxLayout(); v_k1.addWidget(self.create_styled_label("k1 (Kelengkungan Utama)")); self.k1 = QLineEdit("0.0"); self.style_input(self.k1); v_k1.addWidget(self.k1)
         v_k2 = QVBoxLayout(); v_k2.addWidget(self.create_styled_label("k2 (Detail)")); self.k2 = QLineEdit("0.0"); self.style_input(self.k2); v_k2.addWidget(self.k2)
-        v_p1 = QVBoxLayout(); v_p1.addWidget(self.create_styled_label("p1 (Tangential)")); self.p1 = QLineEdit("0.0"); self.style_input(self.p1); v_p1.addWidget(self.p1)
+        v_p1 = QVBoxLayout(); v_p1.addWidget(self.create_styled_label("p1 (Tangensial)")); self.p1 = QLineEdit("0.0"); self.style_input(self.p1); v_p1.addWidget(self.p1)
         h_k.addLayout(v_k1); h_k.addLayout(v_k2); h_k.addLayout(v_p1)
         dist_layout.addLayout(h_k)
         
         h_k2 = QHBoxLayout()
-        v_p2 = QVBoxLayout(); v_p2.addWidget(self.create_styled_label("p2 (Tangential)")); self.p2 = QLineEdit("0.0"); self.style_input(self.p2); v_p2.addWidget(self.p2)
-        v_k3 = QVBoxLayout(); v_k3.addWidget(self.create_styled_label("k3 (Higher Order)")); self.k3 = QLineEdit("0.0"); self.style_input(self.k3); v_k3.addWidget(self.k3)
+        v_p2 = QVBoxLayout(); v_p2.addWidget(self.create_styled_label("p2 (Tangensial)")); self.p2 = QLineEdit("0.0"); self.style_input(self.p2); v_p2.addWidget(self.p2)
+        v_k3 = QVBoxLayout(); v_k3.addWidget(self.create_styled_label("k3 (Orde Tinggi)")); self.k3 = QLineEdit("0.0"); self.style_input(self.k3); v_k3.addWidget(self.k3)
         h_k2.addLayout(v_p2); h_k2.addLayout(v_k3); h_k2.addStretch()
         dist_layout.addLayout(h_k2)
 
         # Camera Matrix
-        dist_layout.addWidget(self.create_styled_label("Camera Matrix (Advanced):"))
+        dist_layout.addWidget(self.create_styled_label("Matriks Kamera (Lanjutan):"))
         hbox_cam = QHBoxLayout()
-        self.btn_auto_matrix = QPushButton("Auto-Estimate Matrix: OFF")
+        self.btn_auto_matrix = QPushButton("Estimasi Matriks Otomatis: MATI")
         self.btn_auto_matrix.setCheckable(True)
         self.style_button(self.btn_auto_matrix)
         self.btn_auto_matrix.setToolTip("Enable to automatically estimate center and focal length from resolution")
@@ -202,33 +202,33 @@ class GeneralSettingsPage(QWidget):
         
         right.addWidget(dist_card)
         
-        hw_card, hw_layout = self.create_card("Hardware Integration")
-        hw_layout.addWidget(self.create_styled_label("Sensor Serial Port:"))
+        hw_card, hw_layout = self.create_card("Integrasi Perangkat Keras")
+        hw_layout.addWidget(self.create_styled_label("Port Serial Sensor:"))
         self.s_port = QLineEdit(); self.style_input(self.s_port); hw_layout.addWidget(self.s_port)
-        hw_layout.addWidget(self.create_styled_label("PLC Modbus Port:"))
+        hw_layout.addWidget(self.create_styled_label("Port Modbus PLC:"))
         self.p_port = QLineEdit(); self.style_input(self.p_port); hw_layout.addWidget(self.p_port)
         h_regs = QHBoxLayout()
-        v_trig = QVBoxLayout(); v_trig.addWidget(self.create_styled_label("Trig Reg:")); self.p_tri = QLineEdit(); self.style_input(self.p_tri); v_trig.addWidget(self.p_tri)
-        v_res = QVBoxLayout(); v_res.addWidget(self.create_styled_label("Res Reg:")); self.p_res = QLineEdit(); self.style_input(self.p_res); v_res.addWidget(self.p_res)
+        v_trig = QVBoxLayout(); v_trig.addWidget(self.create_styled_label("Reg Pemicu:")); self.p_tri = QLineEdit(); self.style_input(self.p_tri); v_trig.addWidget(self.p_tri)
+        v_res = QVBoxLayout(); v_res.addWidget(self.create_styled_label("Reg Hasil:")); self.p_res = QLineEdit(); self.style_input(self.p_res); v_res.addWidget(self.p_res)
         h_regs.addLayout(v_trig); h_regs.addLayout(v_res); hw_layout.addLayout(h_regs)
         right.addWidget(hw_card)
         
         # Developer Tools Card (Hidden Features)
-        dev_card, dev_layout = self.create_card("Developer Tools")
-        btn_dataset = QPushButton("📷  Capture Dataset"); self.style_button(btn_dataset)
+        dev_card, dev_layout = self.create_card("Alat Pengembang")
+        btn_dataset = QPushButton("📷  Ambil Dataset"); self.style_button(btn_dataset)
         btn_dataset.clicked.connect(self.go_to_dataset); dev_layout.addWidget(btn_dataset)
-        btn_photo = QPushButton("🖼️  Measure by Photo"); self.style_button(btn_photo)
+        btn_photo = QPushButton("🖼️  Ukur dengan Foto"); self.style_button(btn_photo)
         btn_photo.clicked.connect(self.go_to_photo); dev_layout.addWidget(btn_photo)
         right.addWidget(dev_card)
         
         # Database Sync Card
-        sync_card, sync_layout = self.create_card("Database Sync")
-        sync_layout.addWidget(self.create_styled_label("Fetch product SKU data from database:"))
-        self.btn_fetch_sku = QPushButton("🔄 Fetch SKU Data"); self.style_button(self.btn_fetch_sku, True)
+        sync_card, sync_layout = self.create_card("Sinkronisasi Database")
+        sync_layout.addWidget(self.create_styled_label("Ambil data SKU produk dari database:"))
+        self.btn_fetch_sku = QPushButton("🔄 Ambil Data SKU"); self.style_button(self.btn_fetch_sku, True)
         self.btn_fetch_sku.clicked.connect(self.fetch_sku_data)
         sync_layout.addWidget(self.btn_fetch_sku)
         
-        sync_layout.addWidget(self.create_styled_label("Sync Log:"))
+        sync_layout.addWidget(self.create_styled_label("Log Sinkronisasi:"))
         from PySide6.QtWidgets import QTextEdit
         self.log_display = QTextEdit(); self.log_display.setReadOnly(True)
         self.log_display.setFixedHeight(UIScaling.scale(120))
@@ -237,8 +237,8 @@ class GeneralSettingsPage(QWidget):
         right.addWidget(sync_card)
         
         h_save_btns = QHBoxLayout()
-        btn_apply = QPushButton("Quick Apply"); btn_apply.setFixedHeight(UIScaling.scale(50)); self.style_button(btn_apply); btn_apply.clicked.connect(self.apply_quick_settings)
-        btn_save = QPushButton("Save & Exit"); btn_save.setFixedHeight(UIScaling.scale(50)); self.style_button(btn_save, True); btn_save.clicked.connect(self.save_settings)
+        btn_apply = QPushButton("Terapkan Cepat"); btn_apply.setFixedHeight(UIScaling.scale(50)); self.style_button(btn_apply); btn_apply.clicked.connect(self.apply_quick_settings)
+        btn_save = QPushButton("Simpan & Keluar"); btn_save.setFixedHeight(UIScaling.scale(50)); self.style_button(btn_save, True); btn_save.clicked.connect(self.save_settings)
         h_save_btns.addWidget(btn_apply); h_save_btns.addWidget(btn_save)
         right.addLayout(h_save_btns); right.addStretch()
         scroll_layout.addLayout(right, 1)
@@ -452,25 +452,25 @@ class GeneralSettingsPage(QWidget):
         try:
             settings_dict = self._gather_settings_dict()
             JsonUtility.save_to_json(SETTINGS_FILE, settings_dict)
-            self.calibration_status.setText("Settings applied and saved!")
+            self.calibration_status.setText("Pengaturan diterapkan dan disimpan!")
             self.calibration_status.setStyleSheet("color: #4CAF50; font-weight: bold;")
             # Show a temporary message
-            QMessageBox.information(self, "Success", "Settings applied successfully!")
+            QMessageBox.information(self, "Sukses", "Pengaturan berhasil diterapkan!")
         except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to apply settings: {e}")
+            QMessageBox.critical(self, "Error", f"Gagal menerapkan pengaturan: {e}")
 
     def save_settings(self):
         """Save settings and return to live feed"""
         try:
             settings_dict = self._gather_settings_dict()
             JsonUtility.save_to_json(SETTINGS_FILE, settings_dict)
-            QMessageBox.information(self, "Success", "Settings saved!")
+            QMessageBox.information(self, "Sukses", "Pengaturan disimpan!")
             
             # Navigate to Live Feed after save
             if self.controller:
                 self.controller.go_to_live()
         except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to save settings: {e}")
+            QMessageBox.critical(self, "Error", f"Gagal menyimpan pengaturan: {e}")
 
     def _gather_settings_dict(self):
         """Helper to collect all UI values into a settings dictionary"""
@@ -737,10 +737,10 @@ class GeneralSettingsPage(QWidget):
 
     def update_auto_matrix_ui(self, is_auto):
         if is_auto:
-            self.btn_auto_matrix.setText("Auto-Estimate Matrix: ON")
+            self.btn_auto_matrix.setText("Estimasi Matriks Otomatis: NYALA")
             self.btn_auto_matrix.setStyleSheet(self.btn_auto_matrix.styleSheet().replace("#E8E8ED", "#4CAF50").replace("#007AFF", "white"))
         else:
-            self.btn_auto_matrix.setText("Auto-Estimate Matrix: OFF")
+            self.btn_auto_matrix.setText("Estimasi Matriks Otomatis: MATI")
             self.style_button(self.btn_auto_matrix)
             
         # Disable/Enable manual fields
@@ -756,7 +756,7 @@ class GeneralSettingsPage(QWidget):
         """Fetch product SKU data from database asynchronously."""
         # Update UI
         self.btn_fetch_sku.setEnabled(False)
-        self.btn_fetch_sku.setText("Fetching...")
+        self.btn_fetch_sku.setText("Mengambil...")
         add_log("Starting SKU data fetch...")
         self._update_log_display()
         
@@ -791,7 +791,7 @@ class GeneralSettingsPage(QWidget):
     def _reset_fetch_button(self):
         """Reset fetch button to default state."""
         self.btn_fetch_sku.setEnabled(True)
-        self.btn_fetch_sku.setText("🔄 Fetch SKU Data")
+        self.btn_fetch_sku.setText("🔄 Ambil Data SKU")
 
     def _update_log_display(self):
         """Update the log display text area."""
