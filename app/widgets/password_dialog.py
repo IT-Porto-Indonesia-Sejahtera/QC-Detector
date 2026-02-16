@@ -43,7 +43,7 @@ class PasswordDialog(BaseOverlay):
         layout.setSpacing(20)
         
         # Title
-        title = QLabel("Enter Password")
+        title = QLabel("Masukan Password")
         title_font_size = UIScaling.scale_font(22)
         title.setStyleSheet(f"font-size: {title_font_size}px; font-weight: bold; color: {self.theme['text_main']};")
         title.setAlignment(Qt.AlignCenter)

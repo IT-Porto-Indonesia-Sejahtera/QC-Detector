@@ -29,7 +29,7 @@ class CaptureDatasetScreen(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.parent_widget = parent
-        self.setWindowTitle("Capture Dataset")
+        self.setWindowTitle("Ambil Dataset")
         
         # Load settings
         self.settings = JsonUtility.load_from_json(os.path.join("output", "settings", "app_settings.json")) or {}
@@ -113,14 +113,14 @@ class CaptureDatasetScreen(QWidget):
             QPushButton:hover {{ background: #666; }}
         """)
         self.back_button.clicked.connect(self.go_back)
-        self.back_button.setToolTip("Back to previous screen")
+        self.back_button.setToolTip("Kembali ke layar sebelumnya")
 
         top_bar.addWidget(self.back_button, alignment=Qt.AlignLeft)
         top_bar.addStretch()
         top_bar.addWidget(QLabel("Model: "))
         top_bar.addWidget(self.model_select)
         top_bar.addSpacing(15)
-        top_bar.addWidget(QLabel("Camera: "))
+        top_bar.addWidget(QLabel("Kamera: "))
         top_bar.addWidget(self.cam_select)
         
         main_layout.addLayout(top_bar)
@@ -143,25 +143,25 @@ class CaptureDatasetScreen(QWidget):
         self.folder_input.setStyleSheet("background: #333; color: white; border: 1px solid #555; padding: 8px; border-radius: 5px;")
         self.folder_input.textChanged.connect(self.update_output_dir)
         
-        self.btn_browse = QPushButton("📁 Browse")
+        self.btn_browse = QPushButton("📁 Pilih")
         self.btn_browse.setStyleSheet("background: #444; color: white; padding: 8px 15px; border-radius: 5px;")
         self.btn_browse.clicked.connect(self.browse_folder)
         
-        folder_layout.addWidget(QLabel("Save Folder:"))
+        folder_layout.addWidget(QLabel("Folder Simpan:"))
         folder_layout.addWidget(self.folder_input, 1)
         folder_layout.addWidget(self.btn_browse)
         bottom_v_layout.addLayout(folder_layout)
 
         # Save Options Row
         options_layout = QHBoxLayout()
-        self.chk_measure = QCheckBox("Save Measurement Result (Overlay)")
+        self.chk_measure = QCheckBox("Simpan Hasil Pengukuran (Overlay)")
         self.chk_measure.setStyleSheet("color: white; font-weight: bold;")
         self.chk_measure.setChecked(self.settings.get("dataset_save_measurements", False))
         self.chk_measure.toggled.connect(self.update_save_options)
         options_layout.addWidget(self.chk_measure)
         
         # New: Capture images during consistency test
-        self.chk_capture_images_test = QCheckBox("Capture Images during Consistency Test")
+        self.chk_capture_images_test = QCheckBox("Ambil Gambar saat Uji Konsistensi")
         self.chk_capture_images_test.setStyleSheet("color: #FFA000; font-weight: bold;")
         self.chk_capture_images_test.setChecked(False)
         options_layout.addWidget(self.chk_capture_images_test)
@@ -173,19 +173,19 @@ class CaptureDatasetScreen(QWidget):
         control_layout.setSpacing(UIScaling.scale(20))
 
         # PLC Toggle Button
-        self.btn_plc_toggle = QPushButton("PLC Trigger: OFF")
+        self.btn_plc_toggle = QPushButton("Pemicu PLC: MATI")
         self.btn_plc_toggle.setMinimumHeight(UIScaling.scale(50))
         self.btn_plc_toggle.setStyleSheet("background: #444; color: #888; font-weight: bold; border-radius: 8px;")
         self.btn_plc_toggle.clicked.connect(self.toggle_plc)
         
         # Test Consistency Button
-        self.test_btn = QPushButton("Test Consistency")
+        self.test_btn = QPushButton("Uji Konsistensi")
         self.test_btn.setMinimumHeight(UIScaling.scale(50))
         self.test_btn.setStyleSheet("background: #E65100; color: white; font-weight: bold; border-radius: 8px;")
         self.test_btn.clicked.connect(self.start_consistency_test)
 
         # Capture Button
-        self.capture_btn = QPushButton("📸 Capture Image (Manual)")
+        self.capture_btn = QPushButton("📸 Ambil Gambar (Manual)")
         self.capture_btn.setMinimumHeight(UIScaling.scale(50))
         capture_btn_font_size = UIScaling.scale_font(18)
         self.capture_btn.setStyleSheet(f"""
@@ -219,7 +219,7 @@ class CaptureDatasetScreen(QWidget):
         # -----------------------------------------------------------------
         self.plc_trigger = None
         self.plc_running = False
-        self.plc_status_label = QLabel("PLC: Disconnected")
+        self.plc_status_label = QLabel("PLC: Terputus")
         plc_status_font_size = UIScaling.scale_font(12)
         self.plc_status_label.setStyleSheet(f"color: #888; font-size: {plc_status_font_size}px;")
         top_bar.addWidget(self.plc_status_label)
@@ -230,7 +230,7 @@ class CaptureDatasetScreen(QWidget):
         self._init_plc_trigger()
 
     def browse_folder(self):
-        path = QFileDialog.getExistingDirectory(self, "Select Save Directory", self.output_dir)
+        path = QFileDialog.getExistingDirectory(self, "Pilih Folder Penyimpanan", self.output_dir)
         if path:
             self.folder_input.setText(path)
             self.output_dir = path
@@ -257,7 +257,7 @@ class CaptureDatasetScreen(QWidget):
         if self.plc_trigger:
             print("[Dataset] Starting PLC Trigger...")
             self.plc_running = True
-            self.btn_plc_toggle.setText("PLC Trigger: ON")
+            self.btn_plc_toggle.setText("Pemicu PLC: NYALA")
             self.btn_plc_toggle.setStyleSheet("background: #2E7D32; color: white; font-weight: bold; border-radius: 8px;")
             threading.Thread(target=self.plc_trigger.start, daemon=True).start()
 
@@ -266,9 +266,9 @@ class CaptureDatasetScreen(QWidget):
             print("[Dataset] Stopping PLC Trigger...")
             self.plc_trigger.stop()
             self.plc_running = False
-            self.btn_plc_toggle.setText("PLC Trigger: OFF")
+            self.btn_plc_toggle.setText("Pemicu PLC: MATI")
             self.btn_plc_toggle.setStyleSheet("background: #444; color: #888; font-weight: bold; border-radius: 8px;")
-            self.plc_status_label.setText("PLC: Disconnected")
+            self.plc_status_label.setText("PLC: Terputus")
             self.plc_status_label.setStyleSheet("color: #888; font-size: 12px;")
 
     def _init_plc_trigger(self):
@@ -312,7 +312,7 @@ class CaptureDatasetScreen(QWidget):
     
     def _on_plc_connection_change(self, connected, message):
         if connected:
-            self.plc_status_label.setText(f"PLC: Connected")
+            self.plc_status_label.setText(f"PLC: Terhubung")
             self.plc_status_label.setStyleSheet("color: #0f0; font-size: 12px;")
         else:
             self.plc_status_label.setText(f"PLC: {message}")
@@ -336,7 +336,7 @@ class CaptureDatasetScreen(QWidget):
         if self.settings.get("ip_camera_presets"):
             cams.append("IP Camera")
             
-        return cams if cams else ["No cameras found"]
+        return cams if cams else ["Kamera tidak ditemukan"]
 
     def change_camera(self, index=None):
         self.stop_camera()
@@ -475,16 +475,16 @@ class CaptureDatasetScreen(QWidget):
             success = cv2.imwrite(filepath, frame_to_save)
             if success:
                 print(f"[Dataset] SUCCESS! Saved to: {filepath}")
-                self.capture_btn.setText("Saved!")
-                QTimer.singleShot(1500, lambda: self.capture_btn.setText("📸 Capture Image (Manual)"))
+                self.capture_btn.setText("Tersimpan!")
+                QTimer.singleShot(1500, lambda: self.capture_btn.setText("📸 Ambil Gambar (Manual)"))
             else:
                 print(f"[Dataset] FAILED to write file: {filepath}")
-                self.capture_btn.setText("Write Failed!")
+                self.capture_btn.setText("Gagal Menulis!")
         except Exception as e:
             print(f"[Dataset] CRITICAL ERROR during capture: {e}")
             import traceback
             traceback.print_exc()
-            self.capture_btn.setText("System Error!")
+            self.capture_btn.setText("Sistem Error!")
 
     def start_consistency_test(self):
         if not self.cap_thread or not self.cap_thread.isRunning():
@@ -529,29 +529,29 @@ class CaptureDatasetScreen(QWidget):
         # UI updates
         self.test_btn.setEnabled(False)
         self.capture_btn.setEnabled(False)
-        self.test_btn.setText("Running...")
+        self.test_btn.setText("Berjalan...")
         
         self.test_thread.start()
 
     def on_test_progress(self, current, total):
-        self.test_btn.setText(f"Running... {current}/{total}")
+        self.test_btn.setText(f"Berjalan... {current}/{total}")
 
     def on_test_finished(self, file_path):
         from PySide6.QtWidgets import QMessageBox
-        self.test_btn.setText("Test Consistency")
+        self.test_btn.setText("Uji Konsistensi")
         self.test_btn.setEnabled(True)
         self.capture_btn.setEnabled(True)
         
         ext = "Excel file" if file_path.endswith(".xlsx") else "CSV file"
-        QMessageBox.information(self, "Test Complete", f"Consistency test finished.\nSaved to {ext}:\n{file_path}")
+        QMessageBox.information(self, "Uji Selesai", f"Uji konsistensi selesai.\nDisimpan ke {ext}:\n{file_path}")
         self.test_thread = None
 
     def on_test_error(self, err_msg):
         from PySide6.QtWidgets import QMessageBox
-        self.test_btn.setText("Test Consistency")
+        self.test_btn.setText("Uji Konsistensi")
         self.test_btn.setEnabled(True)
         self.capture_btn.setEnabled(True)
         
-        QMessageBox.critical(self, "Test Error", f"Error during test:\n{err_msg}")
+        QMessageBox.critical(self, "Error Uji", f"Error saat uji:\n{err_msg}")
         self.test_thread = None
 

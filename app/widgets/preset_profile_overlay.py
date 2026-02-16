@@ -12,6 +12,7 @@ from app.widgets.base_overlay import BaseOverlay
 from app.utils.ui_scaling import UIScaling
 
 PROFILES_FILE = os.path.join("output", "settings", "profiles.json")
+SETTINGS_FILE = os.path.join("output", "settings", "app_settings.json")
 
 from app.utils.theme_manager import ThemeManager
 
@@ -191,9 +192,9 @@ class PresetProfileOverlay(BaseOverlay):
         name_font_size = UIScaling.scale_font(16)
         name.setStyleSheet(f"font-weight: bold; font-size: {name_font_size}px; color: {self.theme['text_main']};")
         
-        sub = QLabel(profile.get("sub_label", ""))
-        sub_font_size = UIScaling.scale_font(14)
-        sub.setStyleSheet(f"color: {self.theme['text_main']}; font-size: {sub_font_size}px;")
+        sub = QLabel(profile.get("last_updated", ""))
+        sub_font_size = UIScaling.scale_font(13)
+        sub.setStyleSheet(f"color: {self.theme['text_secondary']}; font-size: {sub_font_size}px;")
         
         sku = QLabel(profile.get("sku_label", ""))
         sku.setStyleSheet(f"color: {self.theme['text_main']}; font-size: {sub_font_size}px;")
@@ -248,6 +249,13 @@ class PresetProfileOverlay(BaseOverlay):
         return card
 
     def on_profile_clicked(self, profile):
+        # Set as active profile in settings so live screen picks it up
+        try:
+            settings = JsonUtility.load_from_json(SETTINGS_FILE) or {}
+            settings["active_profile_id"] = profile.get("id")
+            JsonUtility.save_to_json(SETTINGS_FILE, settings)
+        except Exception as e:
+            print(f"[PresetProfileOverlay] Error saving active profile: {e}")
         self.profile_selected.emit(profile)
         self.close_overlay()
 

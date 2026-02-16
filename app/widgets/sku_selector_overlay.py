@@ -58,6 +58,7 @@ class SkuSelectorOverlay(BaseOverlay):
         self.all_skus = []
         self.filtered_skus = []
         self._visible_count = MAX_VISIBLE_ITEMS  # Start with limited items
+        self._selection_made = False  # Prevent double-click
         
         self.load_skus()
         self.init_ui()
@@ -137,27 +138,36 @@ class SkuSelectorOverlay(BaseOverlay):
 
     def load_skus(self):
         # Load from the persistent SKU cache (fetched from database)
-        loaded = get_sku_data()
+        try:
+            loaded = get_sku_data()
+        except Exception as e:
+            print(f"[SkuSelector] Error loading SKU data: {e}")
+            loaded = None
+        
         self.all_skus = []
         if loaded:
             # Deduplicate by 'Nama Produk' (product name from new query)
             seen = set()
             for item in loaded:
-                # Use new field names from database query
-                code = item.get("Nama Produk") or item.get("default_code")
-                if code and code not in seen:
-                    seen.add(code)
-                    # Create normalized item with both old and new field mappings
-                    norm = {
-                        "code": code,
-                        "default_code": code,
-                        "gdrive_id": item.get("GDrive ID") or item.get("gdrive_id"),
-                        "otorisasi": item.get("Perbesaran Ukuran (Otorisasi)") or 0,
-                        "kategori": item.get("Kategori"),
-                        "sizes": item.get("List Size Available"),
-                        "coeff": code
-                    }
-                    self.all_skus.append(norm)
+                try:
+                    # Use new field names from database query
+                    code = item.get("Nama Produk") or item.get("default_code")
+                    if code and code not in seen:
+                        seen.add(code)
+                        # Create normalized item with both old and new field mappings
+                        norm = {
+                            "code": code,
+                            "default_code": code,
+                            "gdrive_id": item.get("GDrive ID") or item.get("gdrive_id"),
+                            "otorisasi": item.get("Perbesaran Ukuran (Otorisasi)") or 0,
+                            "kategori": item.get("Kategori"),
+                            "sizes": item.get("List Size Available"),
+                            "coeff": code
+                        }
+                        self.all_skus.append(norm)
+                except Exception as e:
+                    print(f"[SkuSelector] Error normalizing SKU item: {e}")
+                    continue
         
         self.filtered_skus = self.all_skus
 
@@ -262,7 +272,7 @@ class SkuSelectorOverlay(BaseOverlay):
         
         # Update count label
         if total_count == 0:
-            self.lbl_count.setText("No results found")
+            self.lbl_count.setText("No SKU data available — use Sync SKU to fetch")
         elif showing_count < total_count:
             self.lbl_count.setText(f"Showing {showing_count} of {total_count} items (scroll for more)")
         else:
@@ -316,8 +326,11 @@ class SkuSelectorOverlay(BaseOverlay):
         
         layout.addWidget(code_lbl)
         
-        # Click handler
+        # Click handler — prevent double-click
         def on_click(event, s=sku):
+            if self._selection_made:
+                return
+            self._selection_made = True
             self.sku_selected.emit(s)
             self.close_overlay()
             
@@ -330,8 +343,9 @@ class SkuSelectorOverlay(BaseOverlay):
         if gdrive_id in self.card_labels:
             for lbl in self.card_labels[gdrive_id]:
                 try:
-                    scaled = pixmap.scaled(lbl.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
-                    lbl.setPixmap(scaled)
-                    lbl.setText("")
-                except RuntimeError:
-                    pass  # Widget was deleted
+                    if lbl.isVisible():
+                        scaled = pixmap.scaled(lbl.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                        lbl.setPixmap(scaled)
+                        lbl.setText("")
+                except (RuntimeError, AttributeError):
+                    pass  # Widget was deleted or not accessible

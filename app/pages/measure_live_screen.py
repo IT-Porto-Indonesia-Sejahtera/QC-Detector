@@ -123,7 +123,7 @@ class LiveCameraScreen(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.parent_widget = parent
-        self.setWindowTitle("Live Camera QC")
+        self.setWindowTitle("QC Kamera Langsung")
         
         self.theme = ThemeManager.get_colors() # Initialize theme here
         
@@ -143,6 +143,8 @@ class LiveCameraScreen(QWidget):
         self.active_profile_id = None
         self.active_profile_data = {}
         self.presets = DEFAULT_PRESETS
+        self._preset_click_guard = False  # Prevent double-click on presets
+        self._render_debounce = False  # Prevent rapid re-renders
         
         # UI Layout Containers (initialized to None)
         self.left_presets_layout = None
@@ -217,9 +219,8 @@ class LiveCameraScreen(QWidget):
         self.render_presets()
     
     def on_profile_selected(self, profile_data):
-        # Update active profile - logic might need update if active profile changes externally
-        # But since we go to a page and come back, we should reload in showEvent or manually
-        pass 
+        # A profile was selected from the overlay — refresh live screen
+        self.refresh_data()
 
     # ... (skipping some methods not shown here, will target show_settings_menu below)
 
@@ -278,7 +279,7 @@ class LiveCameraScreen(QWidget):
         self.left_presets_layout.setContentsMargins(0, 0, 0, 0)
         
         # Header for Left Panel (e.g. "Team A")
-        self.lbl_left_team = QLabel("Team A")
+        self.lbl_left_team = QLabel("Tim A")
         self.lbl_left_team.setAlignment(Qt.AlignCenter)
         team_font_size = UIScaling.scale_font(20)
         self.lbl_left_team.setStyleSheet(f"font-weight: bold; font-size: {team_font_size}px; color: {self.theme['text_main']}; padding: 5px;")
@@ -301,7 +302,7 @@ class LiveCameraScreen(QWidget):
         self.right_presets_layout.setContentsMargins(0, 0, 0, 0)
         
         # Header for Right Panel (e.g. "Team B")
-        self.lbl_right_team = QLabel("Team B")
+        self.lbl_right_team = QLabel("Tim B")
         self.lbl_right_team.setAlignment(Qt.AlignCenter)
         self.lbl_right_team.setStyleSheet(f"font-weight: bold; font-size: {team_font_size}px; color: {self.theme['text_main']}; padding: 5px;")
         
@@ -471,7 +472,7 @@ class LiveCameraScreen(QWidget):
         content_layout.setSpacing(0)
 
         # Full-screen Preview Label
-        self.preview_label = QLabel("Waiting for Capture...")
+        self.preview_label = QLabel("Menunggu Pengambilan...")
         self.preview_label.setAlignment(Qt.AlignCenter)
         preview_font_size = UIScaling.scale_font(48)
         self.preview_label.setStyleSheet(f"""
@@ -539,14 +540,14 @@ class LiveCameraScreen(QWidget):
         btn_back.setFixedSize(btn_size, btn_size)
         btn_back.setStyleSheet(btn_style)
         btn_back.setCursor(Qt.PointingHandCursor)
-        btn_back.setToolTip("Back to Menu")
+        btn_back.setToolTip("Kembali ke Menu")
         btn_back.clicked.connect(self.go_back)
         
         btn_settings = QPushButton("⚙️")
         btn_settings.setFixedSize(btn_size, btn_size)
         btn_settings.setStyleSheet(btn_style)
         btn_settings.setCursor(Qt.PointingHandCursor)
-        btn_settings.setToolTip("Open settings")
+        btn_settings.setToolTip("Buka Pengaturan")
         btn_settings.clicked.connect(self.show_settings_menu)
         
         top_bar.addWidget(btn_back)
@@ -554,10 +555,10 @@ class LiveCameraScreen(QWidget):
         
         # Model Selection Dropdown (overlay style)
         self.model_combo = QComboBox()
-        self.model_combo.addItem("YOLO-Seg (AI - Recommended)", "yolo")
-        self.model_combo.addItem("Standard (Beige Ready)", "standard")
+        self.model_combo.addItem("YOLO-Seg (AI - Disarankan)", "yolo")
+        self.model_combo.addItem("Standar (Siap Beige)", "standard")
         self.model_combo.addItem("FastSAM (AI)", "sam")
-        self.model_combo.addItem("Advanced (YOLO-X + SAM)", "advanced")
+        self.model_combo.addItem("Lanjutan (YOLO-X + SAM)", "advanced")
         # Find index for current model
         idx = self.model_combo.findData(self.detection_model)
         if idx != -1: self.model_combo.setCurrentIndex(idx)
@@ -619,7 +620,7 @@ class LiveCameraScreen(QWidget):
         self.left_layout.setSpacing(10)
         
         # Header for Presets
-        lbl_presets_header = QLabel("Presets")
+        lbl_presets_header = QLabel("Preset")
         lbl_presets_header.setAlignment(Qt.AlignCenter)
         header_font_size = UIScaling.scale_font(20)
         lbl_presets_header.setStyleSheet(f"font-weight: bold; font-size: {header_font_size}px; color: {self.theme['text_main']}; padding: 5px;")
@@ -676,7 +677,7 @@ class LiveCameraScreen(QWidget):
         self.back_button.clicked.connect(self.go_back)
         
         # Info Bar (Compact)
-        self.info_bar = QLabel(" Loading... ")
+        self.info_bar = QLabel(" Memuat... ")
         info_bar_font_size = UIScaling.scale_font(12) 
         info_bar_radius = UIScaling.scale(5)
         self.info_bar.setAlignment(Qt.AlignCenter)
@@ -684,17 +685,17 @@ class LiveCameraScreen(QWidget):
         self.info_bar.setFixedHeight(ctrl_btn_size)
         
         # Edit Button
-        btn_edit = QPushButton("Edit")
+        btn_edit = QPushButton("Ubah")
         btn_edit.setFixedSize(UIScaling.scale(60), ctrl_btn_size)
         btn_edit_font_size = UIScaling.scale_font(12)
         btn_edit.setStyleSheet(f"background-color: #F5F5F5; border-radius: {info_bar_radius}px; color: #333333; border: 1px solid #E0E0E0; font-size: {btn_edit_font_size}px;")
         btn_edit.clicked.connect(self.open_profile_dialog)
         
-        # Switch Button (Arrows)
-        self.btn_switch = QPushButton("⇄")
-        self.btn_switch.setFixedSize(ctrl_btn_size, ctrl_btn_size)
-        self.btn_switch.setStyleSheet(f"QPushButton {{ background: #E3F2FD; color: #1565C0; border-radius: {ctrl_btn_radius}px; font-size: {ctrl_btn_font_size}px; border: 1px solid #BBDEFB; }} QPushButton:hover {{ background: #BBDEFB; }}")
-        self.btn_switch.clicked.connect(self.on_switch_sides)
+        # Switch Button (Arrows) - REMOVED
+        # self.btn_switch = QPushButton("⇄")
+        # self.btn_switch.setFixedSize(ctrl_btn_size, ctrl_btn_size)
+        # self.btn_switch.setStyleSheet(f"QPushButton {{ background: #E3F2FD; color: #1565C0; border-radius: {ctrl_btn_radius}px; font-size: {ctrl_btn_font_size}px; border: 1px solid #BBDEFB; }} QPushButton:hover {{ background: #BBDEFB; }}")
+        # self.btn_switch.clicked.connect(self.on_switch_sides)
         
         # Settings
         self.settings_btn = QPushButton("⚙️")
@@ -708,9 +709,9 @@ class LiveCameraScreen(QWidget):
         # Model selection for standard layouts
         self.model_combo = QComboBox()
         self.model_combo.addItem("YOLO-Seg (AI)", "yolo")
-        self.model_combo.addItem("Standard", "standard")
+        self.model_combo.addItem("Standar", "standard")
         self.model_combo.addItem("FastSAM", "sam")
-        self.model_combo.addItem("Advanced (YOLO-X + SAM)", "advanced")
+        self.model_combo.addItem("Lanjutan (YOLO-X + SAM)", "advanced")
         self.model_combo.setFixedWidth(UIScaling.scale(120))
         self.model_combo.setFixedHeight(ctrl_btn_size)
         
@@ -733,13 +734,14 @@ class LiveCameraScreen(QWidget):
         top_ctrl_layout.addWidget(self.model_combo)
 
         top_ctrl_layout.addWidget(btn_edit)
-        top_ctrl_layout.addWidget(self.btn_switch)
+        # Switch button removed (Position is now explicit Left/Right)
+        # top_ctrl_layout.addWidget(self.btn_switch)
         top_ctrl_layout.addWidget(self.settings_btn)
         
         layout.addLayout(top_ctrl_layout)
         
         # Preview Label
-        self.preview_label = QLabel("Review\nFrameshot")
+        self.preview_label = QLabel("Tinjau\nHasil Foto")
         self.preview_label.setAlignment(Qt.AlignCenter)
         preview_font_size = UIScaling.scale_font(36)
         preview_radius = UIScaling.scale(8)
@@ -760,7 +762,7 @@ class LiveCameraScreen(QWidget):
         counter_height = UIScaling.scale(100) # Smaller height
         counter_radius = UIScaling.scale(5)
         
-        self.lbl_good = QLabel(f"{self.good_count}\nGood")
+        self.lbl_good = QLabel(f"{self.good_count}\nBagus")
         self.lbl_good.setAlignment(Qt.AlignCenter)
         self.lbl_good.setFixedHeight(counter_height)
         self.lbl_good.setStyleSheet(f"background-color: #66BB6A; color: white; font-weight: bold; font-size: {counter_font_size}px; border-radius: {counter_radius}px;")
@@ -776,7 +778,7 @@ class LiveCameraScreen(QWidget):
         layout.addLayout(counters_layout)
         
         # Big Result
-        self.lbl_big_result = QLabel("-\nIDLE")
+        self.lbl_big_result = QLabel("-\nSIAP")
         self.lbl_big_result.setAlignment(Qt.AlignCenter)
         self.lbl_big_result.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         big_result_font_size = UIScaling.scale_font(48)
@@ -787,15 +789,15 @@ class LiveCameraScreen(QWidget):
         
         # Details Box
         details_layout = QGridLayout()
-        self.lbl_detail_sku = QLabel("SKU/Size :")
+        self.lbl_detail_sku = QLabel("SKU/Ukuran :")
         self.val_detail_sku = QLabel("---/---")
-        self.lbl_detail_len = QLabel("Length :")
+        self.lbl_detail_len = QLabel("Panjang :")
         self.val_detail_len = QLabel("-")
-        self.lbl_detail_wid = QLabel("Width :")
+        self.lbl_detail_wid = QLabel("Lebar :")
         self.val_detail_wid = QLabel("-")
-        self.lbl_detail_oto = QLabel("Auto-Oto :")
+        self.lbl_detail_oto = QLabel("Otorisasi :")
         self.val_detail_oto = QLabel("-")
-        self.lbl_detail_res = QLabel("Result :")
+        self.lbl_detail_res = QLabel("Hasil :")
         self.val_detail_res = QLabel("-")
         
         detail_font_size = UIScaling.scale_font(18)
@@ -844,14 +846,20 @@ class LiveCameraScreen(QWidget):
 
 
     def render_presets(self):
-        # Handle Layout Modes
+        # Debounce rapid re-render calls
+        if self._render_debounce:
+            return
+        self._render_debounce = True
+        QTimer.singleShot(50, self._do_render_presets)
+    
+    def _do_render_presets(self):
+        self._render_debounce = False
         if self.layout_mode == "minimal":
             return # Minimal mode has no presets to render
             
         if self.layout_mode == "classic":
-            # CLASSIC MODE: All presets in left panel, but split by Team A (Left) and B (Right)
-            if hasattr(self, 'btn_switch'): 
-                self.btn_switch.setVisible(False)
+            # CLASSIC MODE: All presets in left panel, but split by Position
+            # We treat Left as Top/First and Right as Bottom/Second
                 
             self._clear_layout(self.classic_presets_layout)
             
@@ -861,76 +869,76 @@ class LiveCameraScreen(QWidget):
             h_split.setContentsMargins(0, 0, 0, 0)
             h_split.setSpacing(10)
             
-            # Team A Container
-            container_A = QWidget()
-            layout_A = QVBoxLayout(container_A)
-            layout_A.setContentsMargins(0, 0, 0, 0)
+            # Left (Kiri) Container
+            container_L = QWidget()
+            layout_L = QVBoxLayout(container_L)
+            layout_L.setContentsMargins(0, 0, 0, 0)
             
-            # Team B Container
-            container_B = QWidget()
-            layout_B = QVBoxLayout(container_B)
-            layout_B.setContentsMargins(0, 0, 0, 0)
+            # Right (Kanan) Container
+            container_R = QWidget()
+            layout_R = QVBoxLayout(container_R)
+            layout_R.setContentsMargins(0, 0, 0, 0)
             
             # Filter Presets
-            def is_team_match(p, target):
-                team = str(p.get("team", "A")).upper().strip()
-                target = str(target).upper().strip()
-                # Match "Team A" with "A", or just "A" with "A"
-                return team == target or team.endswith(" " + target)
-
-            presets_A = [p for p in self.presets if is_team_match(p, "A")]
-            presets_B = [p for p in self.presets if is_team_match(p, "B")]
+            presets_L = []
+            presets_R = []
+            
+            for p in self.presets:
+                # Map Team to Position if needed
+                pos = str(p.get("team", "")).lower().strip()
+                sub = str(p.get("sub_label", "")).lower().strip()
+                
+                # Logic: Explicit Left/Right OR fallback A->Left, B->Right
+                is_left = "left" in pos or "kiri" in pos or "team a" in pos or pos == "a"
+                is_right = "right" in pos or "kanan" in pos or "team b" in pos or pos == "b"
+                
+                if is_left: presets_L.append(p)
+                elif is_right: presets_R.append(p)
+                else: presets_L.append(p) # Default to Left if undefined
             
             # Render to respective layouts
-            self._render_presets_auto_fit(presets_A, layout_A)
-            self._render_presets_auto_fit(presets_B, layout_B)
+            self._render_presets_auto_fit(presets_L, layout_L)
+            self._render_presets_auto_fit(presets_R, layout_R)
             
             # Add to Split Layout (50/50 split within the 55% panel)
-            h_split.addWidget(container_A, 50)
-            h_split.addWidget(container_B, 50)
+            h_split.addWidget(container_L, 50)
+            h_split.addWidget(container_R, 50)
             
             # Add Split Widget to Main Classic Layout
             self.classic_presets_layout.addWidget(h_split_widget)
 
         else:
-            # SPLIT MODE: Team A/B Logic
+            # SPLIT MODE: Left/Right Logic
+            # Switch button is removed as per requirement
+            
             if hasattr(self, 'btn_switch'): 
-                self.btn_switch.setVisible(True)
+                self.btn_switch.setVisible(False)
                 
-            # 1. Determine which team goes where
-            # Default: A is Left, B is Right
-            left_team = "A"
-            right_team = "B"
+            # Update Headers
+            self.lbl_left_team.setText("Kiri")
+            self.lbl_right_team.setText("Kanan")
             
-            if self.team_layout_order == "B_LEFT":
-                left_team = "B"
-                right_team = "A"
-                
-            # 2. Update Headers
-            self.lbl_left_team.setText(f"Team {left_team}")
-            self.lbl_right_team.setText(f"Team {right_team}")
-            
-            # 3. Filter Presets
+            # Filter Presets
             presets_left = []
             presets_right = []
             
-            def is_team_match(p, target):
-                team = str(p.get("team", "A")).upper().strip()
-                target = str(target).upper().strip()
-                # Match "Team A" with "A", or just "A" with "A"
-                return team == target or team.endswith(" " + target)
-
             for p in self.presets:
-                if is_team_match(p, left_team):
-                    presets_left.append(p)
-                elif is_team_match(p, right_team):
-                    presets_right.append(p)
-                    
-            # 4. Clear existing items
+                # Map Team to Position if needed
+                pos = str(p.get("team", "")).lower().strip()
+                
+                # Logic: Explicit Left/Right OR fallback A->Left, B->Right
+                is_left = "left" in pos or "kiri" in pos or "team a" in pos or pos == "a"
+                is_right = "right" in pos or "kanan" in pos or "team b" in pos or pos == "b"
+                
+                if is_left: presets_left.append(p)
+                elif is_right: presets_right.append(p)
+                else: presets_left.append(p) # Default to Left if undefined
+                
+            # Clear existing items
             self._clear_layout(self.left_presets_layout)
             self._clear_layout(self.right_presets_layout)
             
-            # 5. Render to layouts
+            # Render to layouts
             self._render_presets_auto_fit(presets_left, self.left_presets_layout)
             self._render_presets_auto_fit(presets_right, self.right_presets_layout)
         
@@ -955,7 +963,7 @@ class LiveCameraScreen(QWidget):
             return
         
         if not presets:
-            lbl_empty = QLabel("No Presets")
+            lbl_empty = QLabel("Tidak Ada Preset")
             lbl_empty.setAlignment(Qt.AlignCenter)
             parent_layout.addWidget(lbl_empty)
             return
@@ -1030,6 +1038,12 @@ class LiveCameraScreen(QWidget):
         parent_layout.addStretch()
 
     def on_preset_clicked(self, idx):
+        # Prevent double-click (300ms cooldown)
+        if self._preset_click_guard:
+            return
+        self._preset_click_guard = True
+        QTimer.singleShot(300, self._reset_preset_guard)
+        
         if idx < 0 or idx >= len(self.presets):
             return
             
@@ -1043,13 +1057,16 @@ class LiveCameraScreen(QWidget):
         if hasattr(self, 'val_detail_oto'):
             self.val_detail_oto.setText(f"{self.current_otorisasi:+.1f}")
         print(f"Selected Preset {idx}: {self.current_sku} / {self.current_size} (+{self.current_otorisasi})")
+    
+    def _reset_preset_guard(self):
+        self._preset_click_guard = False
 
     def capture_frame(self):
         if self.live_frame is None:
             return
             
         # Show Loading Indicator
-        self.show_status("Processing...", is_error=False)
+        self.show_status("Memproses...", is_error=False)
         QApplication.processEvents() # Force UI update
         
         self.is_paused = True # Freeze preview
@@ -1120,11 +1137,10 @@ class LiveCameraScreen(QWidget):
                     print(f"[CAPTURE] Size: {selected_size} | Otorisasi: {otorisasi} | Target: {cat_result['target_length_mm']} mm")
                     print(f"[CAPTURE] Deviation: {deviation_mm:.2f} mm ({cat_result['deviation_size']:.4f} size units) => {detail}")
                 else:
-                    # Fallback to old PASS/FAIL if no size selected
-                    pf = r.get("pass_fail", "FAIL")
-                    category = "GOOD" if pf == "PASS" else "REJECT"
-                    detail = category
-                    print(f"[CAPTURE] No size selected, using legacy PASS/FAIL: {pf}")
+                    # Logic Change: Force REJECT (BS) if no size selected
+                    category = "REJECT"
+                    detail = "No Size Selected"
+                    print(f"[CAPTURE] No size selected, defaulting to REJECT/BS")
                 
                 self.val_detail_len.setText(f"{length_mm:.2f} mm")
                 self.val_detail_wid.setText(f"{width_mm:.2f} mm")
@@ -1142,7 +1158,7 @@ class LiveCameraScreen(QWidget):
                 
                 if category == "GOOD":
                     self.good_count += 1
-                    self.lbl_big_result.setText(f"{display_size}\nGOOD")
+                    self.lbl_big_result.setText(f"{display_size}\nBAGUS")
                     self.lbl_big_result.setStyleSheet(f"color: white; background-color: {bg_color}; padding: {res_padding}px; border-radius: {res_radius}px; border: none; font-size: {res_font_size}px; font-weight: 900;")
                     self._write_plc_result(is_good=True)
                 elif category == "OVEN":
@@ -1152,7 +1168,7 @@ class LiveCameraScreen(QWidget):
                     # TODO: Determine PLC behavior for OVEN
                 else:  # REJECT
                     self.bs_count += 1
-                    self.lbl_big_result.setText(f"{display_size}\nREJECT")
+                    self.lbl_big_result.setText(f"{display_size}\nBS")
                     self.lbl_big_result.setStyleSheet(f"color: white; background-color: {bg_color}; padding: {res_padding}px; border-radius: {res_radius}px; border: none; font-size: {res_font_size}px; font-weight: 900;")
                     self._write_plc_result(is_good=False)
                     
@@ -1162,7 +1178,7 @@ class LiveCameraScreen(QWidget):
                 self.val_detail_res.setText("-")
                 self.val_detail_len.setText("-")
                 self.val_detail_wid.setText("-")
-                self.lbl_big_result.setText("-\nIDLE")
+                self.lbl_big_result.setText("-\nSIAP")
                 # Idle: Grey text on white
                 res_font_size = UIScaling.scale_font(48)
                 res_padding = UIScaling.scale(20)

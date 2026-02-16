@@ -16,7 +16,7 @@ from project_utilities.json_utility import JsonUtility
 class MainWindow(QWidget):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("QC Detector System")
+        self.setWindowTitle("Sistem Deteksi QC")
         self.setMinimumSize(900, 600)
         self.setStyleSheet("background-color: white;")
         self.from_live = False # Track if we came from live screen

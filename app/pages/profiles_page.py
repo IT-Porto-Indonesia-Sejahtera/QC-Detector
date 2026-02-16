@@ -5,7 +5,7 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QLineEdit,
     QComboBox, QFrame, QSizePolicy, QScrollArea, QMessageBox, QDateEdit
 )
-from PySide6.QtCore import Qt, QDate
+from PySide6.QtCore import Qt, QDate, QTimer
 from PySide6.QtGui import QImage, QPixmap
 
 from app.utils.theme_manager import ThemeManager
@@ -320,13 +320,26 @@ class ProfilesPage(QWidget):
         v_sku.addWidget(txt_sku)
         layout.addLayout(v_sku, 1)
         
-        # Team Selector
+        # Position Selector (Previously Team)
         v_team = QVBoxLayout()
         v_team.setSpacing(4)
-        v_team.addWidget(QLabel("Team Assignment", styleSheet="font-size: 11px; font-weight: 700; color: #8E8E93; border:none;"))
+        v_team.addWidget(QLabel("Position", styleSheet="font-size: 11px; font-weight: 700; color: #8E8E93; border:none;"))
         cmb_team = QComboBox()
         # Dropdown UI is now handled globally, just set content
-        cmb_team.addItems(["", "Team A", "Team B", "Team C", "Team D"])
+        # We use explicit values for Left/Right, but also keep standard "A"/"B" internally if possible?
+        # Actually, let's just use the text.
+        cmb_team.addItem("", "")                # Empty
+        cmb_team.addItem("Left (Kiri)", "A")    # Map Left -> A for internal compat? Or just use "Left"? 
+                                                # Let's use "Left" to be clear, but maybe keep "A" as item data if we want strict mapping?
+                                                # The user wants "Left/Right".
+        cmb_team.setItemData(1, "Left") # Overwrite functionality to just use "Left"/"Right" strings or map them.
+        
+        # Simpler: just use the text that will be saved.
+        cmb_team.clear()
+        cmb_team.addItem("", "")
+        cmb_team.addItem("Left (Kiri)", "Left")
+        cmb_team.addItem("Right (Kanan)", "Right")
+        
         cmb_team.setFixedWidth(140)
         v_team.addWidget(cmb_team)
         layout.addLayout(v_team)
@@ -371,7 +384,11 @@ class ProfilesPage(QWidget):
         """)
 
     def load_profiles(self):
-        self.profiles = JsonUtility.load_from_json(PROFILES_FILE) or []
+        try:
+            self.profiles = JsonUtility.load_from_json(PROFILES_FILE) or []
+        except Exception as e:
+            print(f"[ProfilesPage] Error loading profiles: {e}")
+            self.profiles = []
         self.render_list()
 
     def render_list(self):
@@ -396,11 +413,10 @@ class ProfilesPage(QWidget):
             btn.setFixedHeight(70)
             btn.setCursor(Qt.PointingHandCursor)
             
-            # Subtitle (Team/Date)
-            sub_text = p.get('sub_label', '')
+            # Subtitle (Date)
+            sub_text = p.get('last_updated', '')
             name_text = p.get('name', 'Untitled')
             
-            # Using HTML for rich text in button
             btn.setText(f"{name_text}\n{sub_text}")
             
             # Dynamic Style
@@ -434,7 +450,12 @@ class ProfilesPage(QWidget):
         self.profile_layout.addStretch()
 
     def create_profile(self):
-        new_p = {"id": str(uuid.uuid4()), "name": f"Shift {len(self.profiles)+1}", "sub_label": "Team A", "presets": []}
+        new_p = {
+            "id": str(uuid.uuid4()), 
+            "name": f"Shift {len(self.profiles)+1}", 
+            "sub_label": "Left (Kiri)", 
+            "presets": []
+        }
         self.profiles.append(new_p)
         JsonUtility.save_to_json(PROFILES_FILE, self.profiles)
         self.load_editor(new_p)
@@ -475,7 +496,13 @@ class ProfilesPage(QWidget):
         overlay.sku_selected.connect(self.on_sku_selected)
 
     def on_sku_selected(self, sku_data):
-        row = self.sku_rows[self.pending_sku_index]
+        idx = getattr(self, 'pending_sku_index', -1)
+        if idx < 0 or idx >= len(self.sku_rows):
+            print(f"[ProfilesPage] Invalid pending_sku_index: {idx}")
+            return
+        if not sku_data:
+            return
+        row = self.sku_rows[idx]
         row["data"] = sku_data
         row["sku_val"].setText(str(sku_data.get("code", "")))
 
@@ -525,7 +552,15 @@ class ProfilesPage(QWidget):
         return [s]
 
     def save_current_profile(self):
-        if not self.current_editing: return
+        if not self.current_editing:
+            return
+        
+        # Validate name
+        name = self.name_input.text().strip()
+        if not name:
+            self._show_toast("Please enter a profile name", is_error=True)
+            return
+        
         from backend.sku_cache import get_sku_by_code
         presets, selected_skus = [], []
         team_label, sku_label = "", ""
@@ -536,17 +571,20 @@ class ProfilesPage(QWidget):
                 data["team"] = row["team_cmb"].currentText()
                 code = data.get("code", "UNKNOWN")
                 
-                if not data.get("sizes") or not data.get("otorisasi"):
-                    full_data = get_sku_by_code(code)
-                    if full_data:
-                        for k, v in full_data.items():
-                            if k not in data or not data[k]:
-                                data[k] = v
+                try:
+                    if not data.get("sizes") or not data.get("otorisasi"):
+                        full_data = get_sku_by_code(code)
+                        if full_data:
+                            for k, v in full_data.items():
+                                if k not in data or not data[k]:
+                                    data[k] = v
+                except Exception as e:
+                    print(f"[ProfilesPage] Error enriching SKU {code}: {e}")
                 
                 selected_skus.append(data)
                 otorisasi = data.get("otorisasi", "0")
                 
-                if not team_label: team_label = data["team"]
+                if not team_label: team_label = data.get("team", "")
                 if not sku_label: sku_label = code
                 
                 sizes = self._parse_sizes(data.get("sizes", ""), code)
@@ -561,39 +599,91 @@ class ProfilesPage(QWidget):
                     })
         
         self.current_editing.update({
-            "name": self.name_input.text(),
+            "name": name,
             "last_updated": f"{self.date_edit.date().toString('dd/MM/yyyy')}, {datetime.now().strftime('%H:%M:%S')}",
-            "sub_label": team_label or "No Team",
+            "sub_label": team_label or "No Position",
             "sku_label": sku_label,
             "selected_skus": selected_skus,
             "presets": presets
         })
         JsonUtility.save_to_json(PROFILES_FILE, self.profiles)
         self.render_list()
-        QMessageBox.information(self, "Success", "Profile saved!")
-        
-        if self.controller:
-            self.controller.go_to_live()
+        self._show_toast("✓ Profile saved!")
 
     def activate_current_profile(self):
-        if not self.current_editing: return
+        if not self.current_editing:
+            return
         settings = JsonUtility.load_from_json(SETTINGS_FILE) or {}
         settings["active_profile_id"] = self.current_editing["id"]
         JsonUtility.save_to_json(SETTINGS_FILE, settings)
-        QMessageBox.information(self, "Active", f"'{self.current_editing['name']}' is now active.")
-        
-        if self.controller:
-            self.controller.go_to_live()
+        self._show_toast(f"✓ '{self.current_editing['name']}' is now active.")
 
     def delete_current_profile(self):
         if not self.current_editing: return
-        if QMessageBox.question(self, "Delete", f"Delete '{self.current_editing['name']}'?", QMessageBox.Yes|QMessageBox.No) == QMessageBox.Yes:
+        msg = QMessageBox(self)
+        msg.setWindowTitle("Delete")
+        msg.setText(f"Delete '{self.current_editing['name']}'?")
+        msg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
+        msg.setStyleSheet("""
+            QMessageBox { background-color: #1B1F27; }
+            QMessageBox QLabel { color: #FFFFFF; font-size: 14px; }
+            QPushButton { 
+                background-color: #2A2E38; color: #FFFFFF; 
+                border: 1px solid #3A3E48; border-radius: 6px;
+                padding: 6px 20px; font-size: 13px;
+            }
+            QPushButton:hover { background-color: #3A3E48; }
+        """)
+        if msg.exec() == QMessageBox.Yes:
             self.profiles.remove(self.current_editing)
             JsonUtility.save_to_json(PROFILES_FILE, self.profiles)
             self.current_editing = None
-            self.form_container.setVisible(False)
+            self.editor_area.setVisible(False)
             self.lbl_editor_title.setVisible(True)
             self.render_list()
+
+    def _show_toast(self, message, is_error=False):
+        """Show an inline toast notification that auto-dismisses after 2.5 seconds."""
+        if not hasattr(self, '_toast_label'):
+            self._toast_label = QLabel(self)
+            self._toast_label.setAlignment(Qt.AlignCenter)
+            self._toast_label.setFixedHeight(44)
+            self._toast_label.hide()
+            self._toast_timer = QTimer(self)
+            self._toast_timer.setSingleShot(True)
+            self._toast_timer.timeout.connect(lambda: self._toast_label.hide())
+        
+        if is_error:
+            bg = "#FFEBEE"
+            border = "#EF9A9A"
+            color = "#C62828"
+        else:
+            bg = "#E8F5E9"
+            border = "#A5D6A7"
+            color = "#2E7D32"
+        
+        self._toast_label.setText(message)
+        self._toast_label.setStyleSheet(f"""
+            background-color: {bg};
+            color: {color};
+            border: 1px solid {border};
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 14px;
+            padding: 0 20px;
+        """)
+        
+        # Position at top center of editor area
+        editor_rect = self.editor_area.geometry()
+        toast_w = min(400, editor_rect.width() - 40)
+        self._toast_label.setFixedWidth(toast_w)
+        self._toast_label.move(
+            editor_rect.x() + (editor_rect.width() - toast_w) // 2,
+            editor_rect.y() + 10
+        )
+        self._toast_label.show()
+        self._toast_label.raise_()
+        self._toast_timer.start(2500)
 
     def go_back(self):
         if self.controller:
@@ -616,14 +706,14 @@ class ProfilesPage(QWidget):
         if data:
             set_sku_data(data)
             add_log(f"SUCCESS: Fetched {len(data)} products.")
-            QMessageBox.information(self, "Sync Complete", f"Successfully fetched {len(data)} SKU records.")
+            self._show_toast(f"✓ Successfully fetched {len(data)} SKU records.")
         else:
             add_log("WARNING: Query returned 0 results.")
         self._reset_sync_button()
 
     def _on_sku_fetch_error(self, error_msg):
         add_log(f"ERROR: {error_msg}")
-        QMessageBox.warning(self, "Sync Failed", f"Error: {error_msg}")
+        self._show_toast(f"Sync failed: {error_msg}", is_error=True)
         self._reset_sync_button()
 
     def _reset_sync_button(self):
