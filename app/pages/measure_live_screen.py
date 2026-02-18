@@ -233,8 +233,14 @@ class LiveCameraScreen(QWidget):
         
         # Open Quick Settings Overlay
         overlay = SettingsOverlay(self)
-        overlay.settings_saved.connect(self.refresh_data)
+        overlay.closed.connect(self.on_settings_closed)
+        # overlay.settings_saved.connect(self.on_settings_saved) # Method on_settings_saved not defined
         overlay.show_overlay()
+                
+    def on_settings_closed(self):
+        # This method is called when the settings overlay is closed.
+        # It should trigger a refresh of the LiveCameraScreen to apply any changes.
+        self.refresh_data()
 
     def init_ui(self):
         # Use theme variables
@@ -1572,9 +1578,9 @@ class LiveCameraScreen(QWidget):
             )
             
             self.plc_trigger = PLCModbusTrigger(config)
-            self.plc_trigger.on_trigger = self.on_plc_trigger
-            self.plc_trigger.on_value_update = self.on_plc_value_update
-            self.plc_trigger.on_connection_change = self.on_plc_connection_change
+            self.plc_trigger.on_trigger = lambda: self.on_plc_trigger()
+            self.plc_trigger.on_value_update = lambda v: self.on_plc_value_update(v)
+            self.plc_trigger.on_connection_change = lambda c, m: self.on_plc_connection_change(c, m)
             
             self.plc_enabled = True
             print("[PLC] Modbus trigger initialized")

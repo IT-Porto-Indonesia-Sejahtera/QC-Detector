@@ -157,6 +157,7 @@ class SkuSelectorOverlay(BaseOverlay):
                         # Create normalized item with both old and new field mappings
                         norm = {
                             "code": code,
+                            "Nama Produk": code, # Added for compatibility
                             "default_code": code,
                             "gdrive_id": item.get("GDrive ID") or item.get("gdrive_id"),
                             "otorisasi": item.get("Perbesaran Ukuran (Otorisasi)") or 0,
