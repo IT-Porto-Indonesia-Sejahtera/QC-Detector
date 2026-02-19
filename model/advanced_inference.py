@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Advanced Inference Module — YOLOv8-X + SAM Pipeline
 

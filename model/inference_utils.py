@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Inference Utilities
 ===================
@@ -34,7 +35,10 @@ class ModelWarmupWorker(QThread):
             else:
                 self.logger.warning("YOLOv8-seg not available for warmup")
         except Exception as e:
+            import traceback
             self.logger.error(f"Failed to warmup YOLO: {e}")
+            self.logger.error(traceback.format_exc())
+
 
         # 2. Warmup FastSAM if available
         try:
