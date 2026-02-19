@@ -262,6 +262,24 @@ class ProfilesPage(QWidget):
         """)
         btn_activate.clicked.connect(self.activate_current_profile)
         
+        btn_run = QPushButton("▶ Run Selection")
+        btn_run.setCursor(Qt.PointingHandCursor)
+        btn_run.setStyleSheet("""
+            QPushButton {
+                background-color: #E3F2FD;
+                color: #1976D2;
+                border: 1px solid #BBDEFB;
+                border-radius: 8px;
+                padding: 10px 20px;
+                font-weight: 700;
+                font-size: 14px;
+            }
+            QPushButton:hover {
+                background-color: #BBDEFB;
+            }
+        """)
+        btn_run.clicked.connect(self.run_current_profile)
+
         btn_save = QPushButton("Save Changes")
         btn_save.setCursor(Qt.PointingHandCursor)
         btn_save.setStyleSheet("""
@@ -283,6 +301,7 @@ class ProfilesPage(QWidget):
         h_actions.addWidget(btn_del)
         h_actions.addWidget(btn_activate)
         h_actions.addStretch()
+        h_actions.addWidget(btn_run)
         h_actions.addWidget(btn_save)
         
         layout.addLayout(h_actions)
@@ -399,22 +418,20 @@ class ProfilesPage(QWidget):
                 item.widget().deleteLater()
                 
         # Re-populate
-        # self.profile_layout.addStretch() is removed from here because we add it once in init, 
-        # but we need to ensure items are added BEFORE the stretch.
-        # Actually simplest way: remove everything including stretch, add items, then add stretch.
-        
-        # Since we just cleared everything:
         for p in self.profiles:
             is_selected = (self.current_editing == p)
             
             btn = QPushButton()
             btn.setCheckable(True)
             btn.setChecked(is_selected)
-            btn.setFixedHeight(70)
+            btn.setFixedHeight(UIScaling.scale(70))
             btn.setCursor(Qt.PointingHandCursor)
             
-            # Subtitle (Date)
+            # Subtitle (Date) - Remove time if present
             sub_text = p.get('last_updated', '')
+            if ',' in sub_text:
+                sub_text = sub_text.split(',')[0].strip()
+            
             name_text = p.get('name', 'Untitled')
             
             btn.setText(f"{name_text}\n{sub_text}")
@@ -427,20 +444,23 @@ class ProfilesPage(QWidget):
             btn.setStyleSheet(f"""
                 QPushButton {{
                     text-align: left;
-                    padding: 10px 15px;
+                    padding: 12px 20px;
                     background-color: {bg};
-                    border: 2px solid {border};
-                    border-radius: 10px;
+                    border: 1px solid {border};
+                    border-radius: 12px;
                     color: {text_col};
                     font-weight: 600;
-                    font-size: 14px;
+                    font-size: 15px;
+                    line-height: 1.4;
                 }}
                 QPushButton:hover {{
-                    background-color: #F5F5F7;
+                    background-color: #F8F9FA;
+                    border-color: #D1D1D6;
                 }}
                 QPushButton:checked {{
                     background-color: #E8F0FE;
-                    border: 2px solid #007AFF;
+                    border: 1px solid #007AFF;
+                    border-left-width: 6px; /* Thick left border for selected state */
                 }}
             """)
             
@@ -618,6 +638,18 @@ class ProfilesPage(QWidget):
         JsonUtility.save_to_json(SETTINGS_FILE, settings)
         self._show_toast(f"✓ '{self.current_editing['name']}' is now active.")
 
+    def run_current_profile(self):
+        # Save first to ensure latest changes are used
+        self.save_current_profile()
+        # Activate it
+        self.activate_current_profile()
+        # Navigate to live
+        if self.controller:
+            # We want 'Back' from live to go to Menu, not here.
+            # In MainWindow.go_to_live(), self.from_live is set to False.
+            # So if we call it, it will achieve exactly what's requested.
+            self.controller.go_to_live()
+
     def delete_current_profile(self):
         if not self.current_editing: return
         msg = QMessageBox(self)
@@ -638,8 +670,8 @@ class ProfilesPage(QWidget):
             self.profiles.remove(self.current_editing)
             JsonUtility.save_to_json(PROFILES_FILE, self.profiles)
             self.current_editing = None
-            self.editor_area.setVisible(False)
-            self.lbl_editor_title.setVisible(True)
+            self.form_container.setVisible(False) # Only hide the form
+            self.lbl_editor_title.setVisible(True) # Show placeholder
             self.render_list()
 
     def _show_toast(self, message, is_error=False):
