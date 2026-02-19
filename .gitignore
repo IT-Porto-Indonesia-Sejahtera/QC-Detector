@@ -43,3 +43,6 @@ output/log_output/
 # MkDocs build output
 site/
 # input/temp_assets/
+
+*.json
+*.pyc
