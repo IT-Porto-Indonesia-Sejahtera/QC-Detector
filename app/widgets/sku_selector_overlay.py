@@ -78,20 +78,35 @@ class SkuSelectorOverlay(BaseOverlay):
         # Header
         header = QHBoxLayout()
         btn_back = QPushButton("❮")
-        btn_back_size = UIScaling.scale(60)
-        btn_back_font_size = UIScaling.scale_font(24)
+        btn_back_size = UIScaling.scale(40)
+        btn_back_font_size = UIScaling.scale_font(20)
         btn_back.setFixedSize(btn_back_size, btn_back_size)
-        btn_back.setStyleSheet(f"border: none; font-size: {btn_back_font_size}px; font-weight: bold; color: {self.theme['text_main']};")
+        btn_back.setCursor(Qt.PointingHandCursor)
+        btn_back.setStyleSheet(f"""
+            QPushButton {{
+                border: none; 
+                border-radius: {btn_back_size//2}px;
+                font-size: {btn_back_font_size}px; 
+                font-weight: bold; 
+                color: {self.theme['text_main']};
+                background-color: {self.theme['bg_card']};
+            }}
+            QPushButton:hover {{
+                background-color: {self.theme['border']};
+            }}
+        """)
         btn_back.clicked.connect(self.close_overlay)
         
         lbl_title = QLabel("Select SKU")
-        title_font_size = UIScaling.scale_font(20)
+        title_font_size = UIScaling.scale_font(18)
         lbl_title.setStyleSheet(f"font-size: {title_font_size}px; font-weight: bold; color: {self.theme['text_main']};")
         lbl_title.setAlignment(Qt.AlignCenter)
         
         header.addWidget(btn_back)
-        header.addWidget(lbl_title, stretch=1)
-        header.addSpacing(40)
+        header.addStretch()
+        header.addWidget(lbl_title)
+        header.addStretch()
+        header.addSpacing(btn_back_size) # Symmetric balance
         
         layout.addLayout(header)
         
@@ -121,11 +136,14 @@ class SkuSelectorOverlay(BaseOverlay):
         # Grid Area with infinite scroll
         self.scroll = QScrollArea()
         self.scroll.setWidgetResizable(True)
-        self.scroll.setStyleSheet(f"border: none; background: {self.theme['bg_panel']};")
+        self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff) # Hide horizontal scroll
+        self.scroll.setStyleSheet(f"border: none; background: transparent;")
         
         self.scroll_content = QWidget()
+        self.scroll_content.setStyleSheet(f"background: transparent;")
         self.grid_layout = QGridLayout(self.scroll_content)
-        self.grid_layout.setSpacing(15)
+        self.grid_layout.setSpacing(UIScaling.scale(15))
+        self.grid_layout.setContentsMargins(5, 5, 5, 5)
         
         self.scroll.setWidget(self.scroll_content)
         layout.addWidget(self.scroll)

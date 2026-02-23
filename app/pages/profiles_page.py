@@ -444,14 +444,13 @@ class ProfilesPage(QWidget):
             btn.setStyleSheet(f"""
                 QPushButton {{
                     text-align: left;
-                    padding: 12px 20px;
+                    padding: {UIScaling.scale(10)}px {UIScaling.scale(20)}px;
                     background-color: {bg};
                     border: 1px solid {border};
                     border-radius: 12px;
                     color: {text_col};
                     font-weight: 600;
-                    font-size: 15px;
-                    line-height: 1.4;
+                    font-size: {UIScaling.scale_font(15)}px;
                 }}
                 QPushButton:hover {{
                     background-color: #F8F9FA;
@@ -460,7 +459,7 @@ class ProfilesPage(QWidget):
                 QPushButton:checked {{
                     background-color: #E8F0FE;
                     border: 1px solid #007AFF;
-                    border-left-width: 6px; /* Thick left border for selected state */
+                    border-left: {UIScaling.scale(6)}px solid #007AFF;
                 }}
             """)
             
@@ -658,11 +657,17 @@ class ProfilesPage(QWidget):
         msg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
         msg.setStyleSheet("""
             QMessageBox { background-color: #1B1F27; }
-            QMessageBox QLabel { color: #FFFFFF; font-size: 14px; }
+            QMessageBox QLabel { 
+                color: #FFFFFF; 
+                font-size: 14px; 
+                background-color: transparent;
+                padding: 10px;
+            }
             QPushButton { 
                 background-color: #2A2E38; color: #FFFFFF; 
                 border: 1px solid #3A3E48; border-radius: 6px;
                 padding: 6px 20px; font-size: 13px;
+                margin: 5px;
             }
             QPushButton:hover { background-color: #3A3E48; }
         """)
