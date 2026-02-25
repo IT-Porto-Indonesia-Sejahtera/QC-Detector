@@ -1133,25 +1133,17 @@ class LiveCameraScreen(QWidget):
         if self.live_frame is None:
             return
             
+        # --- Validation: Ensure SKU & Size are selected ---
+        is_empty = (self.current_size in ["---", "-", ""]) or (self.current_sku in ["---", "-", ""])
+        if is_empty:
+            print("[Capture] Aborted: No SKU/Size selected")
+            self.show_status("SILAKAN PILIH SKU & SIZE!", is_error=True)
+            # Auto-hide after 2 seconds
+            QTimer.singleShot(2000, self.hide_status)
+            return
+
         # Show Loading Indicator
         self.show_status("Memproses...", is_error=False)
-        QApplication.processEvents() # Force UI update
-        
-        self.is_paused = True # Freeze preview
-        
-        # Determine model
-        use_sam = False
-        use_yolo = False
-        use_advanced = False
-        if hasattr(self, 'model_combo'):
-            current_model = self.model_combo.currentData()
-            use_yolo = (current_model == "yolo")
-            use_sam = (current_model == "sam")
-            use_advanced = (current_model == "advanced")
-        else:
-            use_yolo = (self.detection_model == "yolo")
-            use_sam = (self.detection_model == "sam")
-            use_advanced = (self.detection_model == "advanced")
             
         try:
             # Apply Height Correction (Parallax)
