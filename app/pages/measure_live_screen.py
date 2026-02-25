@@ -15,6 +15,7 @@ from PySide6.QtGui import QPixmap, QImage, QColor, QPainter, QAction, QDoubleVal
 import numpy as np
 from model.measure_live_sandals import measure_live_sandals
 from project_utilities.json_utility import JsonUtility
+from project_utilities.logger_config import get_detection_logger, get_count_logger
 from app.widgets.preset_profile_overlay import PresetProfileOverlay, PROFILES_FILE
 from app.utils.theme_manager import ThemeManager
 from app.utils.camera_utils import open_video_capture
@@ -46,6 +47,7 @@ except ImportError:
 # ---------------------------------------------------------------------
 PRESETS_FILE = os.path.join("output", "settings", "presets.json")
 SETTINGS_FILE = os.path.join("output", "settings", "app_settings.json")
+COUNTS_FILE = os.path.join("output", "settings", "counts.json")
 
 # Default Presets (Testing Grouping)
 DEFAULT_PRESETS = [
@@ -134,6 +136,16 @@ class LiveCameraScreen(QWidget):
         # State
         self.good_count = 0
         self.bs_count = 0
+        self.granular_counts = {
+            "GOOD 1": 0,
+            "GOOD 2": 0,
+            "OVEN 1": 0,
+            "OVEN 2": 0,
+            "REJECT (UNDER)": 0,
+            "REJECT (OVER)": 0,
+            "TOTAL GOOD": 0,
+            "TOTAL BS": 0
+        }
         self.current_sku = "---"
         self.current_size = "---"
         self.current_otorisasi = 0.0
@@ -154,6 +166,7 @@ class LiveCameraScreen(QWidget):
         # Load Data
         self.load_settings()
         self.load_active_profile() # Replaces direct load_presets
+        self.load_counters()
         
         # Camera Setup
         self.cap_thread = None
@@ -397,6 +410,10 @@ class LiveCameraScreen(QWidget):
     def refresh_data(self):
         """Refresh settings and profile data from JSON files."""
         print("Refreshing LiveCameraScreen data...")
+        # Log current session before refreshing (in case it's an edit switch)
+        self.log_session_summary()
+        self.reset_counters()
+        
         old_layout_mode = getattr(self, 'layout_mode', None)
         self.load_settings()
         self.load_active_profile()
@@ -1054,9 +1071,16 @@ class LiveCameraScreen(QWidget):
             return
             
         p = self.presets[idx]
+        
+        # Log session summary for previous preset before switching
+        self.log_session_summary()
+        
         self.current_sku = p.get("sku", "---")
         self.current_size = p.get("size", "---")
         self.current_otorisasi = float(p.get("otorisasi", 0) or 0)
+        
+        # Reset counters for the new preset session
+        self.reset_counters()
         
         # Update UI
         self.val_detail_sku.setText(f"{self.current_sku}/{self.current_size}")
@@ -1152,9 +1176,13 @@ class LiveCameraScreen(QWidget):
                 self.val_detail_wid.setText(f"{width_mm:.2f} mm")
                 self.val_detail_res.setText(category)
 
+                # Increment Granular Counters
+                if selected_size > 0:
+                    detail_key = detail # e.g. "GOOD 1", "OVEN 2", etc.
+                    if detail_key in self.granular_counts:
+                        self.granular_counts[detail_key] += 1
                 
-                # BIG Style: White BG, Dark Text, Colored Background
-                # Content: SIZE on top (Big), STATUS on bottom (Smaller)
+                # Big Result Style
                 display_size = self.current_size if self.current_size != "---" else "-"
                 
                 res_font_size = UIScaling.scale_font(48)
@@ -1177,6 +1205,26 @@ class LiveCameraScreen(QWidget):
                     self.lbl_big_result.setText(f"{display_size}\nBS")
                     self.lbl_big_result.setStyleSheet(f"color: white; background-color: {bg_color}; padding: {res_padding}px; border-radius: {res_radius}px; border: none; font-size: {res_font_size}px; font-weight: 900;")
                     self._write_plc_result(is_good=False)
+                
+                # Update totals for backwards compatibility and UI
+                self.granular_counts["TOTAL GOOD"] = self.good_count
+                self.granular_counts["TOTAL BS"] = self.bs_count
+                self.save_counters()
+
+                # --- Log detection to detections.log ---
+                try:
+                    det_logger = get_detection_logger()
+                    model_name = getattr(self, 'model_combo', None)
+                    model_used = model_name.currentText() if model_name else self.detection_model
+                    profile_name = self.active_profile_data.get("name", "N/A") if self.active_profile_data else "N/A"
+                    det_logger.info(
+                        f"CAPTURE | SKU: {self.current_sku} | Size: {self.current_size} "
+                        f"| Length: {length_mm:.2f}mm | Width: {width_mm:.2f}mm "
+                        f"| Result: {category} | Detail: {detail} "
+                        f"| Model: {model_used} | Profile: {profile_name}"
+                    )
+                except Exception as log_err:
+                    print(f"[Capture] Logging error: {log_err}")
                     
                 self.update_counters()
                 
@@ -1232,6 +1280,53 @@ class LiveCameraScreen(QWidget):
     def update_counters(self):
         self.lbl_good.setText(f"{self.good_count}\nGood")
         self.lbl_bs.setText(f"{self.bs_count}\nBS")
+
+    def reset_counters(self):
+        """Reset all session counters to zero."""
+        self.good_count = 0
+        self.bs_count = 0
+        for k in self.granular_counts:
+            self.granular_counts[k] = 0
+        self.save_counters()
+        self.update_counters()
+
+    def load_counters(self):
+        """Load counters from JSON persistence."""
+        data = JsonUtility.load_from_json(COUNTS_FILE) or {}
+        if data:
+            self.good_count = data.get("TOTAL GOOD", 0)
+            self.bs_count = data.get("TOTAL BS", 0)
+            # Merge granular counts
+            for k in self.granular_counts:
+                self.granular_counts[k] = data.get(k, 0)
+        self.update_counters()
+
+    def save_counters(self):
+        """Save current counters to JSON persistence."""
+        JsonUtility.save_to_json(COUNTS_FILE, self.granular_counts)
+
+    def log_session_summary(self):
+        """Log current session results to counts.log if there was activity."""
+        if self.good_count == 0 and self.bs_count == 0:
+            return
+            
+        try:
+            count_logger = get_count_logger()
+            profile_name = self.active_profile_data.get("name", "Unknown Profile") if self.active_profile_data else "Unknown Profile"
+            
+            # Summary string
+            ok_count = self.granular_counts.get("GOOD 1", 0) + self.granular_counts.get("GOOD 2", 0)
+            oven_count = self.granular_counts.get("OVEN 1", 0) + self.granular_counts.get("OVEN 2", 0)
+            bs_count = self.granular_counts.get("REJECT (UNDER)", 0) + self.granular_counts.get("REJECT (OVER)", 0)
+            
+            summary = (
+                f"SESSION SUMMARY | Profile: {profile_name} | Preset: {self.current_sku}/{self.current_size} | "
+                f"OK: {ok_count} | OVEN: {oven_count} | BS: {bs_count} | "
+                f"Detail: {self.granular_counts}"
+            )
+            count_logger.info(summary)
+        except Exception as e:
+            print(f"[LogSummary] Error: {e}")
 
     # ------------------------------------------------------------------
     # Camera & Frame Handling
@@ -1396,6 +1491,7 @@ class LiveCameraScreen(QWidget):
         super().hideEvent(event)
         
     def closeEvent(self, event):
+        self.log_session_summary()
         self.stop_camera()
         super().closeEvent(event)
         

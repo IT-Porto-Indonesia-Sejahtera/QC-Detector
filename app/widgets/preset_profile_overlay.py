@@ -48,6 +48,7 @@ class PresetProfileOverlay(BaseOverlay):
         
         # Data
         self.profiles = []
+        self._current_editor = None
         self.load_profiles()
         
         # UI
@@ -273,18 +274,13 @@ class PresetProfileOverlay(BaseOverlay):
         idx = len(self.profiles) + 1
         new_p["name"] = f"Shift {idx}"
         
-        # Import internally (or pass Main controller)
         from app.widgets.profile_editor_overlay import ProfileEditorOverlay
-        
-        # We need to overlay ON TOP of this overlay? or on parent?
-        # If we act like pages, we might want to hide this one or stack.
-        # Simplest: Parent new overlay to the SAME parent (LiveScreen)
+        # Clean up previous editor reference if any
+        self._current_editor = None
         overlay = ProfileEditorOverlay(self.parent(), new_p)
         overlay.data_saved.connect(self.on_editor_saved)
-        # We don't need to hide this one necessarily, but user expects flow.
-        # Since overlay has transparent BG, stacking them darkens background more.
-        # Maybe hide "content_box" or just accept stack.
-        
+        self._current_editor = overlay  # Keep reference to prevent GC
+
     def edit_profile(self, profile):
         # Check password first
         from app.widgets.password_dialog import PasswordDialog
@@ -293,14 +289,23 @@ class PresetProfileOverlay(BaseOverlay):
             return  # Password incorrect or cancelled
         
         from app.widgets.profile_editor_overlay import ProfileEditorOverlay
+        # Clean up previous editor reference if any
+        self._current_editor = None
         overlay = ProfileEditorOverlay(self.parent(), profile)
         overlay.data_saved.connect(self.on_editor_saved)
+        self._current_editor = overlay  # Keep reference to prevent GC
 
     def on_editor_saved(self, profile_data):
+        # Clear editor reference
+        self._current_editor = None
+        
+        # Reload profiles from disk to ensure we have the latest data
+        self.load_profiles()
+        
         # Check if update or add
         exists = False
         for i, p in enumerate(self.profiles):
-            if p["id"] == profile_data["id"]:
+            if p.get("id") == profile_data.get("id"):
                 self.profiles[i] = profile_data
                 exists = True
                 break

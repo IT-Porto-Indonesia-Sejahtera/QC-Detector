@@ -408,6 +408,22 @@ class ProfilesPage(QWidget):
         except Exception as e:
             print(f"[ProfilesPage] Error loading profiles: {e}")
             self.profiles = []
+        
+        # Re-link current_editing to the matching profile in the new list
+        # so that save_current_profile() writes to the correct dict
+        if self.current_editing:
+            editing_id = self.current_editing.get("id")
+            self.current_editing = None
+            if editing_id:
+                for p in self.profiles:
+                    if p.get("id") == editing_id:
+                        self.current_editing = p
+                        break
+            # Re-populate editor form with fresh data from disk
+            if self.current_editing:
+                self.load_editor(self.current_editing)
+                return  # load_editor already calls render_list
+        
         self.render_list()
 
     def render_list(self):

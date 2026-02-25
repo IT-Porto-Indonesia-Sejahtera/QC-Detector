@@ -43,6 +43,7 @@ _add_lark_handler(logging.getLogger())
 # Logger names
 CRASH_LOGGER_NAME = 'qc_crash_logger'
 DETECTION_LOGGER_NAME = 'qc_detection_logger'
+COUNT_LOGGER_NAME = 'qc_count_logger'
 
 def _add_lark_handler(logger):
     """Utility to add Lark notification handler to a logger"""
@@ -157,6 +158,33 @@ def setup_fetch_logger():
         
     return logger
 
+def setup_count_logger():
+    """
+    Setup logger for measurement session summaries.
+    Policy: Max 100MB per file, keep 10 backup files.
+    """
+    logger = logging.getLogger(COUNT_LOGGER_NAME)
+    logger.setLevel(logging.INFO)
+    
+    if not logger.handlers:
+        log_file = os.path.join(LOG_DIR, 'counts.log')
+        
+        handler = RotatingFileHandler(
+            log_file,
+            maxBytes=100*1024*1024,
+            backupCount=10,
+            encoding='utf-8'
+        )
+        
+        formatter = logging.Formatter('%(asctime)s | %(message)s')
+        handler.setFormatter(formatter)
+        logger.addHandler(handler)
+        
+        # Add Lark integration
+        # _add_lark_handler(logger)
+        
+    return logger
+
 def get_crash_logger():
     """Get the crash logger instance"""
     return setup_crash_logger()
@@ -168,3 +196,7 @@ def get_detection_logger():
 def get_fetch_logger():
     """Get the fetch logger instance"""
     return setup_fetch_logger()
+
+def get_count_logger():
+    """Get the count logger instance"""
+    return setup_count_logger()
