@@ -1085,11 +1085,13 @@ class LiveCameraScreen(QWidget):
             btn_font_size = UIScaling.scale_font(32)
             
             if idx == self.current_preset_idx:
-                # SELECTED: Add thick white border
-                btn.setStyleSheet(f"background-color: {bg_color}; border: 5px solid white; border-radius: {btn_radius}px; color: #000000; font-weight: bold; font-size: {btn_font_size}px; padding: 0px;")
+                # SELECTED: High-contrast 8px Bright Yellow border
+                # Using padding 0 to accommodate the thick border within the same geometry
+                btn.setStyleSheet(f"background-color: {bg_color}; border: 8px solid #FFD600; border-radius: {btn_radius}px; color: #000000; font-weight: 900; font-size: {btn_font_size}px; padding: 0px;")
             else:
-                # DEFAULT: No border
-                btn.setStyleSheet(f"background-color: {bg_color}; border: none; border-radius: {btn_radius}px; color: #000000; font-weight: bold; font-size: {btn_font_size}px; padding: 5px;")
+                # UNSELECTED: Dimmed text and no border
+                # Using padding 8px to match the selected button's border width
+                btn.setStyleSheet(f"background-color: {bg_color}; border: none; border-radius: {btn_radius}px; color: rgba(0, 0, 0, 0.5); font-weight: bold; font-size: {btn_font_size}px; padding: 8px;")
 
     def on_preset_clicked(self, idx):
         # Prevent double-click (300ms cooldown)
