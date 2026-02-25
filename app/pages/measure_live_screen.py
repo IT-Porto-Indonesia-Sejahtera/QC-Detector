@@ -162,6 +162,8 @@ class LiveCameraScreen(QWidget):
         self.left_presets_layout = None
         self.right_presets_layout = None
         self.classic_presets_layout = None
+        self.preset_buttons = {} # Store button references
+        self.current_preset_idx = -1 # Track selected preset index
         
         # Load Data
         self.load_settings()
@@ -877,6 +879,8 @@ class LiveCameraScreen(QWidget):
     
     def _do_render_presets(self):
         self._render_debounce = False
+        self.preset_buttons = {} # Clear button references
+        
         if self.layout_mode == "minimal":
             return # Minimal mode has no presets to render
             
@@ -1049,6 +1053,9 @@ class LiveCameraScreen(QWidget):
                 
                 btn.clicked.connect(lambda _, idx=global_idx: self.on_preset_clicked(idx))
                 
+                if global_idx >= 0:
+                    self.preset_buttons[global_idx] = btn
+                
                 grid.addWidget(btn, r, c)
             
             # Add grid to group layout, stretching to fill remaining space in group
@@ -1059,6 +1066,30 @@ class LiveCameraScreen(QWidget):
             
         # Add stretch at end to push everything up
         parent_layout.addStretch()
+        
+        # Initial style update
+        self._update_preset_selection_style()
+
+    def _update_preset_selection_style(self):
+        """Updates the visual style of preset buttons to highlight the selection."""
+        for idx, btn in self.preset_buttons.items():
+            if not btn: continue
+            
+            # Find the original preset data to get the color
+            if idx < 0 or idx >= len(self.presets): continue
+            p = self.presets[idx]
+            color_idx = p.get("color_idx", 0)
+            bg_color = SKU_COLORS.get(color_idx, "#E0E0E0")
+            
+            btn_radius = UIScaling.scale(12)
+            btn_font_size = UIScaling.scale_font(32)
+            
+            if idx == self.current_preset_idx:
+                # SELECTED: Add thick white border
+                btn.setStyleSheet(f"background-color: {bg_color}; border: 5px solid white; border-radius: {btn_radius}px; color: #000000; font-weight: bold; font-size: {btn_font_size}px; padding: 0px;")
+            else:
+                # DEFAULT: No border
+                btn.setStyleSheet(f"background-color: {bg_color}; border: none; border-radius: {btn_radius}px; color: #000000; font-weight: bold; font-size: {btn_font_size}px; padding: 5px;")
 
     def on_preset_clicked(self, idx):
         # Prevent double-click (300ms cooldown)
@@ -1083,9 +1114,14 @@ class LiveCameraScreen(QWidget):
         self.reset_counters()
         
         # Update UI
+        self.current_preset_idx = idx
         self.val_detail_sku.setText(f"{self.current_sku}/{self.current_size}")
         if hasattr(self, 'val_detail_oto'):
             self.val_detail_oto.setText(f"{self.current_otorisasi:+.1f}")
+            
+        # Update button styles
+        self._update_preset_selection_style()
+        
         print(f"Selected Preset {idx}: {self.current_sku} / {self.current_size} (+{self.current_otorisasi})")
     
     def _reset_preset_guard(self):
