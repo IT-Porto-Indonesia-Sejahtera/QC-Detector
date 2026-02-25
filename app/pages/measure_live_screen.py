@@ -166,7 +166,6 @@ class LiveCameraScreen(QWidget):
         # Load Data
         self.load_settings()
         self.load_active_profile() # Replaces direct load_presets
-        self.load_counters()
         
         # Camera Setup
         self.cap_thread = None
@@ -189,6 +188,7 @@ class LiveCameraScreen(QWidget):
 
         # UI Setup
         self.init_ui()
+        self.load_counters()
         
         # Spacebar shortcut for force capture (testing)
         from PySide6.QtGui import QShortcut, QKeySequence
@@ -1278,6 +1278,8 @@ class LiveCameraScreen(QWidget):
         pass
 
     def update_counters(self):
+        if not hasattr(self, 'lbl_good') or not hasattr(self, 'lbl_bs'):
+            return
         self.lbl_good.setText(f"{self.good_count}\nGood")
         self.lbl_bs.setText(f"{self.bs_count}\nBS")
 
