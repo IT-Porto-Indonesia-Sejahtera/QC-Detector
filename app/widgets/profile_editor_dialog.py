@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, QDate
 from PySide6.QtGui import QIcon
 from app.utils.ui_scaling import UIScaling
+from app.utils.image_loader import NetworkImageLoader
 
 class ProfileEditorDialog(QDialog):
     def __init__(self, parent=None, profile_data=None):
@@ -35,6 +36,11 @@ class ProfileEditorDialog(QDialog):
         
         self.profile_data = profile_data or {}
         self.sku_rows = [] # To store widgets for each SKU row
+        
+        # Image loader for SKU images
+        self.image_loader = NetworkImageLoader(self)
+        self.image_loader.image_loaded.connect(self.on_image_loaded)
+        self.card_labels = {} # Map gdrive_id -> list of QLabels
         
         self.init_ui()
         self.load_data()
@@ -123,69 +129,63 @@ class ProfileEditorDialog(QDialog):
 
     def create_sku_row(self, index):
         container = QFrame()
-        container.setFixedHeight(UIScaling.scale(120))
-        container.setStyleSheet("background-color: transparent;")
+        container.setFixedHeight(UIScaling.scale(80))
+        container.setStyleSheet("""
+            QFrame {
+                background-color: #F8F8F8;
+                border-radius: 10px;
+                border: 1px solid #EEE;
+            }
+            QFrame:hover {
+                background-color: #F0F0F0;
+                border: 1px solid #2196F3;
+            }
+        """)
         
         layout = QHBoxLayout(container)
-        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setContentsMargins(10, 5, 10, 5)
         layout.setSpacing(15)
         
-        # Image Placeholder
-        # Mocking the blank square
-        img_placeholder = QLabel()
-        img_size = UIScaling.scale(80)
-        img_placeholder.setFixedSize(img_size, img_size)
-        img_placeholder.setStyleSheet(f"background-color: #E0E0E0; border-radius: {UIScaling.scale(8)}px;")
-        layout.addWidget(img_placeholder)
+        # 1. Image Placeholder
+        img_label = QLabel()
+        img_size = UIScaling.scale(60)
+        img_label.setFixedSize(img_size, img_size)
+        img_label.setAlignment(Qt.AlignCenter)
+        img_label.setStyleSheet(f"background-color: #E0E0E0; border-radius: {UIScaling.scale(8)}px; color: #999;")
+        img_label.setText("?")
+        layout.addWidget(img_label)
         
-        # Info Column
-        info_col = QVBoxLayout()
-        info_col.setSpacing(8)
+        # 2. SKU Name/Code Label
+        txt_sku_val = QLabel("Select SKU...")
+        sku_font_size = UIScaling.scale_font(15)
+        txt_sku_val.setStyleSheet("font-weight: bold; color: black;")
+        txt_sku_val.setWordWrap(True)
+        layout.addWidget(txt_sku_val, stretch=1)
         
-        # SKU Row
-        sku_row = QHBoxLayout()
-        lbl_sku = QLabel("SKU")
-        sku_lbl_w = UIScaling.scale(40)
-        lbl_sku.setFixedWidth(sku_lbl_w)
-        lbl_sku.setStyleSheet(f"font-size: {UIScaling.scale_font(13)}px;")
-        
-        # SKU Value Display (Disabled input or Label)
-        txt_sku_val = QLineEdit()
-        txt_sku_val.setReadOnly(True)
-        txt_sku_val.setPlaceholderText("Select SKU first...")
-        txt_sku_val.setStyleSheet(f"background-color: #E0E0E0; border: none; padding: {UIScaling.scale(5)}px; color: black; font-size: {UIScaling.scale_font(13)}px;")
-        
-        btn_select = QPushButton("select")
-        btn_sel_w = UIScaling.scale(60)
-        btn_sel_h = UIScaling.scale(30)
-        btn_select.setFixedSize(btn_sel_w, btn_sel_h)
-        btn_select.setStyleSheet(f"background-color: #CCC; border-radius: {UIScaling.scale(5)}px; font-weight: bold; color: black; font-size: {UIScaling.scale_font(13)}px;")
-        btn_select.clicked.connect(lambda _, idx=index: self.select_sku(idx))
-        
-        sku_row.addWidget(lbl_sku)
-        sku_row.addWidget(txt_sku_val)
-        sku_row.addWidget(btn_select)
-        
-        # Team Row
-        team_row = QHBoxLayout()
-        lbl_team = QLabel("Team")
-        lbl_team.setFixedWidth(sku_lbl_w)
-        lbl_team.setStyleSheet(f"font-size: {UIScaling.scale_font(13)}px;")
-        
+        # 3. Position Dropdown
         cmb_team = QComboBox()
-        cmb_team.addItems(["", "Team A", "Team B", "Team C", "Team D"])
+        cmb_team.addItems(["", "Left (Kiri)", "Right (Kanan)"])
+        cmb_team.setFixedWidth(UIScaling.scale(150))
+        cmb_team.setStyleSheet("""
+            QComboBox {
+                background-color: white;
+                border: 1px solid #CCC;
+                padding: 5px;
+            }
+        """)
+        layout.addWidget(cmb_team)
         
-        team_row.addWidget(lbl_team)
-        team_row.addWidget(cmb_team)
+        # Click handling for the whole row (except combo box area)
+        def on_row_click(event, idx=index):
+            # Only trigger if clicking outside the combo box
+            if not cmb_team.underMouse():
+                self.select_sku(idx)
         
-        info_col.addLayout(sku_row)
-        info_col.addLayout(team_row)
+        container.mousePressEvent = on_row_click
+        container.setCursor(Qt.PointingHandCursor)
         
-        layout.addLayout(info_col)
-        
-        # Convert QDate to string or whatever needed? No, store references
         self.sku_rows.append({
-            "img": img_placeholder,
+            "img": img_label,
             "sku_val": txt_sku_val,
             "team_cmb": cmb_team,
             "data": None # To store selected SKU object
@@ -226,7 +226,22 @@ class ProfileEditorDialog(QDialog):
             if i < 4:
                 self.sku_rows[i]["data"] = data
                 self.sku_rows[i]["sku_val"].setText(data.get("code", str(data.get("coeff", ""))))
-                self.sku_rows[i]["team_cmb"].setCurrentText(data.get("team", ""))
+                
+                # Map legacy team names to new position names
+                team_val = data.get("team", "")
+                if team_val in ["Team A", "A"]:
+                    team_val = "Left (Kiri)"
+                elif team_val in ["Team B", "B"]:
+                    team_val = "Right (Kanan)"
+                self.sku_rows[i]["team_cmb"].setCurrentText(team_val)
+                
+                # Load image
+                gdrive_id = data.get("gdrive_id")
+                if gdrive_id:
+                    if gdrive_id not in self.card_labels:
+                        self.card_labels[gdrive_id] = []
+                    self.card_labels[gdrive_id].append(self.sku_rows[i]["img"])
+                    self.image_loader.load_image(gdrive_id)
 
     def select_sku(self, index):
         from app.widgets.sku_selector_dialog import SkuSelectorDialog # Lazy import to avoid circular if any
@@ -253,11 +268,26 @@ class ProfileEditorDialog(QDialog):
         row = self.sku_rows[index]
         
         row["data"] = sku_data
-        # Mockup requested showing COEFF (e.g. 0.2123459) in the text box
-        row["sku_val"].setText(str(sku_data.get("coeff", "")))
+        row["sku_val"].setText(str(sku_data.get("code", "")))
         
-        # Update Image (Simulated color change)
-        row["img"].setStyleSheet("background-color: #2196F3; border-radius: 8px;") # Blue to indicate selection
+        # Load image
+        gdrive_id = sku_data.get("gdrive_id")
+        if gdrive_id:
+            row["img"].setText("...")
+            if gdrive_id not in self.card_labels:
+                self.card_labels[gdrive_id] = []
+            self.card_labels[gdrive_id].append(row["img"])
+            self.image_loader.load_image(gdrive_id)
+
+    def on_image_loaded(self, gdrive_id, pixmap):
+        if gdrive_id in self.card_labels:
+            for lbl in self.card_labels[gdrive_id]:
+                try:
+                    scaled = pixmap.scaled(lbl.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                    lbl.setPixmap(scaled)
+                    lbl.setText("")
+                except RuntimeError:
+                    pass
 
     def on_save(self):
         # Validation
@@ -272,6 +302,12 @@ class ProfileEditorDialog(QDialog):
             team = row["team_cmb"].currentText()
             
             if data:
+                # Validation: Check if position is selected
+                if not team:
+                    sku_code = data.get("code", "this SKU")
+                    QMessageBox.warning(self, "Validation Error", f"Please select Position (Left/Right) for {sku_code}")
+                    return
+                
                 has_sku = True
                 # Start building payload
                 item = data.copy()
@@ -319,3 +355,9 @@ class ProfileEditorDialog(QDialog):
             merged.update(self.result_data)
             return merged
         return self.result_data
+        
+    def closeEvent(self, event):
+        """Cancel image downloads when dialog is closed."""
+        if hasattr(self, 'image_loader'):
+            self.image_loader.cancel_all()
+        super().closeEvent(event)

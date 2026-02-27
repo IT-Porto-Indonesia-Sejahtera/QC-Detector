@@ -3,15 +3,17 @@ import uuid
 from datetime import datetime
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QLineEdit,
-    QComboBox, QFrame, QSizePolicy, QScrollArea, QMessageBox, QDateEdit
+    QComboBox, QFrame, QSizePolicy, QScrollArea, QMessageBox, QDateEdit,
+    QMenu
 )
-from PySide6.QtCore import Qt, QDate, QTimer
+from PySide6.QtCore import Qt, QDate, QTimer, QPoint
 from PySide6.QtGui import QImage, QPixmap
 
 from app.utils.theme_manager import ThemeManager
 from project_utilities.json_utility import JsonUtility
 from app.utils.ui_scaling import UIScaling
 from app.widgets.sku_selector_overlay import SkuSelectorOverlay
+from app.utils.image_loader import NetworkImageLoader
 from backend.get_product_sku import ProductSKUWorker
 from backend.sku_cache import set_sku_data, add_log
 
@@ -26,6 +28,11 @@ class ProfilesPage(QWidget):
         self.profiles = []
         self.sku_rows = []
         self.current_editing = None
+        
+        # Image loader for SKU images
+        self.image_loader = NetworkImageLoader(self)
+        self.image_loader.image_loaded.connect(self.on_image_loaded)
+        self.card_labels = {} # Map gdrive_id -> list of QLabels
         
         self.init_ui()
         self.load_profiles()
@@ -59,19 +66,24 @@ class ProfilesPage(QWidget):
         # Sync Button
         self.btn_sync = QPushButton("🔄 Sync SKU")
         self.btn_sync.setCursor(Qt.PointingHandCursor)
-        self.btn_sync.setStyleSheet("""
-            QPushButton {
+        self.btn_sync.setStyleSheet(f"""
+            QPushButton {{
                 background-color: white;
-                border: 1px solid #007AFF;
-                border-radius: 8px;
-                padding: 8px 16px;
-                font-size: 14px;
-                font-weight: 600;
+                border: 1.5px solid #007AFF;
+                border-radius: {UIScaling.scale(10)}px;
+                padding: {UIScaling.scale(8)}px {UIScaling.scale(20)}px;
+                font-size: {UIScaling.scale_font(14)}px;
+                font-weight: 700;
                 color: #007AFF;
-            }
-            QPushButton:hover {
-                background-color: #F0F8FF;
-            }
+            }}
+            QPushButton:hover {{
+                background-color: #F2F7FF;
+                border-color: #0063CC;
+                color: #0063CC;
+            }}
+            QPushButton:pressed {{
+                background-color: #E5EFFF;
+            }}
         """)
         self.btn_sync.clicked.connect(self.fetch_sku_data)
         header_layout.addWidget(self.btn_sync)
@@ -207,8 +219,38 @@ class ProfilesPage(QWidget):
         line.setStyleSheet("color: #E0E0E0; border: none; background-color: #E0E0E0; max-height: 1px;")
         layout.addWidget(line)
         
-        # SKU Configuration
-        layout.addWidget(QLabel("SKU Configuration", styleSheet="font-size: 16px; font-weight: 700; color: #1C1C1E; border:none; margin-bottom: 5px;"))
+        # SKU Configuration Header with Copy Button
+        sku_header = QHBoxLayout()
+        sku_header.setContentsMargins(0, 5, 0, 5)
+        lbl_sku_conf = QLabel("SKU Configuration")
+        lbl_sku_conf.setStyleSheet(f"font-size: {UIScaling.scale_font(18)}px; font-weight: 800; color: #1C1C1E; border:none;")
+        sku_header.addWidget(lbl_sku_conf)
+        sku_header.addStretch()
+        
+        self.btn_copy = QPushButton("📋 Copy From...")
+        self.btn_copy.setCursor(Qt.PointingHandCursor)
+        self.btn_copy.setFixedHeight(UIScaling.scale(36))
+        self.btn_copy.setStyleSheet(f"""
+            QPushButton {{
+                background-color: #F0F0F5;
+                color: #007AFF;
+                border: 1px solid #D1D1D6;
+                border-radius: {UIScaling.scale(8)}px;
+                padding: 0 {UIScaling.scale(12)}px;
+                font-size: {UIScaling.scale_font(13)}px;
+                font-weight: 700;
+            }}
+            QPushButton:hover {{
+                background-color: #E5E5EA;
+                border-color: #007AFF;
+            }}
+            QPushButton:pressed {{
+                background-color: #D1D1D6;
+            }}
+        """)
+        self.btn_copy.clicked.connect(self.show_copy_menu)
+        sku_header.addWidget(self.btn_copy)
+        layout.addLayout(sku_header)
         
         self.sku_rows_container = QVBoxLayout()
         self.sku_rows_container.setSpacing(15)
@@ -308,98 +350,119 @@ class ProfilesPage(QWidget):
 
     def create_sku_row(self, index):
         container = QFrame()
-        container.setStyleSheet("""
-            QFrame {
+        container.setCursor(Qt.PointingHandCursor)
+        container.setStyleSheet(f"""
+            QFrame {{
+                background-color: white;
+                border: 1.5px solid #F0F0F0;
+                border-radius: {UIScaling.scale(12)}px;
+            }}
+            QFrame:hover {{
                 background-color: #FAFAFA;
-                border: 1px solid #EEEEEE;
-                border-radius: 10px;
-            }
+                border-color: #007AFF;
+            }}
         """)
-        container.setFixedHeight(90)
+        container.setFixedHeight(UIScaling.scale(100))
+        
+        # Add subtle shadow effect if needed, but border is cleaner for now
         
         layout = QHBoxLayout(container)
-        layout.setContentsMargins(15, 10, 15, 10)
+        layout.setContentsMargins(20, 10, 20, 10)
         layout.setSpacing(20)
         
-        # Color Indicator
-        colors = ["#2196F3", "#E91E63", "#9C27B0", "#FF9800"]
+        # Color Indicator & Image
+        colors = ["#007AFF", "#FF2D55", "#AF52DE", "#FF9500"]
         indicator = QLabel()
-        indicator.setFixedSize(6, 60)
-        indicator.setStyleSheet(f"background-color: {colors[index % len(colors)]}; border-radius: 3px; border:none;")
+        indicator.setFixedSize(UIScaling.scale(5), UIScaling.scale(70))
+        indicator.setStyleSheet(f"background-color: {colors[index % len(colors)]}; border-radius: 2px; border:none;")
         layout.addWidget(indicator)
         
-        # SKU Display (ReadOnly)
+        # SKU Image
+        img_label = QLabel()
+        img_size = UIScaling.scale(70)
+        img_label.setFixedSize(img_size, img_size)
+        img_label.setAlignment(Qt.AlignCenter)
+        img_label.setStyleSheet(f"background-color: #F2F2F7; border-radius: {UIScaling.scale(10)}px; color: #8E8E93; border: 1px solid #E5E5EA;")
+        img_label.setText("?")
+        layout.addWidget(img_label)
+        
+        # SKU Display (Text)
         v_sku = QVBoxLayout()
-        v_sku.setSpacing(4)
-        v_sku.addWidget(QLabel(f"Group {index + 1}", styleSheet="font-size: 11px; font-weight: 700; color: #8E8E93; border:none;"))
-        txt_sku = QLineEdit()
-        txt_sku.setReadOnly(True)
-        txt_sku.setPlaceholderText("No SKU Selected")
-        txt_sku.setStyleSheet("background: transparent; border: none; font-size: 16px; font-weight: 600; color: #1C1C1E;")
+        v_sku.setSpacing(UIScaling.scale(4))
+        lbl_grp = QLabel(f"GROUP {index + 1}")
+        lbl_grp.setStyleSheet(f"font-size: {UIScaling.scale_font(11)}px; font-weight: 800; color: #8E8E93; border:none; letter-spacing: 0.5px;")
+        v_sku.addWidget(lbl_grp)
+        
+        txt_sku = QLabel("Empty / Tap to Select")
+        txt_sku.setStyleSheet(f"background: transparent; border: none; font-size: {UIScaling.scale_font(18)}px; font-weight: 700; color: #1C1C1E;")
         v_sku.addWidget(txt_sku)
         layout.addLayout(v_sku, 1)
         
-        # Position Selector (Previously Team)
-        v_team = QVBoxLayout()
-        v_team.setSpacing(4)
-        v_team.addWidget(QLabel("Position", styleSheet="font-size: 11px; font-weight: 700; color: #8E8E93; border:none;"))
-        cmb_team = QComboBox()
-        # Dropdown UI is now handled globally, just set content
-        # We use explicit values for Left/Right, but also keep standard "A"/"B" internally if possible?
-        # Actually, let's just use the text.
-        cmb_team.addItem("", "")                # Empty
-        cmb_team.addItem("Left (Kiri)", "A")    # Map Left -> A for internal compat? Or just use "Left"? 
-                                                # Let's use "Left" to be clear, but maybe keep "A" as item data if we want strict mapping?
-                                                # The user wants "Left/Right".
-        cmb_team.setItemData(1, "Left") # Overwrite functionality to just use "Left"/"Right" strings or map them.
+        # Position Selector
+        v_p = QVBoxLayout()
+        v_p.setSpacing(UIScaling.scale(4))
+        lbl_p = QLabel("POSITION")
+        lbl_p.setStyleSheet(f"font-size: {UIScaling.scale_font(11)}px; font-weight: 800; color: #8E8E93; border:none; letter-spacing: 0.5px;")
+        v_p.addWidget(lbl_p)
         
-        # Simpler: just use the text that will be saved.
-        cmb_team.clear()
+        cmb_team = QComboBox()
         cmb_team.addItem("", "")
         cmb_team.addItem("Left (Kiri)", "Left")
         cmb_team.addItem("Right (Kanan)", "Right")
-        
-        cmb_team.setFixedWidth(140)
-        v_team.addWidget(cmb_team)
-        layout.addLayout(v_team)
-        
-        # Select Button
-        btn_sel = QPushButton("Select SKU")
-        btn_sel.setCursor(Qt.PointingHandCursor)
-        btn_sel.setStyleSheet("""
-            QPushButton {
+        cmb_team.setFixedWidth(UIScaling.scale(160))
+        cmb_team.setFixedHeight(UIScaling.scale(38))
+        cmb_team.setStyleSheet(f"""
+            QComboBox {{
                 background-color: white;
                 border: 1px solid #D1D1D6;
+                border-radius: {UIScaling.scale(8)}px;
+                padding: 0 {UIScaling.scale(10)}px;
+                font-size: {UIScaling.scale_font(14)}px;
                 color: #1C1C1E;
-                font-weight: 600;
-                border-radius: 6px;
-                padding: 6px 12px;
-                font-size: 13px;
-            }
-            QPushButton:hover {
-                background-color: #F2F2F7;
-                border-color: #8E8E93;
-            }
+            }}
+            QComboBox::drop-down {{
+                border: none;
+            }}
+            QComboBox:hover {{
+                border-color: #007AFF;
+            }}
         """)
-        btn_sel.clicked.connect(lambda _, idx=index: self.select_sku(idx))
-        layout.addWidget(btn_sel)
+        v_p.addWidget(cmb_team)
+        layout.addLayout(v_p)
         
-        self.sku_rows.append({"sku_val": txt_sku, "team_cmb": cmb_team, "data": None})
+        # Click handling for the whole row (except combo box area)
+        def on_row_click(event, idx=index):
+            if not cmb_team.underMouse():
+                self.select_sku(idx)
+        
+        container.mousePressEvent = on_row_click
+        
+        self.sku_rows.append({
+            "sku_val": txt_sku,
+            "img": img_label, 
+            "team_cmb": cmb_team, 
+            "data": None
+        })
         return container
 
     def style_input(self, widget):
-        widget.setStyleSheet("""
-            QLineEdit, QDateEdit {
-                border: 1px solid #D1D1D6;
-                border-radius: 8px;
-                padding: 8px 10px;
+        widget.setStyleSheet(f"""
+            QLineEdit, QDateEdit {{
+                border: 1.5px solid #E5E5EA;
+                border-radius: {UIScaling.scale(10)}px;
+                padding: {UIScaling.scale(10)}px {UIScaling.scale(15)}px;
                 background: white;
                 color: #1C1C1E;
-                font-size: 14px;
-            }
-            QLineEdit:focus, QDateEdit:focus {
-                border: 1px solid #007AFF;
-            }
+                font-size: {UIScaling.scale_font(15)}px;
+                font-weight: 500;
+            }}
+            QLineEdit:focus, QDateEdit:focus {{
+                border-color: #007AFF;
+                background-color: #FFFFFF;
+            }}
+            QLineEdit:hover, QDateEdit:hover {{
+                border-color: #C7C7CC;
+            }}
         """)
 
     def load_profiles(self):
@@ -512,18 +575,87 @@ class ProfilesPage(QWidget):
         except: 
             self.date_edit.setDate(QDate.currentDate())
             
-        # Reset Rows
+        # Reset Rows & Labels
+        self.card_labels = {}
         selected = profile.get("selected_skus", [])
         for i, row in enumerate(self.sku_rows):
             row["data"] = None
-            row["sku_val"].setText("")
+            row["sku_val"].setText("No SKU Selected") # Reset to placeholder text
+            row["img"].setPixmap(QPixmap()) # Clear pixmap
+            row["img"].setText("?")
+            row["team_cmb"].blockSignals(True)
             row["team_cmb"].setCurrentIndex(0)
+            row["team_cmb"].blockSignals(False)
             
             if i < len(selected):
                 data = selected[i]
                 row["data"] = data
                 row["sku_val"].setText(str(data.get("code", "")))
                 row["team_cmb"].setCurrentText(data.get("team", ""))
+                
+                # Load image
+                gdrive_id = data.get("gdrive_id")
+                if gdrive_id:
+                    if gdrive_id not in self.card_labels:
+                        self.card_labels[gdrive_id] = []
+                    self.card_labels[gdrive_id].append(row["img"])
+                    self.image_loader.load_image(gdrive_id)
+
+    def show_copy_menu(self):
+        if not self.current_editing:
+            return
+            
+        menu = QMenu(self)
+        menu.setStyleSheet("""
+            QMenu {
+                background-color: white;
+                border: 1px solid #D1D1D6;
+                border-radius: 8px;
+                padding: 5px;
+            }
+            QMenu::item {
+                padding: 8px 25px;
+                border-radius: 4px;
+                color: #333;
+            }
+            QMenu::item:selected {
+                background-color: #007AFF;
+                color: white;
+            }
+        """)
+        
+        others = [p for p in self.profiles if p.get("id") != self.current_editing.get("id")]
+        
+        if not others:
+            act = menu.addAction("No other profiles found")
+            act.setEnabled(False)
+        else:
+            for p in others:
+                name = p.get("name", "Untitled")
+                action = menu.addAction(name)
+                action.triggered.connect(lambda _, src=p: self.copy_from_profile(src))
+        
+        menu.exec(self.btn_copy.mapToGlobal(QPoint(0, self.btn_copy.height())))
+
+    def copy_from_profile(self, source_profile):
+        if not self.current_editing:
+            return
+            
+        # Confirm
+        reply = QMessageBox.question(
+            self, "Copy Configuration", 
+            f"Copy SKU configuration from '{source_profile.get('name')}' to '{self.current_editing.get('name')}'?\n\nCurrent SKU choices will be replaced.",
+            QMessageBox.Yes | QMessageBox.No
+        )
+        
+        if reply == QMessageBox.Yes:
+            # Copy relevant data
+            self.current_editing["selected_skus"] = [s.copy() for s in source_profile.get("selected_skus", [])]
+            self.current_editing["presets"] = [p.copy() for p in source_profile.get("presets", [])]
+            
+            # Reload editor to show changes
+            self.load_editor(self.current_editing)
+            self._show_toast("✓ Configuration copied!")
 
     def select_sku(self, index):
         self.pending_sku_index = index
@@ -540,6 +672,25 @@ class ProfilesPage(QWidget):
         row = self.sku_rows[idx]
         row["data"] = sku_data
         row["sku_val"].setText(str(sku_data.get("code", "")))
+        
+        # Load image
+        gdrive_id = sku_data.get("gdrive_id")
+        if gdrive_id:
+            row["img"].setText("...")
+            if gdrive_id not in self.card_labels:
+                self.card_labels[gdrive_id] = []
+            self.card_labels[gdrive_id].append(row["img"])
+            self.image_loader.load_image(gdrive_id)
+
+    def on_image_loaded(self, gdrive_id, pixmap):
+        if gdrive_id in self.card_labels:
+            for lbl in self.card_labels[gdrive_id]:
+                try:
+                    scaled = pixmap.scaled(lbl.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                    lbl.setPixmap(scaled)
+                    lbl.setText("")
+                except RuntimeError:
+                    pass
 
     def _parse_sizes(self, size_str, code=""):
         if not size_str:
@@ -601,9 +752,18 @@ class ProfilesPage(QWidget):
         team_label, sku_label = "", ""
         
         for idx, row in enumerate(self.sku_rows):
-            if row["data"]:
-                data = row["data"].copy()
-                data["team"] = row["team_cmb"].currentText()
+            data = row["data"]
+            team = row["team_cmb"].currentText()
+            
+            if data:
+                # Validation: Check if position is selected
+                if not team:
+                    sku_code = data.get("code", "this SKU")
+                    self._show_toast(f"Error: Please select Position (Left/Right) for {sku_code}", is_error=True)
+                    return
+                
+                data = data.copy()
+                data["team"] = team
                 code = data.get("code", "UNKNOWN")
                 
                 try:

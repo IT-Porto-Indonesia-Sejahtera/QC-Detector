@@ -8,6 +8,7 @@ from PySide6.QtCore import Qt, QDate, Signal
 from app.widgets.base_overlay import BaseOverlay
 from app.utils.theme_manager import ThemeManager
 from app.utils.ui_scaling import UIScaling
+from app.utils.image_loader import NetworkImageLoader
 
 class ProfileEditorOverlay(BaseOverlay):
     data_saved = Signal(dict) # Emits the updated profile data
@@ -38,6 +39,11 @@ class ProfileEditorOverlay(BaseOverlay):
         
         self.profile_data = profile_data or {}
         self.sku_rows = [] 
+        
+        # Image loader for SKU images
+        self.image_loader = NetworkImageLoader(self)
+        self.image_loader.image_loaded.connect(self.on_image_loaded)
+        self.card_labels = {} # Map gdrive_id -> list of QLabels
         
         self.init_ui()
         self.load_data()
@@ -328,51 +334,41 @@ class ProfileEditorOverlay(BaseOverlay):
 
     def create_sku_row(self, index):
         container = QFrame()
-        container.setFixedHeight(UIScaling.scale(140))
-        container.setStyleSheet("background-color: transparent;")
+        container.setFixedHeight(UIScaling.scale(80))
+        container.setStyleSheet(f"""
+            QFrame {{
+                background-color: {self.theme['bg_card']};
+                border-radius: {UIScaling.scale(10)}px;
+            }}
+            QFrame:hover {{
+                background-color: {self.theme['border']};
+            }}
+        """)
         
         layout = QHBoxLayout(container)
-        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setContentsMargins(10, 5, 10, 5)
         layout.setSpacing(15)
         
-        img_size = UIScaling.scale(100)
-        img_placeholder = QLabel()
-        img_placeholder.setFixedSize(img_size, img_size)
-        img_placeholder.setStyleSheet(f"background-color: {self.theme['bg_card']}; border-radius: {UIScaling.scale(8)}px;")
-        layout.addWidget(img_placeholder)
+        # 1. Image Placeholder
+        img_size = UIScaling.scale(60)
+        img_label = QLabel()
+        img_label.setFixedSize(img_size, img_size)
+        img_label.setAlignment(Qt.AlignCenter)
+        img_label.setStyleSheet(f"background-color: {self.theme['bg_panel']}; border-radius: {UIScaling.scale(8)}px; color: #999;")
+        img_label.setText("?")
+        layout.addWidget(img_label)
         
-        info_col = QVBoxLayout()
-        info_col.setSpacing(8)
+        # 2. SKU Name/Code Label
+        txt_sku_val = QLabel("Select SKU...")
+        sku_font_size = UIScaling.scale_font(15)
+        txt_sku_val.setStyleSheet(f"font-weight: bold; font-size: {sku_font_size}px; color: {self.theme['text_main']};")
+        txt_sku_val.setWordWrap(True)
+        layout.addWidget(txt_sku_val, stretch=1)
         
-        sku_row = QHBoxLayout()
-        lbl_sku = QLabel("SKU")
-        sku_lbl_w = UIScaling.scale(40)
-        lbl_sku.setFixedWidth(sku_lbl_w)
-        lbl_sku.setStyleSheet(f"color: {self.theme['text_main']}; font-size: {UIScaling.scale_font(13)}px;")
-        
-        txt_sku_val = QLineEdit()
-        txt_sku_val.setReadOnly(True)
-        txt_sku_val.setPlaceholderText("Select SKU first...")
-        txt_sku_val.setStyleSheet(f"background-color: {self.theme['bg_card']}; border: none; padding: {UIScaling.scale(5)}px; color: {self.theme['text_main']};")
-        
-        btn_select = QPushButton("select")
-        btn_sel_w = UIScaling.scale(100)
-        btn_sel_h = UIScaling.scale(50)
-        btn_select.setFixedSize(btn_sel_w, btn_sel_h)
-        btn_select.setStyleSheet(f"background-color: {self.theme['btn_bg']}; border-radius: {UIScaling.scale(5)}px; font-weight: bold; color: {self.theme['btn_text']}; font-size: {UIScaling.scale_font(16)}px;")
-        btn_select.clicked.connect(lambda _, idx=index: self.select_sku(idx))
-        
-        sku_row.addWidget(lbl_sku)
-        sku_row.addWidget(txt_sku_val)
-        sku_row.addWidget(btn_select)
-        
-        team_row = QHBoxLayout()
-        lbl_team = QLabel("Pos.")
-        lbl_team.setFixedWidth(sku_lbl_w)
-        lbl_team.setStyleSheet(f"color: {self.theme['text_main']}; font-size: {UIScaling.scale_font(13)}px;")
-        
+        # 3. Position ComboBox
         cmb_team = QComboBox()
         cmb_team.addItems(["", "Left (Kiri)", "Right (Kanan)"])
+        cmb_team.setFixedWidth(UIScaling.scale(150))
         
         # Create and set custom white list view to override black dropdown
         list_view = QListView()
@@ -399,18 +395,21 @@ class ProfileEditorOverlay(BaseOverlay):
             }
         """)
         cmb_team.setView(list_view)
+        layout.addWidget(cmb_team)
         
-        team_row.addWidget(lbl_team)
-        team_row.addWidget(cmb_team)
+        # Click handling for the whole row (except combo box area)
+        def on_row_click(event, idx=index):
+            # Only trigger if clicking outside the combo box
+            if not cmb_team.underMouse():
+                self.select_sku(idx)
         
-        info_col.addLayout(sku_row)
-        info_col.addLayout(team_row)
-        
-        layout.addLayout(info_col)
+        container.mousePressEvent = on_row_click
+        container.setCursor(Qt.PointingHandCursor)
         
         self.sku_rows.append({
-            "img": img_placeholder,
-            "sku_val": txt_sku_val,
+            "container": container,
+            "img": img_label,
+            "sku_label": txt_sku_val,
             "team_cmb": cmb_team,
             "data": None 
         })
@@ -435,7 +434,8 @@ class ProfileEditorOverlay(BaseOverlay):
         for i, data in enumerate(selected):
             if i < 4:
                 self.sku_rows[i]["data"] = data
-                self.sku_rows[i]["sku_val"].setText(str(data.get("code", "")))
+                self.sku_rows[i]["sku_label"].setText(str(data.get("code", "")))
+                
                 # Map legacy team names to new position names
                 team_val = data.get("team", "")
                 if team_val in ["Team A", "A"]:
@@ -443,7 +443,14 @@ class ProfileEditorOverlay(BaseOverlay):
                 elif team_val in ["Team B", "B"]:
                     team_val = "Right (Kanan)"
                 self.sku_rows[i]["team_cmb"].setCurrentText(team_val)
-                self.sku_rows[i]["img"].setStyleSheet("background-color: #2196F3; border-radius: 8px;")
+                
+                # Load image
+                gdrive_id = data.get("gdrive_id")
+                if gdrive_id:
+                    if gdrive_id not in self.card_labels:
+                        self.card_labels[gdrive_id] = []
+                    self.card_labels[gdrive_id].append(self.sku_rows[i]["img"])
+                    self.image_loader.load_image(gdrive_id)
 
     def select_sku(self, index):
         from app.widgets.sku_selector_overlay import SkuSelectorOverlay
@@ -463,8 +470,26 @@ class ProfileEditorOverlay(BaseOverlay):
             return
         row = self.sku_rows[idx]
         row["data"] = sku_data
-        row["sku_val"].setText(str(sku_data.get("code", "")))
-        row["img"].setStyleSheet("background-color: #2196F3; border-radius: 8px;")
+        row["sku_label"].setText(str(sku_data.get("code", "")))
+        
+        # Load image
+        gdrive_id = sku_data.get("gdrive_id")
+        if gdrive_id:
+            row["img"].setText("...")
+            if gdrive_id not in self.card_labels:
+                self.card_labels[gdrive_id] = []
+            self.card_labels[gdrive_id].append(row["img"])
+            self.image_loader.load_image(gdrive_id)
+
+    def on_image_loaded(self, gdrive_id, pixmap):
+        if gdrive_id in self.card_labels:
+            for lbl in self.card_labels[gdrive_id]:
+                try:
+                    scaled = pixmap.scaled(lbl.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                    lbl.setPixmap(scaled)
+                    lbl.setText("")
+                except RuntimeError:
+                    pass
 
     def _parse_sizes(self, size_str, code=""):
         """Parse sizes from SKU data — handles ranges, slashes, commas."""
@@ -524,6 +549,12 @@ class ProfileEditorOverlay(BaseOverlay):
             team = row["team_cmb"].currentText()
             
             if data:
+                # Validation: Check if position is selected
+                if not team:
+                    sku_code = data.get("code", "this SKU")
+                    QMessageBox.warning(self, "Validation Error", f"Please select Position (Left/Right) for {sku_code}")
+                    return
+                
                 has_sku = True
                 item = data.copy()
                 item["team"] = team
@@ -572,3 +603,9 @@ class ProfileEditorOverlay(BaseOverlay):
             self.data_saved.emit(result_data)
         
         self.close_overlay()
+
+    def close_overlay(self):
+        """Override to cancel pending image downloads."""
+        if hasattr(self, 'image_loader'):
+            self.image_loader.cancel_all()
+        super().close_overlay()
