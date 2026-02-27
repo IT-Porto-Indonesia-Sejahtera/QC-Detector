@@ -37,7 +37,7 @@ class ModbusConfig:
     
     # RTU (Serial) settings
     serial_port: str = ""  # Let it be empty for manual entry or discovery
-    baudrate: int = 9600
+    baudrate: int = 115200
     parity: str = "E"  # N, E, O
     stopbits: int = 1
     bytesize: int = 8
