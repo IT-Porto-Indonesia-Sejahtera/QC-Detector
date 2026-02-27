@@ -102,17 +102,20 @@ def on_trigger():
     print("READY FOR NEXT TRIGGER")
     print("-" * 30)
 
-def on_connection_change(connected, message):
-    status = "CONNECTED" if connected else "DISCONNECTED"
-    print(f"[{status}] {message}")
+def on_value_update(value):
+    # This prints every single poll result to show the connection is alive
+    print(f"[{time.strftime('%H:%M:%S')}] Polling Reg {TRIGGER_REG}... Value: {value}", end='\r')
 
 trigger.on_trigger = on_trigger
+trigger.on_value_update = on_value_update
 trigger.on_connection_change = on_connection_change
 
 print("\nAttempting to connect...")
 if trigger.connect():
     print("\n" + "=" * 60)
     print("CONNECTION SUCCESSFUL! Polling for triggers...")
+    print("Use command line args to change settings: python3 test_plc_modbus.py [port] [slave_id] [parity]")
+    print(f"Example: python3 test_plc_modbus.py {target_port} 1 N")
     print("=" * 60)
     
     trigger.start()
@@ -126,4 +129,27 @@ if trigger.connect():
         trigger.disconnect()
         print("Done.")
 else:
-    print("\nCONNECTION FAILED! Check your port and PLC settings.")
+    print("\nCONNECTION FAILED! Let's try to SCAN available settings...")
+    print("-" * 30)
+    
+    found = False
+    for test_id in [1, 2, 0, 3]:
+        for test_parity in ["E", "N"]:
+            print(f"Scanning: ID {test_id}, Parity {test_parity}...", end='\r')
+            config.slave_id = test_id
+            config.parity = test_parity
+            test_trigger = PLCModbusTrigger(config)
+            if test_trigger.connect():
+                val = test_trigger._read_register()
+                if val is not None:
+                    print(f"\n[FOUND!] PLC is responding on: ID {test_id}, Parity {test_parity}")
+                    print(f"Current Value of Reg {TRIGGER_REG}: {val}")
+                    print(f"Please use these settings in the app!")
+                    found = True
+                    test_trigger.disconnect()
+                    break
+                test_trigger.disconnect()
+        if found: break
+    
+    if not found:
+        print("\nScan failed. Please check your Wiring (Swap RS485 A/B) or Baudrate (currently 9600).")

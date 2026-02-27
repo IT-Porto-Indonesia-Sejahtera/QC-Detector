@@ -18,7 +18,7 @@ from model.measure_live_sandals import measure_live_sandals
 from project_utilities.json_utility import JsonUtility
 from project_utilities.logger_config import get_detection_logger, get_count_logger
 from app.widgets.preset_profile_overlay import PresetProfileOverlay, PROFILES_FILE
-from app.utils.theme_manager import ThemeManagerthis
+from app.utils.theme_manager import ThemeManager
 from app.utils.camera_utils import open_video_capture
 from app.utils.capture_thread import VideoCaptureThread
 from app.utils.ui_scaling import UIScaling
