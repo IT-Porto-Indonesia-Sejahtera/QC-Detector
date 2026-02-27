@@ -1710,11 +1710,11 @@ class LiveCameraScreen(QWidget):
             config = ModbusConfig(
                 connection_type="rtu",
                 serial_port=self.settings.get("plc_port", ""),
-                baudrate=9600,
-                parity="E",
-                stopbits=1,
-                bytesize=8,
-                slave_id=1,
+                baudrate=int(self.settings.get("plc_baudrate", 9600)),
+                parity=self.settings.get("plc_parity", "E"),
+                stopbits=int(self.settings.get("plc_stopbits", 1)),
+                bytesize=int(self.settings.get("plc_bytesize", 8)),
+                slave_id=int(self.settings.get("plc_slave_id", 1)),
                 register_address=int(self.settings.get("plc_trigger_reg", 12)),
                 register_type="holding",
                 poll_interval_ms=100

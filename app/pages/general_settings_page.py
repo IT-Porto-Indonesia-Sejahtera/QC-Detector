@@ -207,6 +207,12 @@ class GeneralSettingsPage(QWidget):
         self.s_port = QLineEdit(); self.style_input(self.s_port); hw_layout.addWidget(self.s_port)
         hw_layout.addWidget(self.create_styled_label("Port Modbus PLC:"))
         self.p_port = QLineEdit(); self.style_input(self.p_port); hw_layout.addWidget(self.p_port)
+        h_conn = QHBoxLayout()
+        v_slave = QVBoxLayout(); v_slave.addWidget(self.create_styled_label("Slave ID")); self.p_slave = QLineEdit(); self.style_input(self.p_slave); h_conn.addLayout(v_slave)
+        v_parity = QVBoxLayout(); v_parity.addWidget(self.create_styled_label("Parity (N/E/O)")); self.p_parity = QLineEdit(); self.style_input(self.p_parity); h_conn.addLayout(v_parity)
+        v_baud = QVBoxLayout(); v_baud.addWidget(self.create_styled_label("Baudrate")); self.p_baud = QLineEdit(); self.style_input(self.p_baud); h_conn.addLayout(v_baud)
+        hw_layout.addLayout(h_conn)
+
         h_regs = QHBoxLayout()
         v_trig = QVBoxLayout(); v_trig.addWidget(self.create_styled_label("Reg Trig (R)")); self.p_tri = QLineEdit(); self.style_input(self.p_tri); v_trig.addWidget(self.p_tri)
         v_res = QVBoxLayout(); v_res.addWidget(self.create_styled_label("Reg Hasil (W)")); self.p_res = QLineEdit(); self.style_input(self.p_res); v_res.addWidget(self.p_res)
@@ -337,6 +343,10 @@ class GeneralSettingsPage(QWidget):
         self.p_tri.setText(str(s.get("plc_trigger_reg", 12)))
         self.p_res.setText(str(s.get("plc_result_reg", 100)))
         self.p_coil.setText(str(s.get("plc_trigger_coil_reg", 1600)))
+        
+        self.p_slave.setText(str(s.get("plc_slave_id", 1)))
+        self.p_parity.setText(str(s.get("plc_parity", "E")))
+        self.p_baud.setText(str(s.get("plc_baudrate", 9600)))
         
         self.d1.setText(str(s.get("delay_input_capture_ms", 0)))
         self.d2.setText(str(s.get("delay_result_trigger_ms", 0)))
@@ -501,6 +511,9 @@ class GeneralSettingsPage(QWidget):
         s["plc_trigger_reg"] = int(self.p_tri.text() or 12)
         s["plc_result_reg"] = int(self.p_res.text() or 100)
         s["plc_trigger_coil_reg"] = int(self.p_coil.text() or 1600)
+        s["plc_slave_id"] = int(self.p_slave.text() or 1)
+        s["plc_parity"] = self.p_parity.text() or "E"
+        s["plc_baudrate"] = int(self.p_baud.text() or 9600)
         s["delay_input_capture_ms"] = int(self.d1.text() or 0)
         s["delay_result_trigger_ms"] = int(self.d2.text() or 0)
         s["detection_model"] = self.det_model.currentData()
