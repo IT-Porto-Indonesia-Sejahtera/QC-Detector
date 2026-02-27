@@ -1778,7 +1778,7 @@ class LiveCameraScreen(QWidget):
         GOOD: random 1-4
         BS/REJECT: random 5-8
         """
-        if not self.client:
+        if not self.plc_trigger or not self.plc_trigger.is_connected():
             print(f"[{time.strftime('%H:%M:%S')}] [PLC] Cannot write result - not connected")
             return
         
