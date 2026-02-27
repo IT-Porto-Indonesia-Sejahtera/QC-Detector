@@ -215,13 +215,13 @@ class PLCModbusTrigger:
             slave = self.config.slave_id
             
             if reg_type == "coil":
-                result = self.client.read_coils(address, count=1, unit=slave)
+                result = self._safe_modbus_call(self.client.read_coils, address, count=1)
             elif reg_type == "discrete_input":
-                result = self.client.read_discrete_inputs(address, count=1, unit=slave)
+                result = self._safe_modbus_call(self.client.read_discrete_inputs, address, count=1)
             elif reg_type == "holding":
-                result = self.client.read_holding_registers(address, count=1, unit=slave)
+                result = self._safe_modbus_call(self.client.read_holding_registers, address, count=1)
             elif reg_type == "input":
-                result = self.client.read_input_registers(address, count=1, unit=slave)
+                result = self._safe_modbus_call(self.client.read_input_registers, address, count=1)
             else:
                 print(f"Unknown register type: {reg_type}")
                 return None
@@ -246,6 +246,20 @@ class PLCModbusTrigger:
         if self.on_trigger:
             self.on_trigger()
     
+    def _safe_modbus_call(self, func, *args, **kwargs):
+        """Helper to try both 'slave' and 'unit' keywords for compatibility"""
+        slave_id = self.config.slave_id
+        try:
+            # Try 'slave' first (Pymodbus v3.x style)
+            return func(*args, **kwargs, slave=slave_id)
+        except TypeError:
+            try:
+                # Try 'unit' (Pymodbus v2.x style)
+                return func(*args, **kwargs, unit=slave_id)
+            except TypeError:
+                # Some versions might use 'device_id' or no keyword
+                return func(*args, **kwargs)
+
     def _notify_connection(self, connected: bool, message: str):
         """Notify connection status change"""
         if self.on_connection_change:
@@ -271,8 +285,7 @@ class PLCModbusTrigger:
             return False
         
         try:
-            slave = self.config.slave_id
-            result = self.client.write_register(address, value, unit=slave)
+            result = self._safe_modbus_call(self.client.write_register, address, value)
             
             if result.isError():
                 print(f"[PLC] Write error to register {address}: {result}")
@@ -301,9 +314,8 @@ class PLCModbusTrigger:
             return False
         
         try:
-            slave = self.config.slave_id
             # pymodbus write_coil accepts address, value
-            result = self.client.write_coil(address, value, unit=slave)
+            result = self._safe_modbus_call(self.client.write_coil, address, value)
             
             if result.isError():
                 print(f"[PLC] Write error to coil {address}: {result}")
