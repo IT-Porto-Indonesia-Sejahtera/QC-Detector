@@ -178,6 +178,9 @@ class PLCModbusTrigger:
                 value = self._read_register()
                 
                 if value is not None:
+                    # Only log if value is 1 (trigger) or if it changes back to 0
+                    if value == 1 or (value == 0 and self.last_value == 1):
+                         print(f"[{time.strftime('%H:%M:%S')}] [PLC] Reg {self.config.register_address} current value: {value}")
                     # Notify value update (silent - no print for trigger register)
                     if self.on_value_update:
                         self.on_value_update(value)

@@ -18,7 +18,7 @@ from model.measure_live_sandals import measure_live_sandals
 from project_utilities.json_utility import JsonUtility
 from project_utilities.logger_config import get_detection_logger, get_count_logger
 from app.widgets.preset_profile_overlay import PresetProfileOverlay, PROFILES_FILE
-from app.utils.theme_manager import ThemeManager
+from app.utils.theme_manager import ThemeManagerthis
 from app.utils.camera_utils import open_video_capture
 from app.utils.capture_thread import VideoCaptureThread
 from app.utils.ui_scaling import UIScaling
@@ -1406,7 +1406,7 @@ class LiveCameraScreen(QWidget):
             return
             
         marker_size = self.settings.get("aruco_marker_size", 50.0)
-        print(f"[AutoCalib] Checking... (Size: {marker_size})") # Debug log
+        # print(f"[AutoCalib] Checking... (Size: {marker_size})") # Debug log
         
         # Run in background
         self.autocalib_worker = AutoCalibrationWorker(frame.copy(), marker_size)
@@ -1418,7 +1418,7 @@ class LiveCameraScreen(QWidget):
             return
             
         count = result.get("marker_count", 0)
-        print(f"[AutoCalib] Found {count} markers") 
+        # print(f"[AutoCalib] Found {count} markers") 
 
         # strict trigger: MUST be 8 markers
         if count != 8:
@@ -1446,7 +1446,7 @@ class LiveCameraScreen(QWidget):
         # Hysteresis (1% change threshold)
         current = self.mm_per_px or 1.0  # Avoid div/0
         diff_percent = abs(effective_mmpx - current) / current
-        print(f"[AutoCalib] diff percent : {diff_percent}")
+        # print(f"[AutoCalib] diff percent : {diff_percent}")
         
         if diff_percent > 0.01:
             import time
@@ -1469,7 +1469,7 @@ class LiveCameraScreen(QWidget):
             self.show_autocalib_msg(f"Auto-Calibrated: {effective_mmpx:.4f} mm/px")
 
     def show_autocalib_msg(self, msg):
-        print(f"[AutoCalib] SHOW MSG: {msg}")
+        # print(f"[AutoCalib] SHOW MSG: {msg}")
         # Use show_status which uses the overlay widget
         self.show_status(msg, is_error=False)
         self.status_overlay.setStyleSheet("background-color: rgba(76, 175, 80, 0.9); color: white; border-radius: 8px; font-weight: bold; font-size: 24px; padding: 10px;")

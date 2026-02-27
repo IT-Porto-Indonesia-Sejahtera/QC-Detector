@@ -136,6 +136,7 @@ class SensorTrigger:
                 if self.serial_conn.in_waiting > 0:
                     line = self.serial_conn.readline().decode('utf-8', errors='ignore').strip()
                     if line:
+                        print(f"[{time.strftime('%H:%M:%S')}] [SENSOR] RAW: '{line}'")
                         self._process_data(line)
             except serial.SerialException:
                 self._notify_connection(False, "Connection lost")
@@ -177,8 +178,12 @@ class SensorTrigger:
         
         if current_time - self.last_trigger_time >= self.config.cooldown_seconds:
             self.last_trigger_time = current_time
+            print(f"[{time.strftime('%H:%M:%S')}] [SENSOR] >>> TRIGGER FIRED!")
             if self.on_trigger:
                 self.on_trigger()
+        else:
+            remaining = self.config.cooldown_seconds - (current_time - self.last_trigger_time)
+            print(f"[{time.strftime('%H:%M:%S')}] [SENSOR] Trigger suppressed (Cooldown: {remaining:.1f}s remaining)")
     
     def _notify_connection(self, connected: bool, message: str):
         """Notify connection status change"""
