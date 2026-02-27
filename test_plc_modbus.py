@@ -46,20 +46,20 @@ RESULT_REG = 100
 COIL_TRIG = 1600
 
 # Delays for testing
-PRE_CAPTURE_DELAY = 0.5 
-POST_RESULT_DELAY = 0.5
+PRE_CAPTURE_DELAY = 0.0 
+POST_RESULT_DELAY = 0.0
 
 config = ModbusConfig(
     connection_type="rtu",
     serial_port=target_port,
-    baudrate=9600,
+    baudrate=115200,
     parity=parity,
     stopbits=1,
     bytesize=8,
     slave_id=slave_id,
     register_address=TRIGGER_REG,
     register_type="holding",
-    poll_interval_ms=50
+    poll_interval_ms=10
 )
 
 print(f"Port: {config.serial_port} | Baud: {config.baudrate} | Parity: {config.parity} | Slave ID: {slave_id}")
