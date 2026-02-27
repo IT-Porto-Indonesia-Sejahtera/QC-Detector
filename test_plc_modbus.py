@@ -29,7 +29,7 @@ print("PLC Modbus RTU Debugger Tool")
 print("=" * 60)
 
 # CONFIGURATION
-target_port = "/dev/ttyUSB0" 
+target_port = "/dev/ttyUSB1" 
 slave_id = 1
 parity = "E"
 

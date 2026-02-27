@@ -470,7 +470,15 @@ class LiveCameraScreen(QWidget):
             # PLC & Delay settings
             self.delay_input_capture_ms = int(self.settings.get("delay_input_capture_ms", 0))
             self.delay_result_trigger_ms = int(self.settings.get("delay_result_trigger_ms", 0))
-            self.plc_trigger_coil_reg = int(self.settings.get("plc_trigger_coil_reg", 100))
+            self.plc_trigger_coil_reg = int(self.settings.get("plc_trigger_coil_reg", 1600))
+            self.plc_port = self.settings.get("plc_port", "")
+            self.sensor_port = self.settings.get("sensor_port", "")
+            self.plc_slave_id = int(self.settings.get("plc_slave_id", 1))
+            self.plc_parity = self.settings.get("plc_parity", "E")
+            self.plc_baudrate = int(self.settings.get("plc_baudrate", 115200))
+            self.plc_poll_interval = int(self.settings.get("plc_poll_interval", 10))
+            self.plc_trigger_reg = int(self.settings.get("plc_trigger_reg", 12))
+            self.plc_result_reg = int(self.settings.get("plc_result_reg", 100))
         else:
             self.mm_per_px = 0.215984148
             self.camera_index = 0
@@ -488,7 +496,15 @@ class LiveCameraScreen(QWidget):
             self.force_height = 0
             self.delay_input_capture_ms = 0
             self.delay_result_trigger_ms = 0
-            self.plc_trigger_coil_reg = 100
+            self.plc_trigger_coil_reg = 1600
+            self.plc_port = ""
+            self.sensor_port = ""
+            self.plc_trigger_reg = 12
+            self.plc_result_reg = 100
+            self.plc_slave_id = 1
+            self.plc_parity = "E"
+            self.plc_baudrate = 115200
+            self.plc_poll_interval = 10
 
     def setup_minimal_layout(self):
         """Minimal Layout: Full-screen preview with overlay controls."""
@@ -1709,16 +1725,16 @@ class LiveCameraScreen(QWidget):
         try:
             config = ModbusConfig(
                 connection_type="rtu",
-                serial_port=self.settings.get("plc_port", ""),
-                baudrate=int(self.settings.get("plc_baudrate", 115200)),
-                parity=self.settings.get("plc_parity", "E"),
-                stopbits=int(self.settings.get("plc_stopbits", 1)),
-                bytesize=int(self.settings.get("plc_bytesize", 8)),
-                slave_id=int(self.settings.get("plc_slave_id", 1)),
-                register_address=int(self.settings.get("plc_trigger_reg", 12)),
+                serial_port=self.plc_port,
+                baudrate=self.plc_baudrate,
+                parity=self.plc_parity,
+                slave_id=self.plc_slave_id,
+                register_address=self.plc_trigger_reg,
                 register_type="holding",
-                poll_interval_ms=int(self.settings.get("plc_poll_interval", 10))
+                poll_interval_ms=self.plc_poll_interval
             )
+            
+            print(f"[PLC] Initializing Modbus on {self.plc_port} (ID: {self.plc_slave_id}, Parity: {self.plc_parity})")
             
             self.plc_trigger = PLCModbusTrigger(config)
             self.plc_trigger.on_trigger = lambda: self.on_plc_trigger()
