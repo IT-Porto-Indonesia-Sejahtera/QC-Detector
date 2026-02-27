@@ -29,9 +29,16 @@ print("PLC Modbus RTU Debugger Tool")
 print("=" * 60)
 
 # CONFIGURATION
-target_port = "COM7" # Default - change to yours or pass as argument
+target_port = "/dev/ttyUSB0" 
+slave_id = 1
+parity = "E"
+
 if len(sys.argv) > 1:
     target_port = sys.argv[1]
+if len(sys.argv) > 2:
+    slave_id = int(sys.argv[2])
+if len(sys.argv) > 3:
+    parity = sys.argv[3].upper() # N, E, or O
 
 # Default addresses per new requirements
 TRIGGER_REG = 12
@@ -46,16 +53,16 @@ config = ModbusConfig(
     connection_type="rtu",
     serial_port=target_port,
     baudrate=9600,
-    parity="E",
+    parity=parity,
     stopbits=1,
     bytesize=8,
-    slave_id=1,
+    slave_id=slave_id,
     register_address=TRIGGER_REG,
     register_type="holding",
     poll_interval_ms=100
 )
 
-print(f"Port: {config.serial_port} | Baud: {config.baudrate} | Parity: {config.parity}")
+print(f"Port: {config.serial_port} | Baud: {config.baudrate} | Parity: {config.parity} | Slave ID: {slave_id}")
 print(f"Trigger Reg (R): {TRIGGER_REG}")
 print(f"Result Reg (W): {RESULT_REG}")
 print(f"Coil Trig (W): {COIL_TRIG}")
