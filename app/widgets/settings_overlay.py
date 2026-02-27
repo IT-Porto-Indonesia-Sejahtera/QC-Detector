@@ -205,6 +205,7 @@ class SettingsOverlay(BaseOverlay):
         self.plc_slave_input.setText(str(s.get("plc_slave_id", 1)))
         self.plc_parity_input.setText(str(s.get("plc_parity", "E")))
         self.plc_baud_input.setText(str(s.get("plc_baudrate", 9600)))
+        self.plc_poll_input.setText(str(s.get("plc_poll_interval", 50)))
         
         self.delay_input_capture.setText(str(s.get("delay_input_capture_ms", 0)))
         self.delay_result_trigger.setText(str(s.get("delay_result_trigger_ms", 0)))
@@ -425,8 +426,8 @@ class SettingsOverlay(BaseOverlay):
         self.sensor_port_input = QLineEdit(); self.style_input(self.sensor_port_input); self.plc_port_input = QLineEdit(); self.style_input(self.plc_port_input)
         hw_layout.addLayout(VBoxWithLabel("Sensor Port", self.sensor_port_input)); hw_layout.addLayout(VBoxWithLabel("PLC Port", self.plc_port_input))
         
-        h_conn = QHBoxLayout(); self.plc_slave_input = QLineEdit(); self.style_input(self.plc_slave_input); self.plc_parity_input = QLineEdit(); self.style_input(self.plc_parity_input); self.plc_baud_input = QLineEdit(); self.style_input(self.plc_baud_input)
-        h_conn.addLayout(VBoxWithLabel("Slave ID", self.plc_slave_input)); h_conn.addLayout(VBoxWithLabel("Parity (N/E/O)", self.plc_parity_input)); h_conn.addLayout(VBoxWithLabel("Baudrate", self.plc_baud_input))
+        h_conn = QHBoxLayout(); self.plc_slave_input = QLineEdit(); self.style_input(self.plc_slave_input); self.plc_parity_input = QLineEdit(); self.style_input(self.plc_parity_input); self.plc_baud_input = QLineEdit(); self.style_input(self.plc_baud_input); self.plc_poll_input = QLineEdit(); self.style_input(self.plc_poll_input)
+        h_conn.addLayout(VBoxWithLabel("Slave ID", self.plc_slave_input)); h_conn.addLayout(VBoxWithLabel("Parity (N/E/O)", self.plc_parity_input)); h_conn.addLayout(VBoxWithLabel("Baudrate", self.plc_baud_input)); h_conn.addLayout(VBoxWithLabel("Poll (ms)", self.plc_poll_input))
         hw_layout.addLayout(h_conn)
 
         h_regs = QHBoxLayout(); self.plc_trig_input = QLineEdit(); self.style_input(self.plc_trig_input); self.plc_res_input = QLineEdit(); self.style_input(self.plc_res_input)
@@ -988,6 +989,7 @@ class SettingsOverlay(BaseOverlay):
             self.settings["plc_slave_id"] = int(self.plc_slave_input.text() or 1)
             self.settings["plc_parity"] = self.plc_parity_input.text() or "E"
             self.settings["plc_baudrate"] = int(self.plc_baud_input.text() or 9600)
+            self.settings["plc_poll_interval"] = int(self.plc_poll_input.text() or 50)
             self.settings["delay_input_capture_ms"] = int(self.delay_input_capture.text().strip() or 0)
             self.settings["delay_result_trigger_ms"] = int(self.delay_result_trigger.text().strip() or 0)
         except ValueError:

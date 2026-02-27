@@ -14,7 +14,12 @@ from typing import Optional, Callable, List
 from dataclasses import dataclass
 
 try:
-    from pymodbus.client import ModbusTcpClient, ModbusSerialClient
+    try:
+        # Pymodbus v3.x style
+        from pymodbus.client import ModbusTcpClient, ModbusSerialClient
+    except ImportError:
+        # Pymodbus v2.x style
+        from pymodbus.client.sync import ModbusTcpClient, ModbusSerialClient
     PYMODBUS_AVAILABLE = True
 except ImportError:
     PYMODBUS_AVAILABLE = False
@@ -210,13 +215,13 @@ class PLCModbusTrigger:
             slave = self.config.slave_id
             
             if reg_type == "coil":
-                result = self.client.read_coils(address, count=1, device_id=slave)
+                result = self.client.read_coils(address, count=1, unit=slave)
             elif reg_type == "discrete_input":
-                result = self.client.read_discrete_inputs(address, count=1, device_id=slave)
+                result = self.client.read_discrete_inputs(address, count=1, unit=slave)
             elif reg_type == "holding":
-                result = self.client.read_holding_registers(address, count=1, device_id=slave)
+                result = self.client.read_holding_registers(address, count=1, unit=slave)
             elif reg_type == "input":
-                result = self.client.read_input_registers(address, count=1, device_id=slave)
+                result = self.client.read_input_registers(address, count=1, unit=slave)
             else:
                 print(f"Unknown register type: {reg_type}")
                 return None
@@ -260,18 +265,13 @@ class PLCModbusTrigger:
         
         Args:
             address: Register address to write to
-            value: Value to write (0-65535 for holding registers)
-            
-        Returns:
-            True if write was successful
-        """
+        """Write a value to a holding register"""
         if not self.client:
-            print(f"[PLC] Cannot write - not connected")
             return False
         
         try:
             slave = self.config.slave_id
-            result = self.client.write_register(address, value, device_id=slave)
+            result = self.client.write_register(address, value, unit=slave)
             
             if result.isError():
                 print(f"[PLC] Write error to register {address}: {result}")

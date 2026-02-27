@@ -59,7 +59,7 @@ config = ModbusConfig(
     slave_id=slave_id,
     register_address=TRIGGER_REG,
     register_type="holding",
-    poll_interval_ms=100
+    poll_interval_ms=50
 )
 
 print(f"Port: {config.serial_port} | Baud: {config.baudrate} | Parity: {config.parity} | Slave ID: {slave_id}")

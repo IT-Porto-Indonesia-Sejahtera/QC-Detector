@@ -1717,7 +1717,7 @@ class LiveCameraScreen(QWidget):
                 slave_id=int(self.settings.get("plc_slave_id", 1)),
                 register_address=int(self.settings.get("plc_trigger_reg", 12)),
                 register_type="holding",
-                poll_interval_ms=100
+                poll_interval_ms=int(self.settings.get("plc_poll_interval", 10))
             )
             
             self.plc_trigger = PLCModbusTrigger(config)

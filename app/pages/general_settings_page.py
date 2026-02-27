@@ -211,6 +211,7 @@ class GeneralSettingsPage(QWidget):
         v_slave = QVBoxLayout(); v_slave.addWidget(self.create_styled_label("Slave ID")); self.p_slave = QLineEdit(); self.style_input(self.p_slave); h_conn.addLayout(v_slave)
         v_parity = QVBoxLayout(); v_parity.addWidget(self.create_styled_label("Parity (N/E/O)")); self.p_parity = QLineEdit(); self.style_input(self.p_parity); h_conn.addLayout(v_parity)
         v_baud = QVBoxLayout(); v_baud.addWidget(self.create_styled_label("Baudrate")); self.p_baud = QLineEdit(); self.style_input(self.p_baud); h_conn.addLayout(v_baud)
+        v_poll = QVBoxLayout(); v_poll.addWidget(self.create_styled_label("Poll Int (ms)")); self.p_poll = QLineEdit(); self.style_input(self.p_poll); h_conn.addLayout(v_poll)
         hw_layout.addLayout(h_conn)
 
         h_regs = QHBoxLayout()
@@ -347,6 +348,7 @@ class GeneralSettingsPage(QWidget):
         self.p_slave.setText(str(s.get("plc_slave_id", 1)))
         self.p_parity.setText(str(s.get("plc_parity", "E")))
         self.p_baud.setText(str(s.get("plc_baudrate", 9600)))
+        self.p_poll.setText(str(s.get("plc_poll_interval", 50)))
         
         self.d1.setText(str(s.get("delay_input_capture_ms", 0)))
         self.d2.setText(str(s.get("delay_result_trigger_ms", 0)))
@@ -514,6 +516,7 @@ class GeneralSettingsPage(QWidget):
         s["plc_slave_id"] = int(self.p_slave.text() or 1)
         s["plc_parity"] = self.p_parity.text() or "E"
         s["plc_baudrate"] = int(self.p_baud.text() or 9600)
+        s["plc_poll_interval"] = int(self.p_poll.text() or 50)
         s["delay_input_capture_ms"] = int(self.d1.text() or 0)
         s["delay_result_trigger_ms"] = int(self.d2.text() or 0)
         s["detection_model"] = self.det_model.currentData()

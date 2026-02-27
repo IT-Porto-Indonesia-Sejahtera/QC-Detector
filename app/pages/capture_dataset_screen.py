@@ -289,7 +289,7 @@ class CaptureDatasetScreen(QWidget):
                 slave_id=1,
                 register_address=int(self.settings.get("plc_trigger_reg", 12)),
                 register_type="holding",
-                poll_interval_ms=100
+                poll_interval_ms=50
             )
             
             self.plc_trigger = PLCModbusTrigger(config)
