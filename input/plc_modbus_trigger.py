@@ -280,6 +280,37 @@ class PLCModbusTrigger:
         except Exception as e:
             print(f"[PLC] Write exception: {e}")
             return False
+
+    def write_coil(self, address: int, value: bool) -> bool:
+        """
+        Write a boolean value to a coil on the PLC.
+        
+        Args:
+            address: Coil address to write to
+            value: Value to write (True or False)
+            
+        Returns:
+            True if write was successful
+        """
+        if not self.client:
+            print(f"[PLC] Cannot write coil - not connected")
+            return False
+        
+        try:
+            slave = self.config.slave_id
+            # pymodbus write_coil accepts address, value
+            result = self.client.write_coil(address, value, device_id=slave)
+            
+            if result.isError():
+                print(f"[PLC] Write error to coil {address}: {result}")
+                return False
+            
+            print(f"[PLC] Written value {value} to coil {address}")
+            return True
+            
+        except Exception as e:
+            print(f"[PLC] Coil write exception: {e}")
+            return False
     
     def read_any_register(self, address: int) -> Optional[int]:
         """

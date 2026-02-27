@@ -3,6 +3,7 @@ import cv2
 import os
 import datetime
 import random
+import time
 import threading
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
@@ -465,6 +466,11 @@ class LiveCameraScreen(QWidget):
             self.aspect_ratio_correction = self.settings.get("aspect_ratio_correction", 1.0)
             self.force_width = self.settings.get("force_width", 0)
             self.force_height = self.settings.get("force_height", 0)
+            
+            # PLC & Delay settings
+            self.delay_input_capture_ms = int(self.settings.get("delay_input_capture_ms", 0))
+            self.delay_result_trigger_ms = int(self.settings.get("delay_result_trigger_ms", 0))
+            self.plc_trigger_coil_reg = int(self.settings.get("plc_trigger_coil_reg", 100))
         else:
             self.mm_per_px = 0.215984148
             self.camera_index = 0
@@ -480,6 +486,9 @@ class LiveCameraScreen(QWidget):
             self.aspect_ratio_correction = 1.0
             self.force_width = 0
             self.force_height = 0
+            self.delay_input_capture_ms = 0
+            self.delay_result_trigger_ms = 0
+            self.plc_trigger_coil_reg = 100
 
     def setup_minimal_layout(self):
         """Minimal Layout: Full-screen preview with overlay controls."""
@@ -1720,9 +1729,14 @@ class LiveCameraScreen(QWidget):
     def on_plc_trigger(self):
         """Called when PLC register changes from 0 to 1"""
         if not self.is_paused and self.live_frame is not None:
-            print("[PLC] TRIGGER FIRED! Capturing frame...")
-            # Emit signal to safely call capture_frame on main thread
-            self.plc_triggered.emit()
+            delay = getattr(self, 'delay_input_capture_ms', 0)
+            if delay > 0:
+                print(f"[PLC] TRIGGER RECEIVED - Waiting {delay}ms before capture...")
+                QTimer.singleShot(delay, self.plc_triggered.emit)
+            else:
+                print("[PLC] TRIGGER FIRED! Capturing frame...")
+                # Emit signal to safely call capture_frame on main thread
+                self.plc_triggered.emit()
     
     def on_plc_value_update(self, value):
         """Called when PLC register value is read"""
@@ -1753,27 +1767,49 @@ class LiveCameraScreen(QWidget):
     
     def _write_plc_result(self, is_good: bool):
         """
-        Write QC result to PLC register 13.
+        Write QC result to PLC register (default 100).
+        Then wait for delay and pulse trigger Coil (default 100).
         GOOD: random 1-4
         BS/REJECT: random 5-8
         """
-        if not self.plc_trigger or not self.plc_trigger.is_connected():
-            print("[PLC] Cannot write result - not connected")
+        if not self.client:
+            print(f"[{time.strftime('%H:%M:%S')}] [PLC] Cannot write result - not connected")
             return
         
-        res_reg = int(self.settings.get("plc_result_reg", 13))
+        # 1. Write Result to Data Register (D100/100)
+        res_reg = int(self.settings.get("plc_result_reg", 100))
         if is_good:
             value = random.randint(1, 4)
-            print(f"[PLC] GOOD result - writing {value} to register {res_reg}")
+            print(f"[{time.strftime('%H:%M:%S')}] [PLC] >>> GOOD result: writing value {value} to Reg {res_reg}")
         else:
             value = random.randint(5, 8)
-            print(f"[PLC] BS result - writing {value} to register {res_reg}")
+            print(f"[{time.strftime('%H:%M:%S')}] [PLC] >>> BAD result: writing value {value} to Reg {res_reg}")
         
         self.plc_trigger.write_register(res_reg, value)
         
-        # Read back register to verify
-        read_value = self.plc_trigger.read_any_register(res_reg)
-        if read_value is not None:
-            print(f"[PLC] Verified - Register {res_reg} now contains: {read_value}")
+        # 2. Pulsing Coil Trigger (1600) after delay
+        def pulse_trigger():
+            try:
+                trigger_coil = getattr(self, 'plc_trigger_coil_reg', 1600)
+                print(f"[{time.strftime('%H:%M:%S')}] [PLC] >>> PULSING Coil {trigger_coil} (ON)")
+                self.plc_trigger.write_coil(trigger_coil, True)
+                
+                # Auto-reset coil after 500ms
+                QTimer.singleShot(500, lambda: (
+                    print(f"[{time.strftime('%H:%M:%S')}] [PLC] >>> PULSING Coil {trigger_coil} (OFF)"),
+                    self.plc_trigger.write_coil(trigger_coil, False)
+                ))
+            except Exception as e:
+                print(f"[PLC] Coil pulse error: {e}")
+
+        delay = getattr(self, 'delay_result_trigger_ms', 0)
+        if delay > 0:
+            print(f"[{time.strftime('%H:%M:%S')}] [PLC] Waiting {delay}ms before pulse...")
+            QTimer.singleShot(delay, pulse_trigger)
         else:
-            print(f"[PLC] Could not read back register 13 for verification")
+            pulse_trigger()
+        
+        # Read back register to verify (optional)
+        # read_value = self.plc_trigger.read_any_register(res_reg)
+        # if read_value is not None:
+        #     print(f"[PLC] Verified - Register {res_reg} now contains: {read_value}")

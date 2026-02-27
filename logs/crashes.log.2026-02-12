@@ -1,0 +1,40 @@
+2026-02-12 10:46:10,147 - CRITICAL - main - Uncaught exception: 'SettingsOverlay' object has no attribute 'p2'
+Traceback (most recent call last):
+  File "/Users/porto-mac/Documents/GitHub/QC-Detector/app/pages/measure_live_screen.py", line 234, in show_settings_menu
+    overlay = SettingsOverlay(self)
+  File "/Users/porto-mac/Documents/GitHub/QC-Detector/app/widgets/settings_overlay.py", line 76, in __init__
+    self.setup_settings_ui()
+  File "/Users/porto-mac/Documents/GitHub/QC-Detector/app/widgets/settings_overlay.py", line 340, in setup_settings_ui
+    self.refresh_log_viewer(); self.load_settings_to_ui()
+  File "/Users/porto-mac/Documents/GitHub/QC-Detector/app/widgets/settings_overlay.py", line 170, in load_settings_to_ui
+    self.p2.setText(str(dist.get("p2", 0.0)))
+AttributeError: 'SettingsOverlay' object has no attribute 'p2'
+
+2026-02-12 10:46:36,385 - CRITICAL - main - Uncaught exception: 'SettingsOverlay' object has no attribute 'transport_combo'
+Traceback (most recent call last):
+  File "/Users/porto-mac/Documents/GitHub/QC-Detector/app/widgets/settings_overlay.py", line 756, in save_settings_clicked
+    self.save_current_settings()
+  File "/Users/porto-mac/Documents/GitHub/QC-Detector/app/widgets/settings_overlay.py", line 761, in save_current_settings
+    source = self.get_selected_camera_source()
+  File "/Users/porto-mac/Documents/GitHub/QC-Detector/app/widgets/settings_overlay.py", line 568, in get_selected_camera_source
+    "transport": self.transport_combo.currentText()
+AttributeError: 'SettingsOverlay' object has no attribute 'transport_combo'
+
+2026-02-12 10:46:37,556 - CRITICAL - main - Uncaught exception: 'SettingsOverlay' object has no attribute 'transport_combo'
+Traceback (most recent call last):
+  File "/Users/porto-mac/Documents/GitHub/QC-Detector/app/widgets/settings_overlay.py", line 756, in save_settings_clicked
+    self.save_current_settings()
+  File "/Users/porto-mac/Documents/GitHub/QC-Detector/app/widgets/settings_overlay.py", line 761, in save_current_settings
+    source = self.get_selected_camera_source()
+  File "/Users/porto-mac/Documents/GitHub/QC-Detector/app/widgets/settings_overlay.py", line 568, in get_selected_camera_source
+    "transport": self.transport_combo.currentText()
+AttributeError: 'SettingsOverlay' object has no attribute 'transport_combo'
+
+2026-02-12 10:58:24,013 - CRITICAL - main - Uncaught exception: 'SettingsOverlay' object has no attribute 'delay_input'
+Traceback (most recent call last):
+  File "/Users/porto-mac/Documents/GitHub/QC-Detector/app/widgets/settings_overlay.py", line 833, in save_settings_clicked
+    self.save_current_settings()
+  File "/Users/porto-mac/Documents/GitHub/QC-Detector/app/widgets/settings_overlay.py", line 858, in save_current_settings
+    self.settings["sensor_delay"] = float(self.delay_input.text() or 0.2)
+AttributeError: 'SettingsOverlay' object has no attribute 'delay_input'
+

@@ -115,7 +115,10 @@ class SettingsOverlay(BaseOverlay):
                 "sensor_port": "",
                 "plc_port": "",
                 "plc_trigger_reg": 12,
-                "plc_result_reg": 13,
+                "plc_result_reg": 100,
+                "plc_trigger_coil_reg": 1600,
+                "delay_input_capture_ms": 0,
+                "delay_result_trigger_ms": 0,
                 "layout_mode": "classic"
             }
         
@@ -196,9 +199,12 @@ class SettingsOverlay(BaseOverlay):
         self.on_auto_matrix_toggle(is_auto)
         
         self.sensor_port_input.setText(s.get("sensor_port", ""))
-        self.plc_port_input.setText(s.get("plc_port", ""))
         self.plc_trig_input.setText(str(s.get("plc_trigger_reg", 12)))
-        self.plc_res_input.setText(str(s.get("plc_result_reg", 13)))
+        self.plc_res_input.setText(str(s.get("plc_result_reg", 100)))
+        self.plc_coil_input.setText(str(s.get("plc_trigger_coil_reg", 1600)))
+        
+        self.delay_input_capture.setText(str(s.get("delay_input_capture_ms", 0)))
+        self.delay_result_trigger.setText(str(s.get("delay_result_trigger_ms", 0)))
         
         self.update_preset_combo()
         cam_idx = s.get("camera_index", 0)
@@ -415,8 +421,14 @@ class SettingsOverlay(BaseOverlay):
         hw_card, hw_layout = self.create_card("Hardware Integration")
         self.sensor_port_input = QLineEdit(); self.style_input(self.sensor_port_input); self.plc_port_input = QLineEdit(); self.style_input(self.plc_port_input)
         hw_layout.addLayout(VBoxWithLabel("Sensor Port", self.sensor_port_input)); hw_layout.addLayout(VBoxWithLabel("PLC Port", self.plc_port_input))
+        
         h_regs = QHBoxLayout(); self.plc_trig_input = QLineEdit(); self.style_input(self.plc_trig_input); self.plc_res_input = QLineEdit(); self.style_input(self.plc_res_input)
-        h_regs.addLayout(VBoxWithLabel("Trig Reg", self.plc_trig_input)); h_regs.addLayout(VBoxWithLabel("Res Reg", self.plc_res_input)); hw_layout.addLayout(h_regs)
+        self.plc_coil_input = QLineEdit(); self.style_input(self.plc_coil_input)
+        h_regs.addLayout(VBoxWithLabel("Trig Reg (R)", self.plc_trig_input)); h_regs.addLayout(VBoxWithLabel("Res Reg (W)", self.plc_res_input)); h_regs.addLayout(VBoxWithLabel("Coil Trig (W)", self.plc_coil_input)); hw_layout.addLayout(h_regs)
+        
+        h_delays = QHBoxLayout(); self.delay_input_capture = QLineEdit(); self.style_input(self.delay_input_capture); self.delay_result_trigger = QLineEdit(); self.style_input(self.delay_result_trigger)
+        h_delays.addLayout(VBoxWithLabel("Pre-Capture Delay (ms)", self.delay_input_capture)); h_delays.addLayout(VBoxWithLabel("Post-Result Delay (ms)", self.delay_result_trigger)); hw_layout.addLayout(h_delays)
+        
         hw_layout.addStretch()
         right_col.addWidget(hw_card)
         
@@ -964,7 +976,10 @@ class SettingsOverlay(BaseOverlay):
         self.settings["plc_port"] = self.plc_port_input.text().strip()
         try:
             self.settings["plc_trigger_reg"] = int(self.plc_trig_input.text().strip() or 12)
-            self.settings["plc_result_reg"] = int(self.plc_res_input.text().strip() or 13)
+            self.settings["plc_result_reg"] = int(self.plc_res_input.text().strip() or 100)
+            self.settings["plc_trigger_coil_reg"] = int(self.plc_coil_input.text().strip() or 1600)
+            self.settings["delay_input_capture_ms"] = int(self.delay_input_capture.text().strip() or 0)
+            self.settings["delay_result_trigger_ms"] = int(self.delay_result_trigger.text().strip() or 0)
         except ValueError:
             pass
         

@@ -208,9 +208,15 @@ class GeneralSettingsPage(QWidget):
         hw_layout.addWidget(self.create_styled_label("Port Modbus PLC:"))
         self.p_port = QLineEdit(); self.style_input(self.p_port); hw_layout.addWidget(self.p_port)
         h_regs = QHBoxLayout()
-        v_trig = QVBoxLayout(); v_trig.addWidget(self.create_styled_label("Reg Pemicu:")); self.p_tri = QLineEdit(); self.style_input(self.p_tri); v_trig.addWidget(self.p_tri)
-        v_res = QVBoxLayout(); v_res.addWidget(self.create_styled_label("Reg Hasil:")); self.p_res = QLineEdit(); self.style_input(self.p_res); v_res.addWidget(self.p_res)
-        h_regs.addLayout(v_trig); h_regs.addLayout(v_res); hw_layout.addLayout(h_regs)
+        v_trig = QVBoxLayout(); v_trig.addWidget(self.create_styled_label("Reg Trig (R)")); self.p_tri = QLineEdit(); self.style_input(self.p_tri); v_trig.addWidget(self.p_tri)
+        v_res = QVBoxLayout(); v_res.addWidget(self.create_styled_label("Reg Hasil (W)")); self.p_res = QLineEdit(); self.style_input(self.p_res); v_res.addWidget(self.p_res)
+        v_coil = QVBoxLayout(); v_coil.addWidget(self.create_styled_label("Coil Trig (W)")); self.p_coil = QLineEdit(); self.style_input(self.p_coil); v_coil.addWidget(self.p_coil)
+        h_regs.addLayout(v_trig); h_regs.addLayout(v_res); h_regs.addLayout(v_coil); hw_layout.addLayout(h_regs)
+        
+        h_delays = QHBoxLayout()
+        v_d1 = QVBoxLayout(); v_d1.addWidget(self.create_styled_label("Delay Pre-Capture (ms)")); self.d1 = QLineEdit(); self.style_input(self.d1); v_d1.addWidget(self.d1)
+        v_d2 = QVBoxLayout(); v_d2.addWidget(self.create_styled_label("Delay Post-Result (ms)")); self.d2 = QLineEdit(); self.style_input(self.d2); v_d2.addWidget(self.d2)
+        h_delays.addLayout(v_d1); h_delays.addLayout(v_d2); hw_layout.addLayout(h_delays)
         right.addWidget(hw_card)
         
         # Developer Tools Card (Hidden Features)
@@ -328,7 +334,12 @@ class GeneralSettingsPage(QWidget):
         elif layout_mode == "minimal": self.lay_mode.setCurrentIndex(2)
         else: self.lay_mode.setCurrentIndex(0)
         self.s_port.setText(s.get("sensor_port", "")); self.p_port.setText(s.get("plc_port", ""))
-        self.p_tri.setText(str(s.get("plc_trigger_reg", 12))); self.p_res.setText(str(s.get("plc_result_reg", 13)))
+        self.p_tri.setText(str(s.get("plc_trigger_reg", 12)))
+        self.p_res.setText(str(s.get("plc_result_reg", 100)))
+        self.p_coil.setText(str(s.get("plc_trigger_coil_reg", 1600)))
+        
+        self.d1.setText(str(s.get("delay_input_capture_ms", 0)))
+        self.d2.setText(str(s.get("delay_result_trigger_ms", 0)))
         
         det_mode = s.get("detection_model", "standard")
         self.det_model.setCurrentIndex(self.det_model.findData(det_mode))
@@ -487,7 +498,11 @@ class GeneralSettingsPage(QWidget):
             s["camera_index"] = cam_data
             
         s["sensor_port"] = self.s_port.text(); s["plc_port"] = self.p_port.text()
-        s["plc_trigger_reg"] = int(self.p_tri.text() or 12); s["plc_result_reg"] = int(self.p_res.text() or 13)
+        s["plc_trigger_reg"] = int(self.p_tri.text() or 12)
+        s["plc_result_reg"] = int(self.p_res.text() or 100)
+        s["plc_trigger_coil_reg"] = int(self.p_coil.text() or 1600)
+        s["delay_input_capture_ms"] = int(self.d1.text() or 0)
+        s["delay_result_trigger_ms"] = int(self.d2.text() or 0)
         s["detection_model"] = self.det_model.currentData()
         if s["camera_index"] == "ip":
             pid = self.ip_preset_combo.currentData()
