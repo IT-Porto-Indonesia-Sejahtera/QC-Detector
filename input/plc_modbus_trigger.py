@@ -265,7 +265,8 @@ class PLCModbusTrigger:
         
         Args:
             address: Register address to write to
-        """Write a value to a holding register"""
+            value: Value to write (0-65535)
+        """
         if not self.client:
             return False
         
@@ -302,7 +303,7 @@ class PLCModbusTrigger:
         try:
             slave = self.config.slave_id
             # pymodbus write_coil accepts address, value
-            result = self.client.write_coil(address, value, device_id=slave)
+            result = self.client.write_coil(address, value, unit=slave)
             
             if result.isError():
                 print(f"[PLC] Write error to coil {address}: {result}")
