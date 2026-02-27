@@ -221,12 +221,12 @@ class PresetProfileOverlay(BaseOverlay):
         btn_edit_font_size = UIScaling.scale_font(24)
         btn_edit.setFixedSize(btn_edit_size, btn_edit_size)
         btn_edit.setStyleSheet(f"border: none; font-size: {btn_edit_font_size}px; color: {self.theme['text_main']};")
-        btn_edit.clicked.connect(lambda _, p=profile: self.edit_profile(p))
+        btn_edit.clicked.connect(lambda _=False, p=profile: self.edit_profile(p))
         
         btn_del = QPushButton("🗑️")
         btn_del.setFixedSize(btn_edit_size, btn_edit_size)
         btn_del.setStyleSheet(f"border: none; font-size: {btn_edit_font_size}px; color: {self.theme['text_main']};")
-        btn_del.clicked.connect(lambda _, p=profile: self.delete_profile(p))
+        btn_del.clicked.connect(lambda _=False, p=profile: self.delete_profile(p))
         
         actions_layout.addWidget(btn_edit)
         actions_layout.addWidget(btn_del)

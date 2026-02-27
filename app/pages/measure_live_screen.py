@@ -1051,7 +1051,7 @@ class LiveCameraScreen(QWidget):
                 except ValueError:
                     global_idx = -1
                 
-                btn.clicked.connect(lambda _, idx=global_idx: self.on_preset_clicked(idx))
+                btn.clicked.connect(lambda _=False, idx=global_idx: self.on_preset_clicked(idx))
                 
                 if global_idx >= 0:
                     self.preset_buttons[global_idx] = btn
@@ -1152,6 +1152,12 @@ class LiveCameraScreen(QWidget):
             t_obj = getattr(self, 'sandal_thickness', 15.0)
             mm_px_corrected = self.mm_per_px * (h_cam - t_obj) / h_cam if h_cam > 0 else self.mm_per_px
             
+            # Determine detection method from combo box
+            selected_model = self.model_combo.currentData() if hasattr(self, 'model_combo') else self.detection_model
+            use_sam = selected_model == "sam"
+            use_yolo = selected_model == "yolo"
+            use_advanced = selected_model == "advanced"
+
             # Process with selected detection method
             results, processed = measure_live_sandals(
                 self.live_frame.copy(),
