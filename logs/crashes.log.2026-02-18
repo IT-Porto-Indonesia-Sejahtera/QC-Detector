@@ -1,0 +1,12 @@
+2026-02-18 11:02:34,032 - CRITICAL - main - Uncaught exception: <lambda>() missing 1 required positional argument: '_'
+TypeError: <lambda>() missing 1 required positional argument: '_'
+
+2026-02-18 11:04:59,733 - CRITICAL - main - Uncaught exception: <lambda>() missing 1 required positional argument: '_'
+TypeError: <lambda>() missing 1 required positional argument: '_'
+
+2026-02-18 11:05:06,761 - CRITICAL - main - Uncaught exception: <lambda>() missing 1 required positional argument: '_'
+TypeError: <lambda>() missing 1 required positional argument: '_'
+
+2026-02-18 11:05:19,006 - CRITICAL - main - Uncaught exception: <lambda>() missing 1 required positional argument: '_'
+TypeError: <lambda>() missing 1 required positional argument: '_'
+

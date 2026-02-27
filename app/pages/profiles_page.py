@@ -542,7 +542,7 @@ class ProfilesPage(QWidget):
                 }}
             """)
             
-            btn.clicked.connect(lambda _, p=p: self.load_editor(p))
+            btn.clicked.connect(lambda _=False, p=p: self.load_editor(p))
             self.profile_layout.addWidget(btn)
             
         self.profile_layout.addStretch()
@@ -633,7 +633,7 @@ class ProfilesPage(QWidget):
             for p in others:
                 name = p.get("name", "Untitled")
                 action = menu.addAction(name)
-                action.triggered.connect(lambda _, src=p: self.copy_from_profile(src))
+                action.triggered.connect(lambda _=False, src=p: self.copy_from_profile(src))
         
         menu.exec(self.btn_copy.mapToGlobal(QPoint(0, self.btn_copy.height())))
 
