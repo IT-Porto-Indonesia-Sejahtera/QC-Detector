@@ -44,8 +44,8 @@ class OmronModbusClient:
     def _default_config(self):
         """Konfigurasi default"""
         return {
-            "port": "COM3",
-            "baudrate": 9600,
+            "port": "/dev/ttyUSB0",
+            "baudrate": 115200,
             "parity": "E",
             "stopbits": 1,
             "bytesize": 8,

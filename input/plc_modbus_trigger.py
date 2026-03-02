@@ -143,7 +143,9 @@ class PLCModbusTrigger:
                         retries=self.config.retries
                     )
                 elif _PYMODBUS_V3_FRAMER:
-                    # v3.1+: explicit RTU framing
+                    # v3.1+: explicit RTU framing.
+                    # strict=False: don't enforce inter-character timing from baudrate
+                    # (default strict=True computes ~2ms limit at 115200 — Omron takes ~68ms)
                     self.client = ModbusSerialClient(
                         port=self.config.serial_port,
                         framer=FramerType.RTU,
@@ -152,7 +154,8 @@ class PLCModbusTrigger:
                         stopbits=self.config.stopbits,
                         bytesize=self.config.bytesize,
                         timeout=self.config.timeout,
-                        retries=self.config.retries
+                        retries=self.config.retries,
+                        strict=False
                     )
                 else:
                     # v3.0 early builds — RTU is default framer
@@ -163,7 +166,8 @@ class PLCModbusTrigger:
                         stopbits=self.config.stopbits,
                         bytesize=self.config.bytesize,
                         timeout=self.config.timeout,
-                        retries=self.config.retries
+                        retries=self.config.retries,
+                        strict=False
                     )
                 connection_str = f"{self.config.serial_port}"
             
