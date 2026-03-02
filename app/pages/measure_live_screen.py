@@ -1761,8 +1761,13 @@ class LiveCameraScreen(QWidget):
                 self.plc_triggered.emit()
     
     def on_plc_value_update(self, value):
-        """Called when PLC register value is read"""
-        print(f"[PLC] Register value: {value}")
+        """Called when PLC register value is read (addr 12 / plc_trigger_reg).
+        Intentionally silent for normal 0 readings to avoid console spam.
+        The _poll_loop already logs 0->1 and 1->0 transitions.
+        """
+        # Only surface unexpected non-zero values that didn't fire a trigger
+        if value not in (0, 1):
+            print(f"[{time.strftime('%H:%M:%S')}] [PLC] Unexpected reg value: {value} (expected 0 or 1)")
     
     def on_plc_connection_change(self, connected: bool, message: str):
         """Called when PLC connection status changes"""
