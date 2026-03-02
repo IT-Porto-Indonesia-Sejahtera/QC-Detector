@@ -96,6 +96,7 @@ config = ModbusConfig(
     register_type="holding",
     poll_interval_ms=10,
     timeout=3.0,
+    retries=0,  # No retries — let each read wait the full timeout
 )
 
 print(f"Port     : {config.serial_port}")

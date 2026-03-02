@@ -59,8 +59,11 @@ class ModbusConfig:
     register_address: int = 12  # Address of register to monitor
     register_type: str = "holding"  # "coil", "discrete_input", "holding", "input"
     
-    # Serial timeout (seconds to wait for PLC response)
+    # Serial timeout (seconds to wait for PLC response per byte)
     timeout: float = 3.0
+    # Modbus retries: 0 = no retries. Set to 0 if PLC responds slowly
+    # (retrying too fast floods the bus before the PLC has finished responding)
+    retries: int = 0
 
     # Trigger settings
     poll_interval_ms: int = 10  # Polling interval in milliseconds
@@ -135,7 +138,8 @@ class PLCModbusTrigger:
                         parity=self.config.parity,
                         stopbits=self.config.stopbits,
                         bytesize=self.config.bytesize,
-                        timeout=self.config.timeout
+                        timeout=self.config.timeout,
+                        retries=self.config.retries
                     )
                 elif _PYMODBUS_V3_FRAMER:
                     # v3.1+: pass FramerType.RTU explicitly to guarantee RTU framing
@@ -146,7 +150,8 @@ class PLCModbusTrigger:
                         parity=self.config.parity,
                         stopbits=self.config.stopbits,
                         bytesize=self.config.bytesize,
-                        timeout=self.config.timeout
+                        timeout=self.config.timeout,
+                        retries=self.config.retries
                     )
                 else:
                     # v3.0 early builds: RTU is default, just pass serial params
@@ -156,7 +161,8 @@ class PLCModbusTrigger:
                         parity=self.config.parity,
                         stopbits=self.config.stopbits,
                         bytesize=self.config.bytesize,
-                        timeout=self.config.timeout
+                        timeout=self.config.timeout,
+                        retries=self.config.retries
                     )
                 connection_str = f"{self.config.serial_port}"
             
