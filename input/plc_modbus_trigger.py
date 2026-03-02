@@ -17,12 +17,24 @@ try:
     try:
         # Pymodbus v3.x style
         from pymodbus.client import ModbusTcpClient, ModbusSerialClient
+        try:
+            # v3.1+ has FramerType enum for explicit RTU framing
+            from pymodbus.framer import FramerType
+            _PYMODBUS_V3_FRAMER = True
+        except ImportError:
+            # Older v3.0 builds — RTU is default, no FramerType needed
+            _PYMODBUS_V3_FRAMER = False
+        _PYMODBUS_V2 = False
     except ImportError:
         # Pymodbus v2.x style
         from pymodbus.client.sync import ModbusTcpClient, ModbusSerialClient
+        _PYMODBUS_V2 = True
+        _PYMODBUS_V3_FRAMER = False
     PYMODBUS_AVAILABLE = True
 except ImportError:
     PYMODBUS_AVAILABLE = False
+    _PYMODBUS_V2 = False
+    _PYMODBUS_V3_FRAMER = False
 
 
 @dataclass
@@ -114,14 +126,38 @@ class PLCModbusTrigger:
                 if not self.config.serial_port:
                     self._notify_connection(False, "Serial Port is empty")
                     return False
-                self.client = ModbusSerialClient(
-                    port=self.config.serial_port,
-                    baudrate=self.config.baudrate,
-                    parity=self.config.parity,
-                    stopbits=self.config.stopbits,
-                    bytesize=self.config.bytesize,
-                    timeout=self.config.timeout
-                )
+                if _PYMODBUS_V2:
+                    # v2.x requires method='rtu' explicitly
+                    self.client = ModbusSerialClient(
+                        method='rtu',
+                        port=self.config.serial_port,
+                        baudrate=self.config.baudrate,
+                        parity=self.config.parity,
+                        stopbits=self.config.stopbits,
+                        bytesize=self.config.bytesize,
+                        timeout=self.config.timeout
+                    )
+                elif _PYMODBUS_V3_FRAMER:
+                    # v3.1+: pass FramerType.RTU explicitly to guarantee RTU framing
+                    self.client = ModbusSerialClient(
+                        port=self.config.serial_port,
+                        framer=FramerType.RTU,
+                        baudrate=self.config.baudrate,
+                        parity=self.config.parity,
+                        stopbits=self.config.stopbits,
+                        bytesize=self.config.bytesize,
+                        timeout=self.config.timeout
+                    )
+                else:
+                    # v3.0 early builds: RTU is default, just pass serial params
+                    self.client = ModbusSerialClient(
+                        port=self.config.serial_port,
+                        baudrate=self.config.baudrate,
+                        parity=self.config.parity,
+                        stopbits=self.config.stopbits,
+                        bytesize=self.config.bytesize,
+                        timeout=self.config.timeout
+                    )
                 connection_str = f"{self.config.serial_port}"
             
             if self.client.connect():

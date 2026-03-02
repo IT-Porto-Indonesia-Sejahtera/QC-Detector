@@ -1,155 +1,283 @@
+"""
+PLC Modbus RTU Debugger / Test Tool
+=====================================
+Usage:
+    python test_plc_modbus.py [port] [slave_id] [parity] [baudrate]
+
+Examples:
+    python test_plc_modbus.py COM3
+    python test_plc_modbus.py COM3 1 E 9600
+    python test_plc_modbus.py COM3 1 N 115200
+
+If connection succeeds, it polls Reg 12 continuously and shows live values.
+If connection fails, it auto-scans all common baudrate / parity / slave-ID combos.
+"""
+
 import sys
-import serial.tools.list_ports
-import random
 import time
+import random
+
+try:
+    import serial.tools.list_ports
+    SERIAL_TOOLS_AVAILABLE = True
+except ImportError:
+    SERIAL_TOOLS_AVAILABLE = False
 
 from input.plc_modbus_trigger import (
-    ModbusConfig, PLCModbusTrigger, check_pymodbus_available
+    ModbusConfig, PLCModbusTrigger, check_pymodbus_available,
+    _PYMODBUS_V2, _PYMODBUS_V3_FRAMER
 )
 
-# Check if pymodbus is installed
+# ─────────────────────────────────────────────
+# 1. Sanity checks
+# ─────────────────────────────────────────────
 if not check_pymodbus_available():
     print("ERROR: pymodbus is not installed!")
-    print("Please run: pip install pymodbus")
-    exit(1)
+    print("Run: pip install pymodbus")
+    sys.exit(1)
+
+try:
+    import pymodbus
+    _pmv = pymodbus.__version__
+except Exception:
+    _pmv = "unknown"
+
+if _PYMODBUS_V2:
+    _framing_info = f"v2.x — using method='rtu'"
+elif _PYMODBUS_V3_FRAMER:
+    _framing_info = f"v3.1+ (FramerType.RTU) — explicit RTU framing"
+else:
+    _framing_info = f"v3.0 — RTU is default framer"
+
+print(f"pymodbus {_pmv}  [{_framing_info}]")
+
 
 def list_serial_ports():
-    ports = serial.tools.list_ports.comports()
+    if not SERIAL_TOOLS_AVAILABLE:
+        print("  (serial.tools.list_ports not available - install pyserial)")
+        return
+    ports = list(serial.tools.list_ports.comports())
     print("\nAvailable Serial Ports:")
     if not ports:
-        print("  (None found)")
-    for port, desc, hwid in sorted(ports):
-        print(f"  - {port}: {desc}")
-    print("")
+        print("  (None found — check USB cable / driver)")
+    for port in sorted(ports):
+        print(f"  - {port.device}: {port.description}  [{port.hwid}]")
+    print()
 
 list_serial_ports()
 
-print("=" * 60)
-print("PLC Modbus RTU Debugger Tool")
-print("=" * 60)
+print("=" * 65)
+print("  PLC Modbus RTU Debugger")
+print("=" * 65)
 
-# CONFIGURATION
-target_port = "/dev/ttyUSB1" 
-slave_id = 1
-parity = "E"
+# ─────────────────────────────────────────────
+# 2. Config from CLI args
+# ─────────────────────────────────────────────
+target_port  = sys.argv[1] if len(sys.argv) > 1 else "COM3"
+slave_id     = int(sys.argv[2]) if len(sys.argv) > 2 else 1
+parity       = sys.argv[3].upper() if len(sys.argv) > 3 else "E"
+baudrate     = int(sys.argv[4]) if len(sys.argv) > 4 else 115200
 
-if len(sys.argv) > 1:
-    target_port = sys.argv[1]
-if len(sys.argv) > 2:
-    slave_id = int(sys.argv[2])
-if len(sys.argv) > 3:
-    parity = sys.argv[3].upper() # N, E, or O
-
-# Default addresses per new requirements
-TRIGGER_REG = 12
-RESULT_REG = 100
-COIL_TRIG = 1600
-
-# Delays for testing
-PRE_CAPTURE_DELAY = 0.0 
-POST_RESULT_DELAY = 0.0
+TRIGGER_REG  = 12
+RESULT_REG   = 100
+COIL_TRIG    = 1600
+PRE_CAPTURE_DELAY  = 0.0
+POST_RESULT_DELAY  = 0.0
 
 config = ModbusConfig(
     connection_type="rtu",
     serial_port=target_port,
-    baudrate=115200,
+    baudrate=baudrate,
     parity=parity,
     stopbits=1,
     bytesize=8,
     slave_id=slave_id,
     register_address=TRIGGER_REG,
     register_type="holding",
-    poll_interval_ms=10
+    poll_interval_ms=10,
+    timeout=3.0,
 )
 
-print(f"Port: {config.serial_port} | Baud: {config.baudrate} | Parity: {config.parity} | Slave ID: {slave_id}")
-print(f"Trigger Reg (R): {TRIGGER_REG}")
-print(f"Result Reg (W): {RESULT_REG}")
-print(f"Coil Trig (W): {COIL_TRIG}")
-print("-" * 60)
+print(f"Port     : {config.serial_port}")
+print(f"Baudrate : {config.baudrate}")
+print(f"Parity   : {config.parity}  (N=None, E=Even, O=Odd)")
+print(f"Stopbits : {config.stopbits}")
+print(f"Slave ID : {slave_id}")
+print(f"Trigger Reg (Read) : D{TRIGGER_REG}  →  Modbus holding addr {TRIGGER_REG}")
+print(f"Result  Reg (Write): D{RESULT_REG}")
+print(f"Result  Coil (Pulse): CIO 100.00 → Coil {COIL_TRIG}")
+print("-" * 65)
 
-trigger = PLCModbusTrigger(config)
-
+# ─────────────────────────────────────────────
+# 3. Callbacks
+# ─────────────────────────────────────────────
 def on_trigger():
-    print(f"\n[DEBUG] {time.strftime('%H:%M:%S')} >>> PLC TRIGGER DETECTED (Reg {TRIGGER_REG} = 1)")
-    
-    # 1. Simulate Pre-Capture Delay
-    print(f"[DEBUG] Waiting {PRE_CAPTURE_DELAY}s (Pre-Capture)...")
+    print(f"\n[TRIGGER] {time.strftime('%H:%M:%S')} >>> Reg {TRIGGER_REG} = 1  (rising edge!)")
+    print(f"[TRIGGER]  Pre-capture delay: {PRE_CAPTURE_DELAY}s")
     time.sleep(PRE_CAPTURE_DELAY)
-    
-    # 2. Simulate Capture & Logic
+
     is_good = random.choice([True, False])
-    val = random.randint(1, 4) if is_good else random.randint(5, 8)
-    res_str = "GOOD" if is_good else "BAD"
-    
-    # 3. Write Result
-    print(f"[DEBUG] Writing {res_str} result ({val}) to Register {RESULT_REG}...")
+    val     = random.randint(1, 4) if is_good else random.randint(5, 8)
+    label   = "GOOD" if is_good else "BAD"
+
+    print(f"[TRIGGER]  Writing result {label} ({val}) → Reg {RESULT_REG}")
     if trigger.write_register(RESULT_REG, val):
-        print(f"[DEBUG] Result written successfully.")
-    
-    # 4. Post-Result Delay
-    print(f"[DEBUG] Waiting {POST_RESULT_DELAY}s (Post-Result)...")
+        print(f"[TRIGGER]  Write OK.")
+    else:
+        print(f"[TRIGGER]  Write FAILED.")
+
     time.sleep(POST_RESULT_DELAY)
-    
-    # 5. Pulse Coil
-    print(f"[DEBUG] Sending Pulse to Coil {COIL_TRIG}...")
+
+    print(f"[TRIGGER]  Pulsing Coil {COIL_TRIG} HIGH for 500ms...")
     if trigger.write_coil(COIL_TRIG, True):
-        time.sleep(0.5) # Holding pulse for 500ms
+        time.sleep(0.5)
         trigger.write_coil(COIL_TRIG, False)
-        print(f"[DEBUG] Coil pulse complete.")
-    
-    print("-" * 30)
-    print("READY FOR NEXT TRIGGER")
-    print("-" * 30)
+        print(f"[TRIGGER]  Coil pulse done.")
+    else:
+        print(f"[TRIGGER]  Coil write FAILED.")
+
+    print("-" * 30 + " READY " + "-" * 30)
+
 
 def on_value_update(value):
-    # This prints every single poll result to show the connection is alive
-    print(f"[{time.strftime('%H:%M:%S')}] Polling Reg {TRIGGER_REG}... Value: {value}", end='\r')
+    # Printed inline so it doesn't spam the terminal
+    print(f"[{time.strftime('%H:%M:%S')}]  Reg {TRIGGER_REG} = {value}          ", end='\r')
 
-trigger.on_trigger = on_trigger
-trigger.on_value_update = on_value_update
+
+def on_connection_change(connected: bool, message: str):
+    marker = "✓ CONNECTED" if connected else "✗ DISCONNECTED"
+    print(f"\n[CONN]  {marker}  — {message}")
+
+
+# ─────────────────────────────────────────────
+# 4. Wire callbacks and attempt connection
+# ─────────────────────────────────────────────
+trigger = PLCModbusTrigger(config)
+trigger.on_trigger           = on_trigger
+trigger.on_value_update      = on_value_update
 trigger.on_connection_change = on_connection_change
 
-print("\nAttempting to connect...")
-if trigger.connect():
-    print("\n" + "=" * 60)
-    print("CONNECTION SUCCESSFUL! Polling for triggers...")
-    print("Use command line args to change settings: python3 test_plc_modbus.py [port] [slave_id] [parity]")
-    print(f"Example: python3 test_plc_modbus.py {target_port} 1 N")
-    print("=" * 60)
-    
+print("\nAttempting connection...")
+t0 = time.time()
+connected = trigger.connect()
+elapsed_ms = (time.time() - t0) * 1000
+print(f"Connection attempt took {elapsed_ms:.0f}ms")
+
+if connected:
+    # ── LIVE POLLING MODE ──────────────────────────────────────────────────
+    print()
+    print("=" * 65)
+    print("  CONNECTION OK  —  polling for triggers (Ctrl+C to stop)")
+    print("=" * 65)
+    print()
+
+    # One-shot diagnostic read BEFORE starting the thread so we can see timing
+    print("[DIAG]  Doing a single manual read to check response time...")
+    t1 = time.time()
+    val = trigger._read_register()
+    t2 = time.time()
+    rtt_ms = (t2 - t1) * 1000
+    if val is not None:
+        print(f"[DIAG]  OK  — Reg {TRIGGER_REG} = {val}  (RTT: {rtt_ms:.1f}ms)")
+    else:
+        print(f"[DIAG]  WARNING: read returned None after {rtt_ms:.1f}ms")
+        print(f"[DIAG]  Port opened, but PLC is not ACK-ing Modbus requests.")
+        print(f"[DIAG]  Possible causes:")
+        print(f"         1. Wrong slave ID  (current: {slave_id}) — try 0")
+        print(f"         2. Wrong parity   (current: {parity}) — try N or O")
+        print(f"         3. Wrong register type — holding vs input")
+        print(f"         4. RS-485 wiring: A/B lines may be swapped")
+        print(f"         5. PLC Modbus function not enabled in CX-Programmer")
+        print(f"         6. Register D{TRIGGER_REG} may not exist on this PLC model")
+        print()
+
     trigger.start()
-    
+
     try:
         while True:
             time.sleep(1)
     except KeyboardInterrupt:
-        print("\nStopping...")
+        print("\n\nStopping...")
         trigger.stop()
         trigger.disconnect()
-        print("Done.")
+        print("Disconnected. Done.")
+
 else:
-    print("\nCONNECTION FAILED! Let's try to SCAN available settings...")
-    print("-" * 30)
-    
+    # ── AUTO SCAN MODE ─────────────────────────────────────────────────────
+    print()
+    print("─── Connection failed. Starting auto-scan... ───")
+    print("(This tries every common baudrate × parity × slave-ID combo)")
+    print()
+
+    BAUDRATES  = [9600, 19200, 38400, 57600, 115200]
+    PARITIES   = ["E", "N", "O"]
+    SLAVE_IDS  = [1, 0, 2, 3]
+
+    total = len(BAUDRATES) * len(PARITIES) * len(SLAVE_IDS)
+    tried = 0
     found = False
-    for test_id in [1, 2, 0, 3]:
-        for test_parity in ["E", "N"]:
-            print(f"Scanning: ID {test_id}, Parity {test_parity}...", end='\r')
-            config.slave_id = test_id
-            config.parity = test_parity
-            test_trigger = PLCModbusTrigger(config)
-            if test_trigger.connect():
-                val = test_trigger._read_register()
-                if val is not None:
-                    print(f"\n[FOUND!] PLC is responding on: ID {test_id}, Parity {test_parity}")
-                    print(f"Current Value of Reg {TRIGGER_REG}: {val}")
-                    print(f"Please use these settings in the app!")
-                    found = True
-                    test_trigger.disconnect()
-                    break
-                test_trigger.disconnect()
-        if found: break
-    
+
+    for baud in BAUDRATES:
+        if found:
+            break
+        for par in PARITIES:
+            if found:
+                break
+            for sid in SLAVE_IDS:
+                tried += 1
+                cfg = ModbusConfig(
+                    connection_type="rtu",
+                    serial_port=target_port,
+                    baudrate=baud,
+                    parity=par,
+                    stopbits=1,
+                    bytesize=8,
+                    slave_id=sid,
+                    register_address=TRIGGER_REG,
+                    register_type="holding",
+                    timeout=1.5,  # shorter timeout for scan speed
+                )
+                label = f"Baud={baud:>6}  Parity={par}  SlaveID={sid}"
+                print(f"  [{tried:>3}/{total}] Trying {label} ...", end='', flush=True)
+
+                t_scan = time.time()
+                scan_trigger = PLCModbusTrigger(cfg)
+                ok = scan_trigger.connect()
+                if ok:
+                    val = scan_trigger._read_register()
+                    elapsed = (time.time() - t_scan) * 1000
+                    if val is not None:
+                        print(f"  ✓  FOUND! Reg {TRIGGER_REG} = {val}  ({elapsed:.0f}ms)")
+                        print()
+                        print("=" * 65)
+                        print(f"  PLC FOUND with these settings:")
+                        print(f"    Port     : {target_port}")
+                        print(f"    Baudrate : {baud}")
+                        print(f"    Parity   : {par}")
+                        print(f"    Slave ID : {sid}")
+                        print(f"  Update your app settings to match the above!")
+                        print("=" * 65)
+                        found = True
+                        scan_trigger.disconnect()
+                        break
+                    else:
+                        print(f"  ~ Port opened, no Modbus reply  ({elapsed:.0f}ms)")
+                else:
+                    elapsed = (time.time() - t_scan) * 1000
+                    print(f"  ✗  Port open failed  ({elapsed:.0f}ms)")
+                scan_trigger.disconnect()
+
     if not found:
-        print("\nScan failed. Please check your Wiring (Swap RS485 A/B) or Baudrate (currently 9600).")
+        print()
+        print("=" * 65)
+        print("  SCAN COMPLETE — PLC not responding on any setting.")
+        print()
+        print("  Hardware checklist:")
+        print("   [?] Is the USB-Serial adapter showing in Device Manager?")
+        print("   [?] Is the PLC powered ON?")
+        print("   [?] Are TX/RX (or A/B for RS-485) wired correctly?")
+        print("       Try swapping A ↔ B on the RS-485 terminal block.")
+        print("   [?] Is the PLC Modbus slave function enabled?")
+        print("       Check CX-Programmer: PLC Settings → Serial Port")
+        print("   [?] Does the PLC use RS-232 or RS-485? Check cable spec.")
+        print("=" * 65)
