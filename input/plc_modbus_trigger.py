@@ -178,15 +178,26 @@ class PLCModbusTrigger:
     
     def _poll_loop(self):
         """Main loop polling the PLC register"""
-        while self.running and self.client:
+        consecutive_errors = 0
+        MAX_CONSECUTIVE_ERRORS = 5
+        
+        while self.running:
+            # If client was lost, try to reconnect
+            if not self.client:
+                print(f"[{time.strftime('%H:%M:%S')}] [PLC] No client - attempting reconnect...")
+                if not self.connect():
+                    time.sleep(2.0)  # Wait before retry
+                    continue
+
             try:
                 value = self._read_register()
                 
                 if value is not None:
+                    consecutive_errors = 0  # Reset error counter on success
                     # Only log if value is 1 (trigger) or if it changes back to 0
                     if value == 1 or (value == 0 and self.last_value == 1):
-                         print(f"[{time.strftime('%H:%M:%S')}] [PLC] Reg {self.config.register_address} current value: {value}")
-                    # Notify value update (silent - no print for trigger register)
+                        print(f"[{time.strftime('%H:%M:%S')}] [PLC] Reg {self.config.register_address} value: {value} (was: {self.last_value})")
+                    # Notify value update
                     if self.on_value_update:
                         self.on_value_update(value)
                     
@@ -196,23 +207,47 @@ class PLCModbusTrigger:
                             self._fire_trigger()
                     
                     self.last_value = value
-                    
+                else:
+                    # Read returned None — count as a soft error
+                    consecutive_errors += 1
+                    if consecutive_errors >= MAX_CONSECUTIVE_ERRORS:
+                        print(f"[{time.strftime('%H:%M:%S')}] [PLC] {consecutive_errors} consecutive failed reads on Reg {self.config.register_address} (addr {self.config.register_address}, slave {self.config.slave_id}) - disconnecting for reconnect")
+                        self._notify_connection(False, f"Too many read failures on reg {self.config.register_address}")
+                        try:
+                            self.client.close()
+                        except Exception:
+                            pass
+                        self.client = None
+                        consecutive_errors = 0
+                        time.sleep(2.0)
+                        continue
+                        
             except Exception as e:
-                print(f"Modbus read error: {e}")
+                consecutive_errors += 1
+                print(f"[{time.strftime('%H:%M:%S')}] [PLC] Poll exception (#{consecutive_errors}): {type(e).__name__}: {e}")
                 self._notify_connection(False, f"Read error: {str(e)}")
-                break
+                if consecutive_errors >= MAX_CONSECUTIVE_ERRORS:
+                    print(f"[{time.strftime('%H:%M:%S')}] [PLC] Too many exceptions - resetting connection")
+                    try:
+                        self.client.close()
+                    except Exception:
+                        pass
+                    self.client = None
+                    consecutive_errors = 0
+                    time.sleep(2.0)
+                    continue
             
             time.sleep(self.config.poll_interval_ms / 1000.0)
     
     def _read_register(self) -> Optional[int]:
         """Read the configured register from PLC"""
         if not self.client:
+            print(f"[PLC] _read_register: client is None (reg={self.config.register_address}, slave={self.config.slave_id})")
             return None
         
         try:
             reg_type = self.config.register_type.lower()
             address = self.config.register_address
-            slave = self.config.slave_id
             
             if reg_type == "coil":
                 result = self._safe_modbus_call(self.client.read_coils, address, count=1)
@@ -223,21 +258,37 @@ class PLCModbusTrigger:
             elif reg_type == "input":
                 result = self._safe_modbus_call(self.client.read_input_registers, address, count=1)
             else:
-                print(f"Unknown register type: {reg_type}")
+                print(f"[PLC] Unknown register type: {reg_type}")
                 return None
             
-            if result.isError():
-                print(f"Modbus error: {result}")
+            # Bug fix: result can be None or an Exception (not just an error response)
+            if result is None:
+                print(f"[PLC] _read_register: got None result for addr={address}, type={reg_type}, slave={self.config.slave_id}")
+                return None
+            
+            # pymodbus can return an exception object (not raise it) for some error types
+            if isinstance(result, Exception):
+                print(f"[PLC] _read_register: exception object in result for addr={address}: {result}")
+                return None
+            
+            if hasattr(result, 'isError') and result.isError():
+                print(f"[PLC] _read_register: Modbus error response for addr={address}, type={reg_type}, slave={self.config.slave_id}: {result}")
                 return None
             
             # Get value based on register type
             if reg_type in ("coil", "discrete_input"):
+                if not hasattr(result, 'bits') or not result.bits:
+                    print(f"[PLC] _read_register: no bits in result for addr={address}")
+                    return None
                 return 1 if result.bits[0] else 0
             else:
+                if not hasattr(result, 'registers') or not result.registers:
+                    print(f"[PLC] _read_register: no registers in result for addr={address}")
+                    return None
                 return result.registers[0]
                 
         except Exception as e:
-            print(f"Register read error: {e}")
+            print(f"[PLC] _read_register exception for addr={self.config.register_address}, type={self.config.register_type}, slave={self.config.slave_id}: {type(e).__name__}: {e}")
             return None
     
     def _fire_trigger(self):
@@ -339,23 +390,32 @@ class PLCModbusTrigger:
             The register value, or None if read failed
         """
         if not self.client:
-            print(f"[PLC] Cannot read - not connected")
+            print(f"[PLC] read_any_register: Cannot read addr={address} - not connected")
             return None
         
         try:
-            slave = self.config.slave_id
-            result = self.client.read_holding_registers(address, count=1, device_id=slave)
+            # Bug fix: was using hardcoded 'device_id' which is invalid in all pymodbus versions.
+            # Use _safe_modbus_call to handle v2/v3 compatibility automatically.
+            result = self._safe_modbus_call(self.client.read_holding_registers, address, count=1)
             
-            if result.isError():
-                print(f"[PLC] Read error from register {address}: {result}")
+            if result is None or isinstance(result, Exception):
+                print(f"[PLC] read_any_register: bad result from addr={address}: {result}")
+                return None
+            
+            if hasattr(result, 'isError') and result.isError():
+                print(f"[PLC] read_any_register: Modbus error from addr={address}: {result}")
+                return None
+            
+            if not hasattr(result, 'registers') or not result.registers:
+                print(f"[PLC] read_any_register: no registers in result for addr={address}")
                 return None
             
             value = result.registers[0]
-            print(f"[PLC] Read register {address} = {value}")
+            print(f"[PLC] read_any_register: addr={address} = {value}")
             return value
             
         except Exception as e:
-            print(f"[PLC] Read exception: {e}")
+            print(f"[PLC] read_any_register exception for addr={address}: {type(e).__name__}: {e}")
             return None
 
 
