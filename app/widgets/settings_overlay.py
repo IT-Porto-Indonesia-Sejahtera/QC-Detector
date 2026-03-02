@@ -205,7 +205,7 @@ class SettingsOverlay(BaseOverlay):
         self.plc_coil_input.setText(str(s.get("plc_trigger_coil_reg", 1600)))
         self.plc_slave_input.setText(str(s.get("plc_slave_id", 1)))
         self.plc_parity_input.setText(str(s.get("plc_parity", "E")))
-        self.plc_baud_input.setText(str(s.get("plc_baudrate", 115200)))
+        self.plc_baud_input.setText(str(s.get("plc_baudrate", 9600)))
         self.plc_poll_input.setText(str(s.get("plc_poll_interval", 10)))
         
         self.delay_input_capture.setText(str(s.get("delay_input_capture_ms", 0)))
@@ -990,7 +990,7 @@ class SettingsOverlay(BaseOverlay):
             self.settings["plc_trigger_coil_reg"] = int(self.plc_coil_input.text().strip() or 1600)
             self.settings["plc_slave_id"] = int(self.plc_slave_input.text() or 1)
             self.settings["plc_parity"] = self.plc_parity_input.text().strip() or "E"
-            self.settings["plc_baudrate"] = int(self.plc_baud_input.text() or 115200)
+            self.settings["plc_baudrate"] = int(self.plc_baud_input.text() or 9600)
             self.settings["plc_poll_interval"] = int(self.plc_poll_input.text() or 10)
             self.settings["delay_input_capture_ms"] = int(self.delay_input_capture.text().strip() or 0)
             self.settings["delay_result_trigger_ms"] = int(self.delay_result_trigger.text().strip() or 0)

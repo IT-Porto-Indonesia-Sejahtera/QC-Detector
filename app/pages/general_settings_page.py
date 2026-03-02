@@ -347,7 +347,7 @@ class GeneralSettingsPage(QWidget):
         
         self.p_slave.setText(str(s.get("plc_slave_id", 1)))
         self.p_parity.setText(str(s.get("plc_parity", "E")))
-        self.p_baud.setText(str(s.get("plc_baudrate", 115200)))
+        self.p_baud.setText(str(s.get("plc_baudrate", 9600)))
         self.p_poll.setText(str(s.get("plc_poll_interval", 10)))
         
         self.d1.setText(str(s.get("delay_input_capture_ms", 0)))
@@ -515,7 +515,7 @@ class GeneralSettingsPage(QWidget):
         s["plc_trigger_coil_reg"] = int(self.p_coil.text() or 1600)
         s["plc_slave_id"] = int(self.p_slave.text() or 1)
         s["plc_parity"] = self.p_parity.text() or "E"
-        s["plc_baudrate"] = int(self.p_baud.text() or 115200)
+        s["plc_baudrate"] = int(self.p_baud.text() or 9600)
         s["plc_poll_interval"] = int(self.p_poll.text() or 10)
         s["delay_input_capture_ms"] = int(self.d1.text() or 0)
         s["delay_result_trigger_ms"] = int(self.d2.text() or 0)

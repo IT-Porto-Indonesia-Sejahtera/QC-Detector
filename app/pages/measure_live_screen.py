@@ -475,7 +475,7 @@ class LiveCameraScreen(QWidget):
             self.sensor_port = self.settings.get("sensor_port", "")
             self.plc_slave_id = int(self.settings.get("plc_slave_id", 1))
             self.plc_parity = self.settings.get("plc_parity", "E")
-            self.plc_baudrate = int(self.settings.get("plc_baudrate", 115200))
+            self.plc_baudrate = int(self.settings.get("plc_baudrate", 9600))
             self.plc_poll_interval = int(self.settings.get("plc_poll_interval", 10))
             self.plc_trigger_reg = int(self.settings.get("plc_trigger_reg", 12))
             self.plc_result_reg = int(self.settings.get("plc_result_reg", 100))
@@ -503,7 +503,7 @@ class LiveCameraScreen(QWidget):
             self.plc_result_reg = 100
             self.plc_slave_id = 1
             self.plc_parity = "E"
-            self.plc_baudrate = 115200
+            self.plc_baudrate = 9600
             self.plc_poll_interval = 10
 
     def setup_minimal_layout(self):

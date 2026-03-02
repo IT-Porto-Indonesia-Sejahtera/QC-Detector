@@ -44,8 +44,8 @@ class OmronModbusClient:
     def _default_config(self):
         """Konfigurasi default"""
         return {
-            "port": "/dev/ttyUSB0",
-            "baudrate": 115200,
+            "port": "/dev/cu.usbserial-14320",
+            "baudrate": 9600,
             "parity": "E",
             "stopbits": 1,
             "bytesize": 8,
@@ -228,10 +228,19 @@ class OmronModbusClient:
             time.sleep(0.5)
             
             # 4. Kirim Pulse Low ke CIO 100.00
-            print(f"[LOGIC] Mengirim Pulse LOW ke CIO 100.00 (Coil {cio_100_00_addr})...")
+            print(f"[LOGIC] Mengirim Pulse LOW ke CIO 100.00 (Coil {cio_100_00_addr})...", flush=True)
             self.write_coil(cio_100_00_addr, False)
             
-            print("[LOGIC] Selesai.")
+            # 5. Diagnostic Read D12 and D100
+            print(f"\n[DIAG] Mencoba membaca D12 (Trigger)...", flush=True)
+            val12 = self.read_holding_register(12)
+            print(f"       Hasil pembacaan D12: {val12}", flush=True)
+
+            print(f"\n[DIAG] Mencoba membaca D100 (Result)...", flush=True)
+            val100 = self.read_holding_register(100)
+            print(f"       Hasil pembacaan D100: {val100}", flush=True)
+            
+            print("\n[LOGIC] Selesai.", flush=True)
             
         except Exception as e:
             logger.error(f"Error saat random pulse: {e}")

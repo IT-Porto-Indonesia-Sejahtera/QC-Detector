@@ -16,7 +16,7 @@
 
 #define TRIG_PIN 5
 #define ECHO_PIN 18
-#define BAUD_RATE 115200
+#define BAUD_RATE 9600
 
 void setup() {
   Serial.begin(BAUD_RATE);

@@ -49,7 +49,7 @@ class ModbusConfig:
     
     # RTU (Serial) settings
     serial_port: str = ""  # Let it be empty for manual entry or discovery
-    baudrate: int = 115200
+    baudrate: int = 9600
     parity: str = "E"  # N, E, O
     stopbits: int = 1
     bytesize: int = 8
@@ -132,6 +132,7 @@ class PLCModbusTrigger:
                     return False
                 if _PYMODBUS_V2:
                     # v2.x requires method='rtu' explicitly
+                    # v2.5.3 DOES NOT take 'retries' in the constructor (it uses default or per-request)
                     self.client = ModbusSerialClient(
                         method='rtu',
                         port=self.config.serial_port,
@@ -139,8 +140,7 @@ class PLCModbusTrigger:
                         parity=self.config.parity,
                         stopbits=self.config.stopbits,
                         bytesize=self.config.bytesize,
-                        timeout=self.config.timeout,
-                        retries=self.config.retries
+                        timeout=self.config.timeout
                     )
                 elif _PYMODBUS_V3_FRAMER:
                     # v3.1+: explicit RTU framing.
@@ -349,16 +349,12 @@ class PLCModbusTrigger:
     def _safe_modbus_call(self, func, *args, **kwargs):
         """Helper to try both 'slave' and 'unit' keywords for compatibility"""
         slave_id = self.config.slave_id
-        try:
-            # Try 'slave' first (Pymodbus v3.x style)
+        
+        # Explicitly use the correct keyword based on version detection
+        if _PYMODBUS_V2:
+            return func(*args, **kwargs, unit=slave_id)
+        else:
             return func(*args, **kwargs, slave=slave_id)
-        except TypeError:
-            try:
-                # Try 'unit' (Pymodbus v2.x style)
-                return func(*args, **kwargs, unit=slave_id)
-            except TypeError:
-                # Some versions might use 'device_id' or no keyword
-                return func(*args, **kwargs)
 
     def _notify_connection(self, connected: bool, message: str):
         """Notify connection status change"""

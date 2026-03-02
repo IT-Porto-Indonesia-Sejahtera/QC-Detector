@@ -73,10 +73,23 @@ print("=" * 65)
 # ─────────────────────────────────────────────
 # 2. Config from CLI args
 # ─────────────────────────────────────────────
-target_port  = sys.argv[1] if len(sys.argv) > 1 else "COM3"
-slave_id     = int(sys.argv[2]) if len(sys.argv) > 2 else 1
-parity       = sys.argv[3].upper() if len(sys.argv) > 3 else "E"
-baudrate     = int(sys.argv[4]) if len(sys.argv) > 4 else 115200
+args = sys.argv[1:]
+target_port = "COM3"
+slave_id    = 1
+parity      = "E"
+baudrate    = 115200
+
+for arg in args:
+    if arg.startswith("/dev/") or arg.startswith("COM"):
+        target_port = arg
+    elif arg.upper() in ["E", "N", "O"]:
+        parity = arg.upper()
+    elif arg.isdigit():
+        val = int(arg)
+        if val > 255:
+            baudrate = val
+        else:
+            slave_id = val
 
 TRIGGER_REG  = 12
 RESULT_REG   = 100
@@ -165,45 +178,36 @@ elapsed_ms = (time.time() - t0) * 1000
 print(f"Connection attempt took {elapsed_ms:.0f}ms")
 
 if connected:
-    # ── LIVE POLLING MODE ──────────────────────────────────────────────────
-    print()
-    print("=" * 65)
-    print("  CONNECTION OK  —  polling for triggers (Ctrl+C to stop)")
-    print("=" * 65)
-    print()
-
-    # One-shot diagnostic read BEFORE starting the thread so we can see timing
-    print("[DIAG]  Doing a single manual read to check response time...")
+    # One-shot diagnostic read BEFORE starting the thread
+    print("\n[DIAG]  Doing a single manual read to check response time...")
     t1 = time.time()
     val = trigger._read_register()
     t2 = time.time()
     rtt_ms = (t2 - t1) * 1000
+
     if val is not None:
         print(f"[DIAG]  OK  — Reg {TRIGGER_REG} = {val}  (RTT: {rtt_ms:.1f}ms)")
+        print("\n" + "=" * 65)
+        print("  CONNECTION OK  —  polling for triggers (Ctrl+C to stop)")
+        print("=" * 65 + "\n")
+        
+        try:
+            trigger.start()
+            while True:
+                time.sleep(1)
+        except KeyboardInterrupt:
+            print("\n\nStopping...")
+            trigger.stop()
+            trigger.disconnect()
+            print("Disconnected. Done.")
+            sys.exit(0)
     else:
-        print(f"[DIAG]  WARNING: read returned None after {rtt_ms:.1f}ms")
-        print(f"[DIAG]  Port opened, but PLC is not ACK-ing Modbus requests.")
-        print(f"[DIAG]  Possible causes:")
-        print(f"         1. Wrong slave ID  (current: {slave_id}) — try 0")
-        print(f"         2. Wrong parity   (current: {parity}) — try N or O")
-        print(f"         3. Wrong register type — holding vs input")
-        print(f"         4. RS-485 wiring: A/B lines may be swapped")
-        print(f"         5. PLC Modbus function not enabled in CX-Programmer")
-        print(f"         6. Register D{TRIGGER_REG} may not exist on this PLC model")
-        print()
-
-    trigger.start()
-
-    try:
-        while True:
-            time.sleep(1)
-    except KeyboardInterrupt:
-        print("\n\nStopping...")
-        trigger.stop()
+        print(f"[DIAG]  TIMEOUT — No response from PLC (after {rtt_ms:.1f}ms)")
+        print("[DIAG]  Port is open but PLC is silent. Will try auto-scanning...")
         trigger.disconnect()
-        print("Disconnected. Done.")
+        connected = False # Fall through to auto-scan
 
-else:
+if not connected:
     # ── AUTO SCAN MODE ─────────────────────────────────────────────────────
     print()
     print("─── Connection failed. Starting auto-scan... ───")
