@@ -154,8 +154,7 @@ class PLCModbusTrigger:
                         stopbits=self.config.stopbits,
                         bytesize=self.config.bytesize,
                         timeout=self.config.timeout,
-                        retries=self.config.retries,
-                        strict=False
+                        retries=self.config.retries
                     )
                 else:
                     # v3.0 early builds — RTU is default framer
@@ -166,8 +165,7 @@ class PLCModbusTrigger:
                         stopbits=self.config.stopbits,
                         bytesize=self.config.bytesize,
                         timeout=self.config.timeout,
-                        retries=self.config.retries,
-                        strict=False
+                        retries=self.config.retries
                     )
                 connection_str = f"{self.config.serial_port}"
             
