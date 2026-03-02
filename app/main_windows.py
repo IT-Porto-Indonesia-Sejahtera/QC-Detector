@@ -10,6 +10,10 @@ from app.pages.measure_live_screen import LiveCameraScreen
 from app.pages.capture_dataset_screen import CaptureDatasetScreen
 from app.pages.general_settings_page import GeneralSettingsPage
 from app.pages.profiles_page import ProfilesPage
+from app.pages.preset_list_page import PresetListPage
+from app.pages.preset_detail_page import PresetDetailPage
+from app.pages.report_list_page import ReportListPage
+from app.pages.report_detail_page import ReportDetailPage
 from app.utils.fetch_logger import log_info, log_error, log_warning
 from project_utilities.json_utility import JsonUtility
 
@@ -33,6 +37,10 @@ class MainWindow(QWidget):
         self.dataset_page = CaptureDatasetScreen(parent=self)
         self.settings_page = GeneralSettingsPage(controller=self)
         self.profiles_page = ProfilesPage(controller=self)
+        self.preset_list_page = PresetListPage(controller=self)
+        self.preset_detail_page = PresetDetailPage(controller=self)
+        self.report_list_page = ReportListPage(controller=self)
+        self.report_detail_page = ReportDetailPage(controller=self)
 
         # Add to stack
         self.stack.addWidget(self.menu_page)
@@ -42,6 +50,10 @@ class MainWindow(QWidget):
         self.stack.addWidget(self.dataset_page)
         self.stack.addWidget(self.settings_page)
         self.stack.addWidget(self.profiles_page)
+        self.stack.addWidget(self.preset_list_page)
+        self.stack.addWidget(self.preset_detail_page)
+        self.stack.addWidget(self.report_list_page)
+        self.stack.addWidget(self.report_detail_page)
 
         self.stack.setCurrentWidget(self.menu_page)
 
@@ -186,8 +198,20 @@ class MainWindow(QWidget):
         
     def go_to_profiles(self, from_live=False):
         self.from_live = from_live
-        self.profiles_page.refresh_data()
-        self.stack.setCurrentWidget(self.profiles_page)
+        self.preset_list_page.refresh_data()
+        self.stack.setCurrentWidget(self.preset_list_page)
+
+    def go_to_preset_detail(self, profile_data):
+        self.preset_detail_page.load_profile(profile_data)
+        self.stack.setCurrentWidget(self.preset_detail_page)
+
+    def go_to_reports(self):
+        self.report_list_page.refresh_data()
+        self.stack.setCurrentWidget(self.report_list_page)
+
+    def go_to_report_detail(self, record):
+        self.report_detail_page.load_record(record)
+        self.stack.setCurrentWidget(self.report_detail_page)
 
     def go_back(self):
         # Admin back button: return to live if we came from there, otherwise return to menu
