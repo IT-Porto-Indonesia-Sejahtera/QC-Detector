@@ -66,7 +66,8 @@ class ModbusConfig:
     retries: int = 0
 
     # Trigger settings
-    poll_interval_ms: int = 10  # Polling interval in milliseconds
+    # 500ms poll is safe — Modbus RTU @ ~200ms RTT needs breathing room
+    poll_interval_ms: int = 500
     enabled: bool = True
 
 
@@ -142,7 +143,8 @@ class PLCModbusTrigger:
                         retries=self.config.retries
                     )
                 elif _PYMODBUS_V3_FRAMER:
-                    # v3.1+: pass FramerType.RTU explicitly to guarantee RTU framing
+                    # v3.1+: explicit RTU + don't let pymodbus close the port on errors
+                    # (our _poll_loop already handles reconnection more gracefully)
                     self.client = ModbusSerialClient(
                         port=self.config.serial_port,
                         framer=FramerType.RTU,
@@ -151,10 +153,11 @@ class PLCModbusTrigger:
                         stopbits=self.config.stopbits,
                         bytesize=self.config.bytesize,
                         timeout=self.config.timeout,
-                        retries=self.config.retries
+                        retries=self.config.retries,
+                        close_comm_on_error=False
                     )
                 else:
-                    # v3.0 early builds: RTU is default, just pass serial params
+                    # v3.0 early builds
                     self.client = ModbusSerialClient(
                         port=self.config.serial_port,
                         baudrate=self.config.baudrate,
@@ -162,7 +165,8 @@ class PLCModbusTrigger:
                         stopbits=self.config.stopbits,
                         bytesize=self.config.bytesize,
                         timeout=self.config.timeout,
-                        retries=self.config.retries
+                        retries=self.config.retries,
+                        close_comm_on_error=False
                     )
                 connection_str = f"{self.config.serial_port}"
             

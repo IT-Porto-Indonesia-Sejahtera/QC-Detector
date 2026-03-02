@@ -94,9 +94,9 @@ config = ModbusConfig(
     slave_id=slave_id,
     register_address=TRIGGER_REG,
     register_type="holding",
-    poll_interval_ms=10,
+    poll_interval_ms=500,   # 500ms gap between polls — Omron PLC needs ~200ms RTT
     timeout=3.0,
-    retries=0,  # No retries — let each read wait the full timeout
+    retries=0,
 )
 
 print(f"Port     : {config.serial_port}")
