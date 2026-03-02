@@ -47,6 +47,9 @@ class ModbusConfig:
     register_address: int = 12  # Address of register to monitor
     register_type: str = "holding"  # "coil", "discrete_input", "holding", "input"
     
+    # Serial timeout (seconds to wait for PLC response)
+    timeout: float = 3.0
+
     # Trigger settings
     poll_interval_ms: int = 10  # Polling interval in milliseconds
     enabled: bool = True
@@ -116,7 +119,8 @@ class PLCModbusTrigger:
                     baudrate=self.config.baudrate,
                     parity=self.config.parity,
                     stopbits=self.config.stopbits,
-                    bytesize=self.config.bytesize
+                    bytesize=self.config.bytesize,
+                    timeout=self.config.timeout
                 )
                 connection_str = f"{self.config.serial_port}"
             

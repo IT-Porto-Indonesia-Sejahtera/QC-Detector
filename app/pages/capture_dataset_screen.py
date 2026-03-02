@@ -282,14 +282,15 @@ class CaptureDatasetScreen(QWidget):
             config = ModbusConfig(
                 connection_type="rtu",
                 serial_port=self.settings.get("plc_port", ""),
-                baudrate=115200,
-                parity="E",
-                stopbits=1,
-                bytesize=8,
-                slave_id=1,
+                baudrate=int(self.settings.get("plc_baudrate", 115200)),
+                parity=self.settings.get("plc_parity", "E"),
+                stopbits=int(self.settings.get("plc_stopbits", 1)),
+                bytesize=int(self.settings.get("plc_bytesize", 8)),
+                slave_id=int(self.settings.get("plc_slave_id", 1)),
                 register_address=int(self.settings.get("plc_trigger_reg", 12)),
                 register_type="holding",
-                poll_interval_ms=10
+                poll_interval_ms=int(self.settings.get("plc_poll_interval", 10)),
+                timeout=float(self.settings.get("plc_timeout", 3.0))
             )
             
             self.plc_trigger = PLCModbusTrigger(config)
