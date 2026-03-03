@@ -66,8 +66,8 @@ class ModbusConfig:
     retries: int = 0
 
     # Trigger settings
-    # 500ms poll is safe — Modbus RTU @ ~200ms RTT needs breathing room
-    poll_interval_ms: int = 500
+    # 300ms poll is more responsive — Modbus RTU @ ~200ms RTT needs breathing room
+    poll_interval_ms: int = 300
     enabled: bool = True
 
 
@@ -89,6 +89,9 @@ class PLCModbusTrigger:
         self.read_thread: Optional[threading.Thread] = None
         self.running = False
         self.last_value: Optional[int] = None
+        self._lock = threading.Lock()
+        self._last_trigger_time = 0
+        self._trigger_cooldown = 0.5 # 0.5 seconds between triggers (debounce)
         
         # Suppress pymodbus internal logging (which can be very noisy)
         # It's better to manage our own logging and only show what's relevant to the UI
@@ -165,7 +168,8 @@ class PLCModbusTrigger:
                         stopbits=self.config.stopbits,
                         bytesize=self.config.bytesize,
                         timeout=self.config.timeout,
-                        retries=self.config.retries
+                        retries=self.config.retries,
+                        strict=False
                     )
                 connection_str = f"{self.config.serial_port}"
             
@@ -239,7 +243,8 @@ class PLCModbusTrigger:
                     continue
 
             try:
-                value = self._read_register()
+                with self._lock:
+                    value = self._read_register()
                 
                 if value is not None:
                     consecutive_errors = 0  # Reset error counter on success
@@ -253,7 +258,13 @@ class PLCModbusTrigger:
                     # Check for rising edge (0 -> 1)
                     if self.config.enabled:
                         if self.last_value == 0 and value == 1:
-                            self._fire_trigger()
+                            # Add trigger cooldown to prevent double firing
+                            now = time.time()
+                            if now - self._last_trigger_time > self._trigger_cooldown:
+                                self._fire_trigger()
+                                self._last_trigger_time = now
+                            else:
+                                print(f"[{time.strftime('%H:%M:%S')}] [PLC] Trigger ignored (cooldown: {now - self._last_trigger_time:.2f}s)")
                     
                     self.last_value = value
                 else:
@@ -380,19 +391,20 @@ class PLCModbusTrigger:
         if not self.client:
             return False
         
-        try:
-            result = self._safe_modbus_call(self.client.write_register, address, value)
-            
-            if result.isError():
-                print(f"[PLC] Write error to register {address}: {result}")
+        with self._lock:
+            try:
+                result = self._safe_modbus_call(self.client.write_register, address, value)
+                
+                if result.isError():
+                    print(f"[PLC] Write error to register {address}: {result}")
+                    return False
+                
+                print(f"[PLC] Written value {value} to register {address}")
+                return True
+                
+            except Exception as e:
+                print(f"[PLC] Write exception: {e}")
                 return False
-            
-            print(f"[PLC] Written value {value} to register {address}")
-            return True
-            
-        except Exception as e:
-            print(f"[PLC] Write exception: {e}")
-            return False
 
     def write_coil(self, address: int, value: bool) -> bool:
         """
@@ -409,20 +421,21 @@ class PLCModbusTrigger:
             print(f"[PLC] Cannot write coil - not connected")
             return False
         
-        try:
-            # pymodbus write_coil accepts address, value
-            result = self._safe_modbus_call(self.client.write_coil, address, value)
-            
-            if result.isError():
-                print(f"[PLC] Write error to coil {address}: {result}")
+        with self._lock:
+            try:
+                # pymodbus write_coil accepts address, value
+                result = self._safe_modbus_call(self.client.write_coil, address, value)
+                
+                if result.isError():
+                    print(f"[PLC] Write error to coil {address}: {result}")
+                    return False
+                
+                print(f"[PLC] Written value {value} to coil {address}")
+                return True
+                
+            except Exception as e:
+                print(f"[PLC] Coil write exception: {e}")
                 return False
-            
-            print(f"[PLC] Written value {value} to coil {address}")
-            return True
-            
-        except Exception as e:
-            print(f"[PLC] Coil write exception: {e}")
-            return False
     
     def read_any_register(self, address: int) -> Optional[int]:
         """
@@ -438,30 +451,31 @@ class PLCModbusTrigger:
             print(f"[PLC] read_any_register: Cannot read addr={address} - not connected")
             return None
         
-        try:
-            # Bug fix: was using hardcoded 'device_id' which is invalid in all pymodbus versions.
-            # Use _safe_modbus_call to handle v2/v3 compatibility automatically.
-            result = self._safe_modbus_call(self.client.read_holding_registers, address, count=1)
-            
-            if result is None or isinstance(result, Exception):
-                print(f"[PLC] read_any_register: bad result from addr={address}: {result}")
+        with self._lock:
+            try:
+                # Bug fix: was using hardcoded 'device_id' which is invalid in all pymodbus versions.
+                # Use _safe_modbus_call to handle v2/v3 compatibility automatically.
+                result = self._safe_modbus_call(self.client.read_holding_registers, address, count=1)
+                
+                if result is None or isinstance(result, Exception):
+                    print(f"[PLC] read_any_register: bad result from addr={address}: {result}")
+                    return None
+                
+                if hasattr(result, 'isError') and result.isError():
+                    print(f"[PLC] read_any_register: Modbus error from addr={address}: {result}")
+                    return None
+                
+                if not hasattr(result, 'registers') or not result.registers:
+                    print(f"[PLC] read_any_register: no registers in result for addr={address}")
+                    return None
+                
+                value = result.registers[0]
+                print(f"[PLC] read_any_register: addr={address} = {value}")
+                return value
+                
+            except Exception as e:
+                print(f"[PLC] read_any_register exception for addr={address}: {type(e).__name__}: {e}")
                 return None
-            
-            if hasattr(result, 'isError') and result.isError():
-                print(f"[PLC] read_any_register: Modbus error from addr={address}: {result}")
-                return None
-            
-            if not hasattr(result, 'registers') or not result.registers:
-                print(f"[PLC] read_any_register: no registers in result for addr={address}")
-                return None
-            
-            value = result.registers[0]
-            print(f"[PLC] read_any_register: addr={address} = {value}")
-            return value
-            
-        except Exception as e:
-            print(f"[PLC] read_any_register exception for addr={address}: {type(e).__name__}: {e}")
-            return None
 
 
 # Singleton instance

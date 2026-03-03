@@ -441,6 +441,32 @@ class SettingsOverlay(BaseOverlay):
         hw_layout.addStretch()
         right_col.addWidget(hw_card)
         
+        test_card, test_layout = self.create_card("PLC Consistency Test")
+        test_layout.addWidget(self.create_styled_label("Record images & results for stability test:"))
+        h_test = QHBoxLayout()
+        self.btn_start_test = QPushButton("▶ Start Session"); self.style_button(self.btn_start_test, True)
+        self.btn_start_test.clicked.connect(self.start_consistency_test)
+        self.btn_stop_test = QPushButton("■ Stop & Export"); self.style_button(self.btn_stop_test)
+        self.btn_stop_test.setEnabled(False)
+        self.btn_stop_test.clicked.connect(self.stop_consistency_test)
+        h_test.addWidget(self.btn_start_test); h_test.addWidget(self.btn_stop_test)
+        test_layout.addLayout(h_test)
+        
+        self.lbl_test_status = QLabel("Status: Ready")
+        self.lbl_test_status.setStyleSheet(f"color: {C['text_sub']}; font-size: 11px;")
+        test_layout.addWidget(self.lbl_test_status)
+        
+        # Sync initial state
+        parent = self.parent()
+        if hasattr(parent, 'consistency_tracker') and parent.consistency_tracker.is_active:
+            self.lbl_test_status.setText("Status: RUNNING (Recording...)")
+            self.lbl_test_status.setStyleSheet("color: #4CAF50; font-size: 11px; font-weight: bold;")
+            self.btn_start_test.setEnabled(False)
+            self.btn_stop_test.setEnabled(True)
+        
+        test_layout.addStretch()
+        right_col.addWidget(test_card)
+        
         sync_card, sync_layout = self.create_card("Database Sync")
         self.btn_fetch = QPushButton("🔄 Fetch SKU Data"); self.style_button(self.btn_fetch, True); self.btn_fetch.clicked.connect(self.start_fetch_sku); sync_layout.addWidget(self.btn_fetch)
         
@@ -1001,6 +1027,44 @@ class SettingsOverlay(BaseOverlay):
         JsonUtility.save_to_json(settings_file, self.settings)
         
         self.settings_saved.emit(self.settings)
+
+    # -------------------------------------------------------------------------
+    # PLC Consistency Test Logic
+    # -------------------------------------------------------------------------
+    
+    def start_consistency_test(self):
+        """Start a new consistency test session"""
+        parent = self.parent()
+        if hasattr(parent, 'consistency_tracker'):
+            parent.consistency_tracker.start_session()
+            self.lbl_test_status.setText("Status: RUNNING (Recording...)")
+            self.lbl_test_status.setStyleSheet("color: #4CAF50; font-size: 11px; font-weight: bold;")
+            self.btn_start_test.setEnabled(False)
+            self.btn_stop_test.setEnabled(True)
+            if hasattr(parent, '_update_tracker_ui'):
+                parent._update_tracker_ui()
+                
+    def stop_consistency_test(self):
+        """Stop current session and export results"""
+        parent = self.parent()
+        if hasattr(parent, 'consistency_tracker'):
+            path = parent.consistency_tracker.stop_session()
+            count = parent.consistency_tracker.get_count()
+            self.lbl_test_status.setText(f"Status: Exported {count} records to Excel")
+            self.lbl_test_status.setStyleSheet(f"color: {self._C['accent']}; font-size: 11px;")
+            self.btn_start_test.setEnabled(True)
+            self.btn_stop_test.setEnabled(False)
+            if hasattr(parent, '_update_tracker_ui'):
+                parent._update_tracker_ui()
+            
+            # Show a message or open folder?
+            import subprocess
+            try:
+                folder = os.path.dirname(path)
+                if os.path.exists(folder):
+                    subprocess.run(["open", folder])
+            except:
+                pass
 
     # -------------------------------------------------------------------------
     # SKU Fetch Logic

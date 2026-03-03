@@ -38,6 +38,7 @@ except ImportError:
 # PLC Modbus trigger (optional - import safely)
 try:
     from input.plc_modbus_trigger import PLCModbusTrigger, ModbusConfig, check_pymodbus_available
+    from input.plc_consistency_tracker import PLCConsistencyTracker
     PLC_AVAILABLE = check_pymodbus_available()
 except ImportError:
     PLC_AVAILABLE = False
@@ -211,6 +212,25 @@ class LiveCameraScreen(QWidget):
         self.plc_triggered.connect(self.capture_frame)  # Thread-safe signal
         if PLC_AVAILABLE:
             self.setup_plc_trigger()
+            
+        # PLC Consistency Tracker
+        self.consistency_tracker = PLCConsistencyTracker()
+        
+        # Tracker indicator (floating label)
+        self.lbl_tracker_indicator = QLabel("RECORD #0")
+        self.lbl_tracker_indicator.setParent(self)
+        self.lbl_tracker_indicator.setAlignment(Qt.AlignCenter)
+        indicator_font = UIScaling.scale_font(16)
+        self.lbl_tracker_indicator.setStyleSheet(f"""
+            background-color: rgba(255, 152, 0, 0.9);
+            color: white;
+            font-weight: bold;
+            font-size: {indicator_font}px;
+            padding: 10px;
+            border-radius: 10px;
+            border: 2px solid white;
+        """)
+        self.lbl_tracker_indicator.hide()
         
     def open_profile_dialog(self):
         # Check password first
@@ -1158,6 +1178,9 @@ class LiveCameraScreen(QWidget):
         if self.live_frame is None:
             return
             
+        # Snapshot of raw frame for consistency tracker (before drawing)
+        raw_frame = self.live_frame.copy()
+            
         # --- Validation: Ensure SKU & Size are selected ---
         is_empty = (self.current_size in ["---", "-", ""]) or (self.current_sku in ["---", "-", ""])
         if is_empty:
@@ -1255,17 +1278,32 @@ class LiveCameraScreen(QWidget):
                     self.good_count += 1
                     self.lbl_big_result.setText(f"{display_size}\nBAGUS")
                     self.lbl_big_result.setStyleSheet(f"color: white; background-color: {bg_color}; padding: {res_padding}px; border-radius: {res_radius}px; border: none; font-size: {res_font_size}px; font-weight: 900;")
-                    self._write_plc_result(is_good=True)
+                    plc_val = self._write_plc_result(is_good=True)
                 elif category == "OVEN":
                     # OVEN counts as neither good nor reject for now
                     self.lbl_big_result.setText(f"{display_size}\nOVEN")
                     self.lbl_big_result.setStyleSheet(f"color: white; background-color: {bg_color}; padding: {res_padding}px; border-radius: {res_radius}px; border: none; font-size: {res_font_size}px; font-weight: 900;")
                     # TODO: Determine PLC behavior for OVEN
+                    plc_val = 0
                 else:  # REJECT
                     self.bs_count += 1
                     self.lbl_big_result.setText(f"{display_size}\nBS")
                     self.lbl_big_result.setStyleSheet(f"color: white; background-color: {bg_color}; padding: {res_padding}px; border-radius: {res_radius}px; border: none; font-size: {res_font_size}px; font-weight: 900;")
-                    self._write_plc_result(is_good=False)
+                    plc_val = self._write_plc_result(is_good=False)
+                
+                # Record to consistency tracker if active
+                if self.consistency_tracker.is_active:
+                    plc_input = self.plc_trigger.get_current_value() if self.plc_trigger else 0
+                    self.consistency_tracker.add_record(
+                        raw_frame,
+                        sku=self.current_sku,
+                        size=self.current_size,
+                        px_val=px_length,
+                        mm_val=length_mm,
+                        plc_input=plc_input or 0,
+                        plc_output=plc_val or 0
+                    )
+                    self._update_tracker_ui()
                 
                 # Update totals for backwards compatibility and UI
                 self.granular_counts["TOTAL GOOD"] = self.good_count
@@ -1791,6 +1829,25 @@ class LiveCameraScreen(QWidget):
         if self.plc_trigger:
             print("[PLC] Stopping Modbus polling...")
             self.plc_trigger.stop()
+
+    def _update_tracker_ui(self):
+        """Update the consistency tracker floating indicator"""
+        if hasattr(self, 'consistency_tracker') and self.consistency_tracker.is_active:
+            count = self.consistency_tracker.get_count()
+            self.lbl_tracker_indicator.setText(f"RECORD #{count}")
+            self.lbl_tracker_indicator.show()
+            self.lbl_tracker_indicator.raise_()
+        else:
+            if hasattr(self, 'lbl_tracker_indicator'):
+                self.lbl_tracker_indicator.hide()
+            
+    def resizeEvent(self, event):
+        """Reposition floating indicators on resize"""
+        super().resizeEvent(event)
+        if hasattr(self, 'lbl_tracker_indicator'):
+            # Position in top-right area
+            w = self.width()
+            self.lbl_tracker_indicator.move(w - self.lbl_tracker_indicator.width() - 20, 100)
     
     def _write_plc_result(self, is_good: bool):
         """
@@ -1835,6 +1892,8 @@ class LiveCameraScreen(QWidget):
             QTimer.singleShot(delay, pulse_trigger)
         else:
             pulse_trigger()
+            
+        return value
         
         # Read back register to verify (optional)
         # read_value = self.plc_trigger.read_any_register(res_reg)
