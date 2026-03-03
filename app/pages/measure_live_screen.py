@@ -1301,7 +1301,9 @@ class LiveCameraScreen(QWidget):
                         px_val=px_length,
                         mm_val=length_mm,
                         plc_input=plc_input or 0,
-                        plc_output=plc_val or 0
+                        plc_output=plc_val or 0,
+                        pre_delay=getattr(self, 'delay_input_capture_ms', 0),
+                        post_delay=getattr(self, 'delay_result_trigger_ms', 0)
                     )
                     self._update_tracker_ui()
                 

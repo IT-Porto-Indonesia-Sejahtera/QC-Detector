@@ -46,7 +46,9 @@ class PLCConsistencyTracker:
                    px_val: float, 
                    mm_val: float, 
                    plc_input: int, 
-                   plc_output: int):
+                   plc_output: int,
+                   pre_delay: int = 0,
+                   post_delay: int = 0):
         """Add a new record to the current session"""
         if not self.is_active:
             return
@@ -70,11 +72,13 @@ class PLCConsistencyTracker:
             "mm": round(mm_val, 3),
             "plc_input": plc_input,
             "plc_output": plc_output,
+            "pre_delay": pre_delay,
+            "post_delay": post_delay,
             "image_path": img_relative_path
         }
         
         self.records.append(record)
-        print(f"[TRACKER] Added record #{index}: {sku} {size} -> {mm_val}mm")
+        print(f"[TRACKER] Added record #{index}: {sku} {size} -> {mm_val}mm (Delays: {pre_delay}/{post_delay}ms)")
 
     def export_to_excel(self) -> str:
         """Export records to Excel file using xlsxwriter"""
@@ -101,7 +105,9 @@ class PLCConsistencyTracker:
         })
         
         # Headers
-        headers = ["Index", "Timestamp", "SKU", "Size", "Pixel Value", "MM Value", "PLC Input (D12)", "PLC Output (D100)", "Image Link"]
+        headers = ["Index", "Timestamp", "SKU", "Size", "Pixel Value", "MM Value", 
+                   "Pre-Cap Delay (ms)", "Post-Res Delay (ms)",
+                   "PLC Input (D12)", "PLC Output (D100)", "Image Link"]
         for col, header in enumerate(headers):
             worksheet.write(0, col, header, header_format)
             worksheet.set_column(col, col, 15)
@@ -114,11 +120,13 @@ class PLCConsistencyTracker:
             worksheet.write(row, 3, rec["size"], cell_format)
             worksheet.write(row, 4, rec["pixel"], cell_format)
             worksheet.write(row, 5, rec["mm"], cell_format)
-            worksheet.write(row, 6, rec["plc_input"], cell_format)
-            worksheet.write(row, 7, rec["plc_output"], cell_format)
+            worksheet.write(row, 6, rec.get("pre_delay", 0), cell_format)
+            worksheet.write(row, 7, rec.get("post_delay", 0), cell_format)
+            worksheet.write(row, 8, rec["plc_input"], cell_format)
+            worksheet.write(row, 9, rec["plc_output"], cell_format)
             
             # Link to image
-            worksheet.write_url(row, 8, f"external:{rec['image_path']}", cell_format, string="View Image")
+            worksheet.write_url(row, 10, f"external:{rec['image_path']}", cell_format, string="View Image")
             
         workbook.close()
         return path
