@@ -162,6 +162,7 @@ def get_machine_list() -> List[str]:
 def enrich_wo_with_sku(wo_data: Dict[str, Any]) -> Dict[str, Any]:
     """
     Enrich a WO object with SKU magnification (otorisasi) data.
+    Uses product_id for reliable linking, falling back to product_code.
     
     Args:
         wo_data: A single WO dictionary from fetch_wo_list.
@@ -169,17 +170,30 @@ def enrich_wo_with_sku(wo_data: Dict[str, Any]) -> Dict[str, Any]:
     Returns:
         The dictionary with an added 'skus' list containing enriched product data.
     """
-    codes_str = wo_data.get('list_product_code', '')
+    from backend.sku_cache import get_sku_by_id, get_sku_by_code
+
+    ids_str = str(wo_data.get('list_product_id', ''))
+    codes_str = str(wo_data.get('list_product_code', ''))
+    
+    ids = [i.strip() for i in ids_str.split(',') if i.strip()]
     codes = [c.strip() for c in codes_str.split(',') if c.strip()]
     
     enriched_skus = []
-    for code in codes:
-        sku_info = get_sku_by_code(code)
+    
+    # Try to match by ID first (more reliable)
+    for i, pid in enumerate(ids):
+        sku_info = get_sku_by_id(pid)
+        if not sku_info and i < len(codes):
+            # Fallback to code
+            sku_info = get_sku_by_code(codes[i])
+            
         if sku_info:
             enriched_skus.append(sku_info)
-        else:
-            # Fallback if not in cache
+        elif i < len(codes):
+            # Final fallback if not in cache at all
+            code = codes[i]
             enriched_skus.append({
+                'id': pid,
                 'code': code,
                 'Nama Produk': code,
                 'otorisasi': 0,

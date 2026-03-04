@@ -477,10 +477,15 @@ class PresetDetailPage(QWidget):
         record = RecordManager.get_record_by_preset_id(profile.get("id"))
         if record and "counts" in record:
             c = record["counts"]
-            self.lbl_good.setText(str(c.get("TOTAL GOOD", 0)))
-            self.lbl_oven.setText(str(c.get("OVEN 1", 0) + c.get("OVEN 2", 0)))
-            self.lbl_bs.setText(str(c.get("TOTAL BS", 0)))
-            total = c.get("TOTAL GOOD", 0) + c.get("TOTAL BS", 0)
+            good = c.get("TOTAL GOOD", 0)
+            # Aggregate Oven 1 + Oven 2 or use TOTAL OVEN if exists
+            oven = c.get("TOTAL OVEN", c.get("OVEN 1", 0) + c.get("OVEN 2", 0))
+            bs = c.get("TOTAL BS", 0)
+            total = good + oven + bs
+            
+            self.lbl_good.setText(str(good))
+            self.lbl_oven.setText(str(oven))
+            self.lbl_bs.setText(str(bs))
             self.lbl_total.setText(str(total))
         else:
             self.lbl_good.setText("0")

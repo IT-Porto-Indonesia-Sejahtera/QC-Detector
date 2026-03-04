@@ -137,6 +137,7 @@ class LiveCameraScreen(QWidget):
         
         # State
         self.good_count = 0
+        self.oven_count = 0
         self.bs_count = 0
         self.granular_counts = {
             "GOOD 1": 0,
@@ -1258,10 +1259,9 @@ class LiveCameraScreen(QWidget):
                     self.lbl_big_result.setStyleSheet(f"color: white; background-color: {bg_color}; padding: {res_padding}px; border-radius: {res_radius}px; border: none; font-size: {res_font_size}px; font-weight: 900;")
                     self._write_plc_result(is_good=True)
                 elif category == "OVEN":
-                    # OVEN counts as neither good nor reject for now
+                    self.oven_count += 1
                     self.lbl_big_result.setText(f"{display_size}\nOVEN")
                     self.lbl_big_result.setStyleSheet(f"color: white; background-color: {bg_color}; padding: {res_padding}px; border-radius: {res_radius}px; border: none; font-size: {res_font_size}px; font-weight: 900;")
-                    # TODO: Determine PLC behavior for OVEN
                 else:  # REJECT
                     self.bs_count += 1
                     self.lbl_big_result.setText(f"{display_size}\nBS")
@@ -1270,6 +1270,7 @@ class LiveCameraScreen(QWidget):
                 
                 # Update totals for backwards compatibility and UI
                 self.granular_counts["TOTAL GOOD"] = self.good_count
+                self.granular_counts["TOTAL OVEN"] = self.oven_count
                 self.granular_counts["TOTAL BS"] = self.bs_count
                 self.save_counters()
 
@@ -1348,6 +1349,7 @@ class LiveCameraScreen(QWidget):
     def reset_counters(self):
         """Reset all session counters to zero."""
         self.good_count = 0
+        self.oven_count = 0
         self.bs_count = 0
         for k in self.granular_counts:
             self.granular_counts[k] = 0
@@ -1361,6 +1363,7 @@ class LiveCameraScreen(QWidget):
             if record:
                 data = record.get("counts", {})
                 self.good_count = data.get("TOTAL GOOD", 0)
+                self.oven_count = data.get("TOTAL OVEN", 0)
                 self.bs_count = data.get("TOTAL BS", 0)
                 for k in self.granular_counts:
                     self.granular_counts[k] = data.get(k, 0)
@@ -1369,6 +1372,7 @@ class LiveCameraScreen(QWidget):
             data = JsonUtility.load_from_json(COUNTS_FILE) or {}
             if data:
                 self.good_count = data.get("TOTAL GOOD", 0)
+                self.oven_count = data.get("TOTAL OVEN", 0)
                 self.bs_count = data.get("TOTAL BS", 0)
                 for k in self.granular_counts:
                     self.granular_counts[k] = data.get(k, 0)
