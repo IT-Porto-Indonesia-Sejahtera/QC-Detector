@@ -3,7 +3,8 @@ import uuid
 from datetime import datetime
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QLineEdit,
-    QFrame, QSizePolicy, QScrollArea, QMessageBox, QTextEdit, QScroller
+    QFrame, QSizePolicy, QScrollArea, QMessageBox, QTextEdit, QScroller,
+    QGridLayout
 )
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QPixmap
@@ -14,6 +15,8 @@ from app.utils.ui_scaling import UIScaling
 from app.widgets.sku_selector_overlay import SkuSelectorOverlay
 from app.utils.image_loader import NetworkImageLoader
 from app.data.record_manager import RecordManager
+from backend.get_wo_list import fetch_wo_list, enrich_wo_with_sku
+from app.widgets.wo_selector_overlay import WOSelectorOverlay
 
 PROFILES_FILE = os.path.join("output", "settings", "profiles.json")
 SETTINGS_FILE = os.path.join("output", "settings", "app_settings.json")
@@ -135,6 +138,11 @@ class PresetDetailPage(QWidget):
         self.btn_finish.clicked.connect(self.finish_preset)
         a_layout.addWidget(self.btn_finish)
 
+        self.btn_resync = self._make_action_btn("🔄  Sync from WO", "white", "#2563EB")
+        self.btn_resync.setStyleSheet(self.btn_resync.styleSheet() + f"border: 1.5px solid #2563EB; border-radius: {UIScaling.scale(10)}px;")
+        self.btn_resync.clicked.connect(self.re_sync_wo)
+        a_layout.addWidget(self.btn_resync)
+
         a_layout.addStretch()
 
         # Status badge
@@ -216,6 +224,35 @@ class PresetDetailPage(QWidget):
             QTextEdit:focus {{ border-color: #2563EB; background-color: white; }}
         """)
         left_layout.addWidget(self.notes_input)
+        
+        # QC Results Section
+        left_layout.addSpacing(UIScaling.scale(10))
+        lbl_qc = QLabel("📊  QC Summary")
+        lbl_qc.setStyleSheet(f"font-size: {UIScaling.scale_font(14)}px; font-weight: 700; color: #1F2937; border: none;")
+        left_layout.addWidget(lbl_qc)
+        
+        qc_frame = QFrame()
+        qc_frame.setStyleSheet(f"""
+            QFrame {{
+                background-color: #F3F4F6;
+                border: 1.5px solid #E5E7EB;
+                border-radius: {UIScaling.scale(12)}px;
+            }}
+        """)
+        qc_layout = QVBoxLayout(qc_frame)
+        qc_layout.setContentsMargins(UIScaling.scale(16), UIScaling.scale(16), UIScaling.scale(16), UIScaling.scale(16))
+        
+        self.qc_grid = QGridLayout()
+        self.qc_grid.setSpacing(UIScaling.scale(15))
+        
+        self.lbl_good = self._add_qc_stat("GOOD", "0", 0, 0)
+        self.lbl_oven = self._add_qc_stat("OVEN", "0", 0, 1)
+        self.lbl_bs = self._add_qc_stat("BS", "0", 1, 0)
+        self.lbl_total = self._add_qc_stat("TOTAL", "0", 1, 1)
+        
+        qc_layout.addLayout(self.qc_grid)
+        left_layout.addWidget(qc_frame)
+        
         left_layout.addStretch()
 
         c_layout.addWidget(left_frame, 2)
@@ -294,6 +331,22 @@ class PresetDetailPage(QWidget):
         """)
         return btn
 
+    def _add_qc_stat(self, label, value, row, col):
+        """Helper to add a stat box to the QC grid."""
+        container = QVBoxLayout()
+        container.setSpacing(2)
+        
+        lbl = QLabel(label)
+        lbl.setStyleSheet(f"font-size: {UIScaling.scale_font(11)}px; font-weight: 700; color: #6B7280; border: none;")
+        container.addWidget(lbl)
+        
+        val = QLabel(value)
+        val.setStyleSheet(f"font-size: {UIScaling.scale_font(20)}px; font-weight: 800; color: #111827; border: none;")
+        container.addWidget(val)
+        
+        self.qc_grid.addLayout(container, row, col)
+        return val
+
     def _make_info_row(self, label_text, parent_layout):
         row = QHBoxLayout()
         row.setSpacing(UIScaling.scale(16))
@@ -307,13 +360,19 @@ class PresetDetailPage(QWidget):
         val.setFixedHeight(UIScaling.scale(42))
         val.setStyleSheet(f"""
             QLineEdit {{
-                background-color: #F9FAFB;
-                border: 1.5px solid #E5E7EB;
+                background-color: #F3F4F6;
+                border: 1.5px solid #D1D5DB;
                 border-radius: {UIScaling.scale(10)}px;
                 padding: 0 {UIScaling.scale(14)}px;
                 font-size: {UIScaling.scale_font(15)}px;
-                font-weight: 600;
+                font-weight: 700;
                 color: #111827;
+            }}
+            QLineEdit:read-only {{
+                background-color: #F3F4F6;
+                color: #000000;
+                border: 2px solid #9CA3AF;
+                font-weight: 400;
             }}
             QLineEdit:focus {{ border-color: #2563EB; background-color: white; }}
         """)
@@ -369,11 +428,11 @@ class PresetDetailPage(QWidget):
         self.lbl_machine.setText(f"🏭 {machine}" if machine else "")
         self.lbl_machine.setVisible(bool(machine))
 
-        self.info_plant.setText(profile.get("plant", ""))
-        self.info_shift.setText(profile.get("shift", ""))
-        self.info_date.setText(profile.get("production_date", ""))
-        self.info_mps.setText(profile.get("mps", ""))
-        self.notes_input.setPlainText(profile.get("notes", ""))
+        self.info_plant.setText(str(profile.get("plant") or ""))
+        self.info_shift.setText(str(profile.get("shift") or ""))
+        self.info_date.setText(str(profile.get("production_date") or ""))
+        self.info_mps.setText(str(profile.get("nomor_mps") or profile.get("mps") or ""))
+        self.notes_input.setPlainText(str(profile.get("notes") or ""))
 
         # Button visibility based on status
         is_editable = status in ("draft", "ready")
@@ -382,23 +441,52 @@ class PresetDetailPage(QWidget):
         self.btn_activate.setVisible(status == "ready")
         self.btn_finish.setVisible(status == "active")
         self.btn_ukur.setVisible(status in ("ready", "active"))
+        self.btn_resync.setVisible(is_editable)
 
-        # Disable editing for done/active
+        # Disable editing for detail fields (always read-only as requested)
+        # Use high contrast black color
+        readonly_style = f"""
+            QLineEdit {{
+                background-color: #F3F4F6;
+                border: 1.5px solid #D1D5DB;
+                border-radius: {UIScaling.scale(10)}px;
+                padding: 0 {UIScaling.scale(14)}px;
+                font-size: {UIScaling.scale_font(15)}px;
+                font-weight: 400;
+                color: #000000;
+            }}
+        """
         for field in [self.info_plant, self.info_shift, self.info_date, self.info_mps]:
-            field.setReadOnly(not is_editable)
-            if not is_editable:
-                field.setStyleSheet(f"""
-                    QLineEdit {{
-                        background-color: #F3F4F6;
-                        border: 1.5px solid #E5E7EB;
-                        border-radius: {UIScaling.scale(10)}px;
-                        padding: 0 {UIScaling.scale(14)}px;
-                        font-size: {UIScaling.scale_font(15)}px;
-                        font-weight: 600;
-                        color: #9CA3AF;
-                    }}
-                """)
-        self.notes_input.setReadOnly(not is_editable)
+            field.setReadOnly(True)
+            field.setStyleSheet(readonly_style)
+            
+        self.notes_input.setReadOnly(True)
+        self.notes_input.setStyleSheet(f"""
+            QTextEdit {{
+                background-color: #F3F4F6;
+                border: 1.5px solid #E5E7EB;
+                border-radius: {UIScaling.scale(12)}px;
+                padding: {UIScaling.scale(12)}px;
+                font-size: {UIScaling.scale_font(14)}px;
+                color: #000000;
+            }}
+        """)
+
+        # Load QC counts if available
+        from app.data.record_manager import RecordManager
+        record = RecordManager.get_record_by_preset_id(profile.get("id"))
+        if record and "counts" in record:
+            c = record["counts"]
+            self.lbl_good.setText(str(c.get("TOTAL GOOD", 0)))
+            self.lbl_oven.setText(str(c.get("OVEN 1", 0) + c.get("OVEN 2", 0)))
+            self.lbl_bs.setText(str(c.get("TOTAL BS", 0)))
+            total = c.get("TOTAL GOOD", 0) + c.get("TOTAL BS", 0)
+            self.lbl_total.setText(str(total))
+        else:
+            self.lbl_good.setText("0")
+            self.lbl_oven.setText("0")
+            self.lbl_bs.setText("0")
+            self.lbl_total.setText("0")
 
         self._render_sku_rows(profile, is_editable)
 
@@ -480,40 +568,57 @@ class PresetDetailPage(QWidget):
 
         layout.addWidget(sku_name, 1)
 
-        # Position label
+        # Position button (clickable to toggle)
         raw_position = data.get("team", "") if data else ""
         position = self._format_position(raw_position)
-        lbl_pos = QLabel(position)
+        
+        btn_pos = QPushButton(position)
+        btn_pos.setCursor(Qt.PointingHandCursor)
+        btn_pos.setFixedHeight(UIScaling.scale(42))
+        
+        def update_pos_style(text):
+            if "Kiri" in text:
+                btn_pos.setStyleSheet(f"""
+                    QPushButton {{
+                        font-size: {UIScaling.scale_font(13)}px;
+                        font-weight: 700;
+                        color: #1E40AF;
+                        background-color: #DBEAFE;
+                        padding: 0 {UIScaling.scale(14)}px;
+                        border-radius: {UIScaling.scale(8)}px;
+                        border: 1.5px solid #93C5FD;
+                    }}
+                    QPushButton:hover {{ background-color: #BFDBFE; }}
+                """)
+            elif "Kanan" in text:
+                btn_pos.setStyleSheet(f"""
+                    QPushButton {{
+                        font-size: {UIScaling.scale_font(13)}px;
+                        font-weight: 700;
+                        color: #9A3412;
+                        background-color: #FFF7ED;
+                        padding: 0 {UIScaling.scale(14)}px;
+                        border-radius: {UIScaling.scale(8)}px;
+                        border: 1.5px solid #FDBA74;
+                    }}
+                    QPushButton:hover {{ background-color: #FFEDD5; }}
+                """)
+            else:
+                btn_pos.setStyleSheet("border: none; background: transparent;")
 
-        if "Kiri" in position:
-            lbl_pos.setStyleSheet(f"""
-                font-size: {UIScaling.scale_font(13)}px;
-                font-weight: 700;
-                color: #1E40AF;
-                background-color: #DBEAFE;
-                padding: {UIScaling.scale(6)}px {UIScaling.scale(14)}px;
-                border-radius: {UIScaling.scale(8)}px;
-                border: 1.5px solid #93C5FD;
-            """)
-        elif "Kanan" in position:
-            lbl_pos.setStyleSheet(f"""
-                font-size: {UIScaling.scale_font(13)}px;
-                font-weight: 700;
-                color: #9A3412;
-                background-color: #FFF7ED;
-                padding: {UIScaling.scale(6)}px {UIScaling.scale(14)}px;
-                border-radius: {UIScaling.scale(8)}px;
-                border: 1.5px solid #FDBA74;
-            """)
+        update_pos_style(position)
+        
+        if is_editable and data:
+            btn_pos.clicked.connect(lambda _, idx=index: self._toggle_sku_position(idx))
         else:
-            lbl_pos.setStyleSheet("border: none;")
+            btn_pos.setCursor(Qt.ArrowCursor)
 
-        layout.addWidget(lbl_pos)
+        layout.addWidget(btn_pos)
 
         row_data = {
             "img": img_label,
             "name": sku_name,
-            "pos": lbl_pos,
+            "pos_btn": btn_pos,
             "data": data,
         }
         self.sku_rows.append(row_data)
@@ -522,6 +627,56 @@ class PresetDetailPage(QWidget):
             container.mousePressEvent = lambda e, idx=index: self.select_sku(idx)
 
         return container
+
+    def _toggle_sku_position(self, index):
+        """Toggle position between Kiri and Kanan for a selected SKU."""
+        if index < 0 or index >= len(self.sku_rows):
+            return
+            
+        row = self.sku_rows[index]
+        data = row["data"]
+        if not data:
+            return
+            
+        current_team = data.get("team", "").lower()
+        if "kiri" in current_team or "left" in current_team:
+            new_team = "Kanan"
+        else:
+            new_team = "Kiri"
+            
+        data["team"] = new_team
+        
+        # Update UI
+        display_pos = self._format_position(new_team)
+        row["pos_btn"].setText(display_pos)
+        
+        # Style update
+        if "Kiri" in display_pos:
+            row["pos_btn"].setStyleSheet(f"""
+                QPushButton {{
+                    font-size: {UIScaling.scale_font(13)}px;
+                    font-weight: 700;
+                    color: #1E40AF;
+                    background-color: #DBEAFE;
+                    padding: 0 {UIScaling.scale(14)}px;
+                    border-radius: {UIScaling.scale(8)}px;
+                    border: 1.5px solid #93C5FD;
+                }}
+                QPushButton:hover {{ background-color: #BFDBFE; }}
+            """)
+        else:
+            row["pos_btn"].setStyleSheet(f"""
+                QPushButton {{
+                    font-size: {UIScaling.scale_font(13)}px;
+                    font-weight: 700;
+                    color: #9A3412;
+                    background-color: #FFF7ED;
+                    padding: 0 {UIScaling.scale(14)}px;
+                    border-radius: {UIScaling.scale(8)}px;
+                    border: 1.5px solid #FDBA74;
+                }}
+                QPushButton:hover {{ background-color: #FFEDD5; }}
+            """)
 
     # ─── SKU SELECTION ────────────────────────────────────
 
@@ -561,6 +716,78 @@ class PresetDetailPage(QWidget):
                     lbl.setText("")
                 except RuntimeError:
                     pass
+
+    # ─── WO RE-SYNC ───────────────────────────────────────
+
+    def re_sync_wo(self):
+        """Allow user to pick a new WO and update this preset's fields."""
+        settings = JsonUtility.load_from_json(SETTINGS_FILE) or {}
+        plant = settings.get("plant", "EVA1")
+        machine = self.current_profile.get("machine") or settings.get("machine", "Mesin 08")
+        
+        try:
+            wo_list = fetch_wo_list(plant, machine)
+            overlay = WOSelectorOverlay(self.window(), wo_list, plant=plant, machine=machine)
+            overlay.wo_selected.connect(self._on_wo_reselected)
+        except Exception as e:
+            self._show_toast(f"Error fetching WOs: {e}", is_error=True)
+
+    def _on_wo_reselected(self, wo_data):
+        if not wo_data or not self.current_profile: return
+        
+        # Enrich
+        enriched = enrich_wo_with_sku(wo_data)
+        
+        # Update metadata
+        self.current_profile["wo_number"] = enriched.get('nomor_wo', 'Untitled')
+        self.current_profile["plant"] = enriched.get('plant', '')
+        self.current_profile["shift"] = enriched.get('shift', '')
+        self.current_profile["mps"] = enriched.get('nomor_mps', '')
+        self.current_profile["machine"] = enriched.get('machine', '')
+        
+        prod_date = enriched.get('tanggal_produksi')
+        if hasattr(prod_date, 'strftime'):
+            self.current_profile["production_date"] = prod_date.strftime("%d/%m/%Y")
+        else:
+            self.current_profile["production_date"] = str(prod_date or datetime.now().strftime("%d/%m/%Y"))
+
+        # Update Name
+        wo_num = self.current_profile["wo_number"]
+        mac = self.current_profile["machine"]
+        self.current_profile["name"] = f"{wo_num} - {mac}" if mac else wo_num
+
+        # Update SKUs
+        new_skus = []
+        for sku in enriched.get("skus", []):
+            new_skus.append({
+                "code": sku.get("code", sku.get("default_code", "")),
+                "Nama Produk": sku.get("Nama Produk", sku.get("name", "")),
+                "gdrive_id": sku.get("gdrive_id", ""),
+                "otorisasi": sku.get("otorisasi", 0),
+                "sizes": sku.get("sizes", "36,37,38,39,40,41,42,43,44"),
+                "team": "Kiri", # Default
+            })
+        self.current_profile["selected_skus"] = new_skus
+
+        # Update internal presets
+        presets = []
+        for idx, sku in enumerate(new_skus):
+            code = sku["code"]
+            oto = sku["otorisasi"]
+            size_list = self._parse_sizes(sku["sizes"], code)
+            for s in size_list:
+                presets.append({
+                    "sku": code,
+                    "size": s,
+                    "color_idx": (idx % 4) + 1,
+                    "team": sku["team"],
+                    "otorisasi": oto
+                })
+        self.current_profile["presets"] = presets
+
+        # Refresh UI
+        self.load_profile(self.current_profile)
+        self._show_toast("✓ Data updated from Work Order")
 
     # ─── ACTIONS ──────────────────────────────────────────
 

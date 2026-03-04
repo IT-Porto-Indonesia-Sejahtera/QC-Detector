@@ -1,0 +1,16 @@
+2026-02-27 13:47:06,412 - CRITICAL - main - Uncaught exception: name 'h_regs' is not defined
+Traceback (most recent call last):
+  File "/Users/porto-mac/Documents/GitHub/QC-Detector/main.py", line 122, in <module>
+    run_ui_mode()
+  File "/Users/porto-mac/Documents/GitHub/QC-Detector/main.py", line 56, in run_ui_mode
+    app.run_app()
+  File "/Users/porto-mac/Documents/GitHub/QC-Detector/app/main_windows.py", line 331, in run_app
+    window = MainWindow()
+  File "/Users/porto-mac/Documents/GitHub/QC-Detector/app/main_windows.py", line 34, in __init__
+    self.settings_page = GeneralSettingsPage(controller=self)
+  File "/Users/porto-mac/Documents/GitHub/QC-Detector/app/pages/general_settings_page.py", line 30, in __init__
+    self.init_ui()
+  File "/Users/porto-mac/Documents/GitHub/QC-Detector/app/pages/general_settings_page.py", line 213, in init_ui
+    h_regs.addLayout(v_trig); h_regs.addLayout(v_res); h_regs.addLayout(v_coil); hw_layout.addLayout(h_regs)
+NameError: name 'h_regs' is not defined
+

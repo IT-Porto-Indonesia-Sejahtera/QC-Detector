@@ -13,6 +13,10 @@ from project_utilities.json_utility import JsonUtility
 from app.utils.ui_scaling import UIScaling
 from app.widgets.wo_selector_overlay import WOSelectorOverlay
 from app.data.record_manager import RecordManager
+from backend.get_wo_list import fetch_wo_list, enrich_wo_with_sku
+from backend.get_product_sku import ProductSKUWorker
+from backend.sku_cache import set_sku_data, add_log
+from backend.DB import is_connected
 
 PROFILES_FILE = os.path.join("output", "settings", "profiles.json")
 SETTINGS_FILE = os.path.join("output", "settings", "app_settings.json")
@@ -84,6 +88,26 @@ class PresetListPage(QWidget):
         btn_refresh.clicked.connect(self.refresh_data)
         h_layout.addWidget(btn_refresh)
 
+        # Sync SKU button
+        self.btn_sync = QPushButton("🔄 Sync SKU")
+        self.btn_sync.setCursor(Qt.PointingHandCursor)
+        self.btn_sync.setFixedHeight(UIScaling.scale(48))
+        self.btn_sync.setStyleSheet(f"""
+            QPushButton {{
+                background-color: white;
+                border: 1.5px solid #2563EB;
+                border-radius: {UIScaling.scale(12)}px;
+                padding: 0 {UIScaling.scale(20)}px;
+                font-size: {UIScaling.scale_font(13)}px;
+                font-weight: 700;
+                color: #2563EB;
+            }}
+            QPushButton:hover {{ background-color: #EFF6FF; }}
+            QPushButton:disabled {{ color: #9CA3AF; border-color: #D1D5DB; }}
+        """)
+        self.btn_sync.clicked.connect(self.fetch_sku_data)
+        h_layout.addWidget(self.btn_sync)
+
         # Mulai button
         self.btn_mulai = QPushButton("▶  Mulai")
         self.btn_mulai.setCursor(Qt.PointingHandCursor)
@@ -116,7 +140,7 @@ class PresetListPage(QWidget):
         f_layout.setContentsMargins(UIScaling.scale(24), UIScaling.scale(10), UIScaling.scale(24), UIScaling.scale(10))
         f_layout.setSpacing(UIScaling.scale(12))
 
-        # Tambah Preset button
+        # Tambah Preset button (integrated with WO Sync)
         btn_add = QPushButton("＋  Tambah Preset")
         btn_add.setCursor(Qt.PointingHandCursor)
         btn_add.setFixedHeight(UIScaling.scale(44))
@@ -439,39 +463,87 @@ class PresetListPage(QWidget):
     # ─── ACTIONS ──────────────────────────────────────────
 
     def add_preset(self):
-        overlay = WOSelectorOverlay(self.window())
-        overlay.wo_selected.connect(self._on_wo_selected)
+        """Fetch today's WOs and show selector before creating."""
+        settings = JsonUtility.load_from_json(SETTINGS_FILE) or {}
+        plant = settings.get("plant", "EVA1")
+        machine = settings.get("machine", "Mesin 08")
+        
+        if not is_connected():
+            # If not connected, we can still show the overlay but it will be empty
+            # or we could allow manual creation. For now, let's try to fetch.
+            pass
+
+        try:
+            # Synchronous fetch as requested
+            wo_list = fetch_wo_list(plant, machine)
+            overlay = WOSelectorOverlay(self.window(), wo_list, plant=plant, machine=machine)
+            overlay.wo_selected.connect(self._on_wo_selected)
+        except Exception as e:
+            print(f"Error fetching WOs: {e}")
+            # Fallback to empty overlay or manual (manual not yet specifically requested)
+            overlay = WOSelectorOverlay(self.window(), [])
+            overlay.wo_selected.connect(self._on_wo_selected)
 
     def _on_wo_selected(self, wo_data):
+        if not wo_data: return
+        
+        # Enrich with SKU data (otorisasi)
+        enriched = enrich_wo_with_sku(wo_data)
+        
+        wo_num = enriched.get('nomor_wo', 'Untitled')
+        machine = enriched.get('machine', '')
+        shift = enriched.get('shift', '')
+        
+        prod_date = enriched.get('tanggal_produksi')
+        if hasattr(prod_date, 'strftime'): # Handle date/datetime objects
+            prod_date = prod_date.strftime("%d/%m/%Y")
+        else:
+            prod_date = str(prod_date or datetime.now().strftime("%d/%m/%Y"))
+
         new_profile = {
             "id": str(uuid.uuid4()),
-            "name": f"{wo_data['wo_number']} - {wo_data.get('machine', '')}",
-            "wo_number": wo_data["wo_number"],
-            "plant": wo_data.get("plant", ""),
-            "shift": wo_data.get("shift", ""),
-            "production_date": wo_data.get("production_date", ""),
-            "mps": wo_data.get("mps", ""),
-            "machine": wo_data.get("machine", ""),
+            "name": f"{wo_num} - {machine}",
+            "wo_number": wo_num,
+            "plant": enriched.get('plant', ''),
+            "shift": shift,
+            "production_date": prod_date,
+            "mps": enriched.get('nomor_mps', ''),
+            "machine": machine,
             "notes": "",
             "status": "draft",
-            "presets": [],
-            "selected_skus": [],
             "last_updated": datetime.now().strftime("%d/%m/%Y, %H:%M:%S"),
+            "selected_skus": [],
+            "presets": []
         }
 
-        wo_skus = wo_data.get("skus", [])
-        for sku in wo_skus[:4]:
+        # Populate selected_skus from the enriched WO
+        wo_skus = enriched.get("skus", [])
+        for sku in wo_skus:
             new_profile["selected_skus"].append({
-                "code": sku.get("code", ""),
-                "coeff": sku.get("code", ""),
-                "default_code": sku.get("code", ""),
-                "Nama Produk": sku.get("name", sku.get("code", "")),
-                "gdrive_id": "",
-                "kategori": "EVA1",
-                "otorisasi": 0,
-                "sizes": "",
-                "team": sku.get("position", ""),
+                "code": sku.get("code", sku.get("default_code", "")),
+                "Nama Produk": sku.get("Nama Produk", sku.get("name", "")),
+                "gdrive_id": sku.get("gdrive_id", ""),
+                "otorisasi": sku.get("otorisasi", 0),
+                "sizes": sku.get("sizes", "36,37,38,39,40,41,42,43,44"),
+                "team": "Kiri", # Default position
             })
+
+        # Generate internal presets list
+        presets = []
+        for idx, sku in enumerate(new_profile["selected_skus"]):
+            code = sku["code"]
+            oto = sku["otorisasi"]
+            # Helper to parse sizes (assuming it matches the one in ProfilesPage)
+            size_list = [s.strip() for s in sku["sizes"].split(',') if s.strip()]
+            for s in size_list:
+                presets.append({
+                    "sku": code,
+                    "size": s,
+                    "color_idx": (idx % 4) + 1,
+                    "team": sku["team"],
+                    "otorisasi": oto
+                })
+        new_profile["presets"] = presets
 
         self.profiles.append(new_profile)
         self.save_profiles()
@@ -532,6 +604,32 @@ class PresetListPage(QWidget):
             return
         if self.controller:
             self.controller.go_to_live()
+
+    def fetch_sku_data(self):
+        self.btn_sync.setEnabled(False)
+        self.btn_sync.setText("Syncing...")
+        add_log("Starting SKU data fetch from Preset List page...")
+        
+        self.sku_worker = ProductSKUWorker()
+        self.sku_worker.finished.connect(self._on_sku_fetch_success)
+        self.sku_worker.error.connect(self._on_sku_fetch_error)
+        self.sku_worker.start()
+
+    def _on_sku_fetch_success(self, data):
+        if data:
+            set_sku_data(data)
+            self._show_toast(f"✓ Successfully synced {len(data)} SKUs")
+        else:
+            self._show_toast("No SKU data returned", is_error=True)
+        self._reset_sync_button()
+
+    def _on_sku_fetch_error(self, error_msg):
+        self._show_toast(f"Sync failed: {error_msg}", is_error=True)
+        self._reset_sync_button()
+
+    def _reset_sync_button(self):
+        self.btn_sync.setEnabled(True)
+        self.btn_sync.setText("🔄 Sync SKU")
 
     def go_back(self):
         if self.controller:
