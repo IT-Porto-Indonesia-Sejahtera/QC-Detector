@@ -89,7 +89,7 @@ class RecordManager:
         return record
 
     @classmethod
-    def update_counts(cls, preset_id, counts):
+    def update_counts(cls, preset_id, counts, per_sku_counts=None):
         """Update the counts dict for a preset's record."""
         if not preset_id:
             return
@@ -97,6 +97,8 @@ class RecordManager:
         for r in records:
             if r.get("preset_id") == preset_id:
                 r["counts"] = dict(counts)
+                if per_sku_counts is not None:
+                    r["per_sku_counts"] = dict(per_sku_counts)
                 break
         cls._save(records)
 

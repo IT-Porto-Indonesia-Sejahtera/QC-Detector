@@ -8,9 +8,9 @@ import threading
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QComboBox, QFrame, QSizePolicy, QGridLayout, QMenu, QWidgetAction,
-    QLineEdit, QScrollArea, QApplication, QScroller
+    QLineEdit, QScrollArea, QApplication, QScroller, QMessageBox
 )
-from PySide6.QtCore import Qt, QTimer, QSize, QRect, Signal, QThread, QThread
+from PySide6.QtCore import Qt, QTimer, QSize, QRect, Signal, QThread
 from PySide6.QtGui import QPixmap, QImage, QColor, QPainter, QAction, QDoubleValidator, QFont
 
 import numpy as np
@@ -137,6 +137,10 @@ class LiveCameraScreen(QWidget):
         self.team_layout_order = "A_LEFT" # or "B_LEFT"
         
         # State
+        self.last_result = None
+        
+        # QC Counter State
+        self.preset_counts = {} # Stores idx -> granular_counts_dict
         self.good_count = 0
         self.oven_count = 0
         self.bs_count = 0
@@ -148,12 +152,9 @@ class LiveCameraScreen(QWidget):
             "REJECT (UNDER)": 0,
             "REJECT (OVER)": 0,
             "TOTAL GOOD": 0,
+            "TOTAL OVEN": 0,
             "TOTAL BS": 0
         }
-        self.current_sku = "---"
-        self.current_size = "---"
-        self.current_otorisasi = 0.0
-        self.last_result = None
         
         # Profile State
         self.active_profile_id = None
@@ -437,11 +438,11 @@ class LiveCameraScreen(QWidget):
         print("Refreshing LiveCameraScreen data...")
         # Log current session before refreshing (in case it's an edit switch)
         self.log_session_summary()
-        self.reset_counters()
         
         old_layout_mode = getattr(self, 'layout_mode', None)
         self.load_settings()
         self.load_active_profile()
+        self.load_counters() # Restore saved counts for this profile
         
         # If layout mode changed, we need a full UI rebuild
         if old_layout_mode is not None and old_layout_mode != self.layout_mode:
@@ -844,8 +845,28 @@ class LiveCameraScreen(QWidget):
         self.lbl_bs.setFixedHeight(counter_height)
         self.lbl_bs.setStyleSheet(f"background-color: #D32F2F; color: white; font-weight: bold; font-size: {counter_font_size}px; border-radius: {counter_radius}px;")
         
-        counters_layout.addWidget(self.lbl_good)
-        counters_layout.addWidget(self.lbl_bs)
+        # Reset Button
+        self.btn_reset = QPushButton("🗑️")
+        self.btn_reset.setFixedSize(UIScaling.scale(50), counter_height)
+        self.btn_reset.setCursor(Qt.PointingHandCursor)
+        self.btn_reset.setStyleSheet(f"""
+            QPushButton {{
+                background-color: #F5F5F5;
+                color: #666666;
+                border: 1px solid #E0E0E0;
+                border-radius: {counter_radius}px;
+                font-size: {UIScaling.scale_font(20)}px;
+            }}
+            QPushButton:hover {{
+                background-color: #EEEEEE;
+                color: #D32F2F;
+            }}
+        """)
+        self.btn_reset.clicked.connect(self.confirm_reset)
+        
+        counters_layout.addWidget(self.lbl_good, 2)
+        counters_layout.addWidget(self.lbl_bs, 2)
+        counters_layout.addWidget(self.btn_reset, 1)
         
         layout.addLayout(counters_layout)
         
@@ -1147,29 +1168,45 @@ class LiveCameraScreen(QWidget):
         self._preset_click_guard = True
         QTimer.singleShot(300, self._reset_preset_guard)
         
-        if idx < 0 or idx >= len(self.presets):
-            return
-            
         p = self.presets[idx]
         
         # Log session summary for previous preset before switching
         self.log_session_summary()
         
+        # 1. Save current granular counts to the preset_counts map for the OLD SKU
+        if self.current_preset_idx >= 0:
+            self.preset_counts[str(self.current_preset_idx)] = dict(self.granular_counts)
+        
+        # 2. Update SKU details
         self.current_sku = p.get("sku", "---")
         self.current_size = p.get("size", "---")
         self.current_otorisasi = float(p.get("otorisasi", 0) or 0)
         
-        # Reset counters for the new preset session
-        self.reset_counters()
+        # 3. Load counters for the NEW SKU
+        self.current_preset_idx = idx
+        sku_counts = self.preset_counts.get(str(idx))
+        if sku_counts:
+            # Found existing counts for this SKU button
+            self.granular_counts = dict(sku_counts)
+            self.good_count = self.granular_counts.get("TOTAL GOOD", 0)
+            self.oven_count = self.granular_counts.get("TOTAL OVEN", 0)
+            self.bs_count = self.granular_counts.get("TOTAL BS", 0)
+        else:
+            # New SKU button, initialize with zeros
+            self.good_count = 0
+            self.oven_count = 0
+            self.bs_count = 0
+            for k in self.granular_counts:
+                self.granular_counts[k] = 0
         
         # Update UI
-        self.current_preset_idx = idx
         self.val_detail_sku.setText(f"{self.current_sku}/{self.current_size}")
         if hasattr(self, 'val_detail_oto'):
             self.val_detail_oto.setText(f"{self.current_otorisasi:+.1f}")
             
         # Update button styles
         self._update_preset_selection_style()
+        self.update_counters()
         
         print(f"Selected Preset {idx}: {self.current_sku} / {self.current_size} (+{self.current_otorisasi})")
     
@@ -1402,12 +1439,28 @@ class LiveCameraScreen(QWidget):
         if self.active_profile_data and self.active_profile_id:
             record = RecordManager.get_or_create_record(self.active_profile_data)
             if record:
-                data = record.get("counts", {})
-                self.good_count = data.get("TOTAL GOOD", 0)
-                self.oven_count = data.get("TOTAL OVEN", 0)
-                self.bs_count = data.get("TOTAL BS", 0)
-                for k in self.granular_counts:
-                    self.granular_counts[k] = data.get(k, 0)
+                # Load per-SKU counts if available
+                self.preset_counts = record.get("per_sku_counts", {})
+                
+                # If we have a selected preset, load its specific counts
+                if self.current_preset_idx >= 0:
+                    data = self.preset_counts.get(str(self.current_preset_idx), {})
+                    if data:
+                        self.good_count = data.get("TOTAL GOOD", 0)
+                        self.oven_count = data.get("TOTAL OVEN", 0)
+                        self.bs_count = data.get("TOTAL BS", 0)
+                        for k in self.granular_counts:
+                            self.granular_counts[k] = data.get(k, 0)
+                    else:
+                        # Clear if no data for this index
+                        self.good_count = 0
+                        self.oven_count = 0
+                        self.bs_count = 0
+                        for k in self.granular_counts:
+                            self.granular_counts[k] = 0
+                else:
+                    # No preset selected yet, just use aggregate for now or keep zeros
+                    pass
         else:
             # Fallback: try legacy counts.json
             data = JsonUtility.load_from_json(COUNTS_FILE) or {}
@@ -1422,9 +1475,49 @@ class LiveCameraScreen(QWidget):
     def save_counters(self):
         """Save current counters to RecordManager for the active preset."""
         if self.active_profile_id:
-            RecordManager.update_counts(self.active_profile_id, self.granular_counts)
-        # Also save legacy file for backwards compatibility
+            # 1. Update the per-sku map with current session data
+            if self.current_preset_idx >= 0:
+                self.preset_counts[str(self.current_preset_idx)] = dict(self.granular_counts)
+            
+            # 2. Calculate aggregate total for the profile record
+            aggregate_counts = {k: 0 for k in self.granular_counts}
+            for idx_str, counts in self.preset_counts.items():
+                for k in aggregate_counts:
+                    aggregate_counts[k] += counts.get(k, 0)
+            
+            # 3. Save both to RecordManager
+            RecordManager.update_counts(self.active_profile_id, aggregate_counts, self.preset_counts)
+        
+        # Also save legacy file for backwards compatibility (current SKU only)
         JsonUtility.save_to_json(COUNTS_FILE, self.granular_counts)
+
+    def confirm_reset(self):
+        """Ask user for confirmation before resetting ALL counters in this shift."""
+        reply = QMessageBox.question(
+            self, "Konfirmasi Reset",
+            "Apakah Anda yakin ingin menghapus SEMUA hitungan QC untuk sesi ini?\n\nSemua data Good/BS yang tersimpan untuk semua SKU di sesi ini akan menjadi NOL.",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No
+        )
+        
+        if reply == QMessageBox.Yes:
+            print("[Reset] User confirmed reset. Zeroing all counts...")
+            # 1. Clear session locals
+            self.good_count = 0
+            self.oven_count = 0
+            self.bs_count = 0
+            for k in self.granular_counts:
+                self.granular_counts[k] = 0
+            
+            # 2. Clear per-sku map
+            self.preset_counts = {}
+            
+            # 3. Save to RecordManager (zeros)
+            self.save_counters()
+            
+            # 4. Update UI
+            self.update_counters()
+            self.show_status("Selesai: Hitungan di-Reset", is_error=False)
+            QTimer.singleShot(1500, self.hide_status)
 
     def log_session_summary(self):
         """Log current session results to counts.log if there was activity."""
