@@ -576,39 +576,10 @@ class PresetDetailPage(QWidget):
         btn_pos.setCursor(Qt.PointingHandCursor)
         btn_pos.setFixedHeight(UIScaling.scale(42))
         
-        def update_pos_style(text):
-            if "Kiri" in text:
-                btn_pos.setStyleSheet(f"""
-                    QPushButton {{
-                        font-size: {UIScaling.scale_font(13)}px;
-                        font-weight: 700;
-                        color: #1E40AF;
-                        background-color: #DBEAFE;
-                        padding: 0 {UIScaling.scale(14)}px;
-                        border-radius: {UIScaling.scale(8)}px;
-                        border: 1.5px solid #93C5FD;
-                    }}
-                    QPushButton:hover {{ background-color: #BFDBFE; }}
-                """)
-            elif "Kanan" in text:
-                btn_pos.setStyleSheet(f"""
-                    QPushButton {{
-                        font-size: {UIScaling.scale_font(13)}px;
-                        font-weight: 700;
-                        color: #9A3412;
-                        background-color: #FFF7ED;
-                        padding: 0 {UIScaling.scale(14)}px;
-                        border-radius: {UIScaling.scale(8)}px;
-                        border: 1.5px solid #FDBA74;
-                    }}
-                    QPushButton:hover {{ background-color: #FFEDD5; }}
-                """)
-            else:
-                btn_pos.setStyleSheet("border: none; background: transparent;")
-
+        update_pos_style = lambda text: self._apply_pos_btn_style(btn_pos, text)
         update_pos_style(position)
         
-        if is_editable and data:
+        if is_editable:
             btn_pos.clicked.connect(lambda _, idx=index: self._toggle_sku_position(idx))
         else:
             btn_pos.setCursor(Qt.ArrowCursor)
@@ -650,9 +621,16 @@ class PresetDetailPage(QWidget):
         display_pos = self._format_position(new_team)
         row["pos_btn"].setText(display_pos)
         
-        # Style update
-        if "Kiri" in display_pos:
-            row["pos_btn"].setStyleSheet(f"""
+        self._apply_pos_btn_style(row["pos_btn"], display_pos)
+
+    def _apply_pos_btn_style(self, btn, text):
+        """Apply consistent styling to position buttons."""
+        if not text:
+            btn.setStyleSheet("border: none; background: transparent;")
+            return
+
+        if "Kiri" in text:
+            btn.setStyleSheet(f"""
                 QPushButton {{
                     font-size: {UIScaling.scale_font(13)}px;
                     font-weight: 700;
@@ -664,8 +642,8 @@ class PresetDetailPage(QWidget):
                 }}
                 QPushButton:hover {{ background-color: #BFDBFE; }}
             """)
-        else:
-            row["pos_btn"].setStyleSheet(f"""
+        elif "Kanan" in text:
+            btn.setStyleSheet(f"""
                 QPushButton {{
                     font-size: {UIScaling.scale_font(13)}px;
                     font-weight: 700;
@@ -677,6 +655,8 @@ class PresetDetailPage(QWidget):
                 }}
                 QPushButton:hover {{ background-color: #FFEDD5; }}
             """)
+        else:
+            btn.setStyleSheet("border: none; background: transparent;")
 
     # ─── SKU SELECTION ────────────────────────────────────
 
@@ -698,6 +678,14 @@ class PresetDetailPage(QWidget):
         display_name = sku_data.get("Nama Produk", sku_data.get("code", ""))
         row["name"].setText(display_name)
         row["name"].setStyleSheet(f"font-size: {UIScaling.scale_font(16)}px; font-weight: 700; color: #111827; border: none;")
+
+        # Update Position
+        if not sku_data.get("team"):
+            sku_data["team"] = "Kiri" # Default
+        
+        display_pos = self._format_position(sku_data["team"])
+        row["pos_btn"].setText(display_pos)
+        self._apply_pos_btn_style(row["pos_btn"], display_pos)
 
         gdrive_id = sku_data.get("gdrive_id", "")
         if gdrive_id:
