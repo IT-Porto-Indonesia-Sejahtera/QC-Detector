@@ -90,6 +90,13 @@ class GeneralSettingsPage(QWidget):
         
         p_layout.addWidget(self.create_styled_label("Mode Tata Letak:"))
         self.lay_mode = QComboBox(); self.lay_mode.addItems(["Classic", "Split", "Minimal"]); self.style_input(self.lay_mode); p_layout.addWidget(self.lay_mode)
+        
+        h_wo_cfg = QHBoxLayout()
+        v_plant = QVBoxLayout(); v_plant.addWidget(self.create_styled_label("Plant Default")); self.plant_input = QLineEdit("EVA1"); self.style_input(self.plant_input); v_plant.addWidget(self.plant_input)
+        v_mach = QVBoxLayout(); v_mach.addWidget(self.create_styled_label("Mesin Default")); self.machine_input = QLineEdit("Mesin 08"); self.style_input(self.machine_input); v_mach.addWidget(self.machine_input)
+        h_wo_cfg.addLayout(v_plant); h_wo_cfg.addLayout(v_mach)
+        p_layout.addLayout(h_wo_cfg)
+        
         right.addWidget(p_card)
         
         # Auto Calibration Card
@@ -379,6 +386,10 @@ class GeneralSettingsPage(QWidget):
         self.force_w.setText(str(s.get("force_width", 0)))
         self.force_h.setText(str(s.get("force_height", 0)))
 
+        # Load WO Config
+        self.plant_input.setText(s.get("plant", "EVA1"))
+        self.machine_input.setText(s.get("machine", "Mesin 08"))
+
         # Load distortion settings
         dist = s.get("lens_distortion", {})
         self.k1.setText(str(dist.get("k1", 0.0)))
@@ -556,6 +567,10 @@ class GeneralSettingsPage(QWidget):
         except:
             s["force_width"] = 0
             s["force_height"] = 0
+        
+        # Save WO Config
+        s["plant"] = self.plant_input.text().strip() or "EVA1"
+        s["machine"] = self.machine_input.text().strip() or "Mesin 08"
         
         # Save distortion settings
         try:

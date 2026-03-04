@@ -49,6 +49,13 @@ class MenuScreen(QWidget):
         presets_btn.setCursor(Qt.PointingHandCursor)
         presets_btn.clicked.connect(self.go_to_presets)
         
+        # Secondary Action: REPORT
+        report_btn = QPushButton("📊  Report")
+        report_btn.setMinimumSize(btn_min_w, btn_min_h)
+        report_btn.setStyleSheet(self.secondary_button_style(btn_font_size))
+        report_btn.setCursor(Qt.PointingHandCursor)
+        report_btn.clicked.connect(self.go_to_reports)
+
         # Secondary Action: SETTINGS
         settings_btn = QPushButton("⚙️  Pengaturan Sistem")
         settings_btn.setMinimumSize(btn_min_w, btn_min_h)
@@ -59,6 +66,8 @@ class MenuScreen(QWidget):
         layout.addWidget(run_btn, alignment=Qt.AlignCenter)
         layout.addSpacing(UIScaling.scale(15))
         layout.addWidget(presets_btn, alignment=Qt.AlignCenter)
+        layout.addSpacing(UIScaling.scale(15))
+        layout.addWidget(report_btn, alignment=Qt.AlignCenter)
         layout.addSpacing(UIScaling.scale(15))
         layout.addWidget(settings_btn, alignment=Qt.AlignCenter)
         layout.addStretch(1)
@@ -83,6 +92,9 @@ class MenuScreen(QWidget):
         from app.widgets.password_dialog import PasswordDialog
         if PasswordDialog.authenticate(self, password_type="preset"):
             self.parent.go_to_profiles()
+
+    def go_to_reports(self):
+        self.parent.go_to_reports()
 
     def go_to_settings(self):
         from app.widgets.password_dialog import PasswordDialog

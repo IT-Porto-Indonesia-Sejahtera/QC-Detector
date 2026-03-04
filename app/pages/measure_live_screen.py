@@ -24,6 +24,7 @@ from app.utils.capture_thread import VideoCaptureThread
 from app.utils.ui_scaling import UIScaling
 from backend.size_categorization import categorize_measurement, get_category_color
 from app.widgets.settings_overlay import SettingsOverlay
+from app.data.record_manager import RecordManager
 
 # Global list to hold stuck threads so they aren't garbage collected abruptly
 _zombie_threads = []
@@ -137,6 +138,7 @@ class LiveCameraScreen(QWidget):
         
         # State
         self.good_count = 0
+        self.oven_count = 0
         self.bs_count = 0
         self.granular_counts = {
             "GOOD 1": 0,
@@ -1280,7 +1282,7 @@ class LiveCameraScreen(QWidget):
                     self.lbl_big_result.setStyleSheet(f"color: white; background-color: {bg_color}; padding: {res_padding}px; border-radius: {res_radius}px; border: none; font-size: {res_font_size}px; font-weight: 900;")
                     plc_val = self._write_plc_result(is_good=True)
                 elif category == "OVEN":
-                    # OVEN counts as neither good nor reject for now
+                    self.oven_count += 1
                     self.lbl_big_result.setText(f"{display_size}\nOVEN")
                     self.lbl_big_result.setStyleSheet(f"color: white; background-color: {bg_color}; padding: {res_padding}px; border-radius: {res_radius}px; border: none; font-size: {res_font_size}px; font-weight: 900;")
                     # TODO: Determine PLC behavior for OVEN
@@ -1309,6 +1311,7 @@ class LiveCameraScreen(QWidget):
                 
                 # Update totals for backwards compatibility and UI
                 self.granular_counts["TOTAL GOOD"] = self.good_count
+                self.granular_counts["TOTAL OVEN"] = self.oven_count
                 self.granular_counts["TOTAL BS"] = self.bs_count
                 self.save_counters()
 
@@ -1387,6 +1390,7 @@ class LiveCameraScreen(QWidget):
     def reset_counters(self):
         """Reset all session counters to zero."""
         self.good_count = 0
+        self.oven_count = 0
         self.bs_count = 0
         for k in self.granular_counts:
             self.granular_counts[k] = 0
@@ -1394,18 +1398,32 @@ class LiveCameraScreen(QWidget):
         self.update_counters()
 
     def load_counters(self):
-        """Load counters from JSON persistence."""
-        data = JsonUtility.load_from_json(COUNTS_FILE) or {}
-        if data:
-            self.good_count = data.get("TOTAL GOOD", 0)
-            self.bs_count = data.get("TOTAL BS", 0)
-            # Merge granular counts
-            for k in self.granular_counts:
-                self.granular_counts[k] = data.get(k, 0)
+        """Load counters from RecordManager for the active preset."""
+        if self.active_profile_data and self.active_profile_id:
+            record = RecordManager.get_or_create_record(self.active_profile_data)
+            if record:
+                data = record.get("counts", {})
+                self.good_count = data.get("TOTAL GOOD", 0)
+                self.oven_count = data.get("TOTAL OVEN", 0)
+                self.bs_count = data.get("TOTAL BS", 0)
+                for k in self.granular_counts:
+                    self.granular_counts[k] = data.get(k, 0)
+        else:
+            # Fallback: try legacy counts.json
+            data = JsonUtility.load_from_json(COUNTS_FILE) or {}
+            if data:
+                self.good_count = data.get("TOTAL GOOD", 0)
+                self.oven_count = data.get("TOTAL OVEN", 0)
+                self.bs_count = data.get("TOTAL BS", 0)
+                for k in self.granular_counts:
+                    self.granular_counts[k] = data.get(k, 0)
         self.update_counters()
 
     def save_counters(self):
-        """Save current counters to JSON persistence."""
+        """Save current counters to RecordManager for the active preset."""
+        if self.active_profile_id:
+            RecordManager.update_counts(self.active_profile_id, self.granular_counts)
+        # Also save legacy file for backwards compatibility
         JsonUtility.save_to_json(COUNTS_FILE, self.granular_counts)
 
     def log_session_summary(self):

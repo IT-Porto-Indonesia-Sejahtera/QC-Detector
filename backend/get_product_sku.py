@@ -42,6 +42,7 @@ def get_product_sku(
         ptd.revisi,
         pm.name AS divisi,
         ptd.size,
+        pt.id as product_id,
         ptd.code_cetakan,
         ptd.normal_size AS perbesar_ukuran,
 --         ptd.hardness,
@@ -116,6 +117,7 @@ WHERE rn = 1
             
             # Map to clean dictionary
             cleaned_result.append({
+                'id': row.get('product_id'), # Internal Database ID
                 'Nama Produk': row.get('product_code', 'Unknown'),
                 'Perbesaran Ukuran (Otorisasi)': oto_val,  # Now a float
                 'Raw Otorisasi': row.get('perbesaran_ukuran'), # Keep original just in case

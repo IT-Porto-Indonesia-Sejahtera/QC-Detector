@@ -123,7 +123,17 @@ def get_sku_by_code(code: str) -> Optional[Dict[str, Any]]:
     """Look up full SKU details by product code."""
     data = get_sku_data()
     for p in data:
-        if str(p.get("code", "")).strip().upper() == str(code).strip().upper():
+        if str(p.get("code", p.get("Nama Produk", ""))).strip().upper() == str(code).strip().upper():
+            return p
+    return None
+
+
+def get_sku_by_id(product_id: Any) -> Optional[Dict[str, Any]]:
+    """Look up full SKU details by internal product ID."""
+    data = get_sku_data()
+    pid = str(product_id).strip()
+    for p in data:
+        if str(p.get("id", "")).strip() == pid:
             return p
     return None
 

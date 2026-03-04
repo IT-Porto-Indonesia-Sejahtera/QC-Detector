@@ -15,7 +15,9 @@ from app.utils.ui_scaling import UIScaling
 from app.widgets.sku_selector_overlay import SkuSelectorOverlay
 from app.utils.image_loader import NetworkImageLoader
 from backend.get_product_sku import ProductSKUWorker
-from backend.sku_cache import set_sku_data, add_log
+from backend.get_wo_list import fetch_wo_list, enrich_wo_with_sku
+from backend.sku_cache import set_sku_data, add_log, get_sku_by_code
+from app.widgets.wo_selector_overlay import WOSelectorOverlay
 
 PROFILES_FILE = os.path.join("output", "settings", "profiles.json")
 SETTINGS_FILE = os.path.join("output", "settings", "app_settings.json")
@@ -932,4 +934,7 @@ class ProfilesPage(QWidget):
     def _reset_sync_button(self):
         self.btn_sync.setEnabled(True)
         self.btn_sync.setText("🔄 Sync SKU")
+
+# Add this at the end of the file or ensure it's available
+from backend.DB import is_connected
 
