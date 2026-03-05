@@ -161,6 +161,8 @@ class SettingsOverlay(BaseOverlay):
         else: self.layout_combo.setCurrentIndex(0)
         
         self.delay_input.setText(str(s.get("sensor_delay", 0.2)))
+        self.plant_input.setText(s.get("plant", "EVA1"))
+        self.machine_input.setText(s.get("machine", "Mesin 08"))
         
         # ArUco & Heights
         self.marker_size_input.setText(str(s.get("aruco_marker_size", 50.0)))
@@ -375,6 +377,13 @@ class SettingsOverlay(BaseOverlay):
         self.layout_combo = QComboBox(); self.layout_combo.addItems(["Classic", "Split", "Minimal"]); self.style_input(self.layout_combo); p_layout.addWidget(self.layout_combo)
         p_layout.addWidget(self.create_styled_label("Sensor Delay (s):"))
         self.delay_input = QLineEdit(); self.style_input(self.delay_input); p_layout.addWidget(self.delay_input)
+        
+        h_wo = QHBoxLayout()
+        self.plant_input = QLineEdit(); self.style_input(self.plant_input); self.plant_input.setPlaceholderText("EVA1")
+        self.machine_input = QLineEdit(); self.style_input(self.machine_input); self.machine_input.setPlaceholderText("Mesin 08")
+        h_wo.addLayout(VBoxWithLabel("Plant", self.plant_input))
+        h_wo.addLayout(VBoxWithLabel("Machine", self.machine_input))
+        p_layout.addLayout(h_wo)
         p_layout.addStretch()
         right_col.addWidget(p_card)
         
@@ -977,6 +986,8 @@ class SettingsOverlay(BaseOverlay):
         self.settings["sandal_thickness"] = float(self.obj_thickness_input.text() or 0.0)
         self.settings["mm_per_px"] = float(self.mmpx_input.text() or 0.21)
         self.settings["sensor_delay"] = float(self.delay_input.text() or 0.2)
+        self.settings["plant"] = self.plant_input.text().strip() or "EVA1"
+        self.settings["machine"] = self.machine_input.text().strip() or "Mesin 08"
         
         # Save Crop & Rotation
         self.settings["camera_crop"] = {

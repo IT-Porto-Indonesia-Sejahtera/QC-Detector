@@ -32,39 +32,63 @@ class GeneralSettingsPage(QWidget):
         self.is_scanning = False
         self.consistency_tracker = PLCConsistencyTracker()
         
+        # Industrial palette constants
+        self._C = {
+            'bg': '#1B1F27', 'surface': '#252A34', 'surface_hover': '#2E3440',
+            'text': '#E8ECF1', 'text_sub': '#8B95A5',
+            'accent': '#3B82F6', 'accent_hover': '#2563EB',
+            'green': '#22C55E', 'danger': '#EF4444',
+            'input_bg': '#1E2330', 'input_border': '#3A4150',
+            'input_focus': '#3B82F6',
+        }
+        
         self.init_ui()
         self.detect_available_cameras()
         self.load_settings()
 
     def init_ui(self):
         self.init_complete = False
-        self.setStyleSheet("background-color: #F2F2F7;")
+        C = self._C
+        self.setStyleSheet(f"background-color: {C['bg']};")
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0); layout.setSpacing(0)
         
         # Header
         header = QFrame(); header.setFixedHeight(UIScaling.scale(80))
-        header.setStyleSheet(f"background-color: {self.theme['bg_panel']}; border-bottom: 1px solid {self.theme['border']};")
+        header.setStyleSheet(f"background-color: {C['surface']}; border-bottom: 1px solid {C['input_border']};")
         h_layout = QHBoxLayout(header); h_layout.setContentsMargins(20, 0, 20, 0)
         
         btn_back = QPushButton("❮ Kembali"); btn_back.setFixedHeight(UIScaling.scale(40))
-        btn_back.setStyleSheet(f"border: none; font-size: {UIScaling.scale_font(16)}px; font-weight: bold; color: {self.theme['text_main']}; background: transparent;")
+        btn_back.setStyleSheet(f"border: none; font-size: {UIScaling.scale_font(16)}px; font-weight: bold; color: {C['text']}; background: transparent;")
         btn_back.clicked.connect(self.go_back)
         
-        lbl_title = QLabel("Pengaturan Sistem"); lbl_title.setStyleSheet(f"font-size: {UIScaling.scale_font(24)}px; font-weight: bold; color: {self.theme['text_main']};")
+        lbl_title = QLabel("Pengaturan Sistem"); lbl_title.setStyleSheet(f"font-size: {UIScaling.scale_font(24)}px; font-weight: bold; color: {C['text']};")
         
         h_layout.addWidget(btn_back); h_layout.addSpacing(20); h_layout.addWidget(lbl_title); h_layout.addStretch()
         layout.addWidget(header)
         
         # Scrollable Content
         scroll = QScrollArea(); scroll.setWidgetResizable(True); scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setStyleSheet(f"""
+            QScrollArea {{ background: transparent; border: none; }}
+            QScrollBar:vertical {{
+                background: {C['bg']}; width: 8px; border-radius: 4px;
+            }}
+            QScrollBar::handle:vertical {{
+                background: {C['input_border']}; border-radius: 4px; min-height: 30px;
+            }}
+            QScrollBar::handle:vertical:hover {{ background: {C['text_sub']}; }}
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0; }}
+        """)
         scroll_content = QWidget(); scroll_layout = QHBoxLayout(scroll_content)
+        scroll_content.setStyleSheet("background: transparent;")
         scroll_layout.setContentsMargins(20, 20, 20, 20); scroll_layout.setSpacing(20)
         
         # --- LEFT: Camera ---
         left = QVBoxLayout(); left.setSpacing(20)
         cam_card, cam_layout = self.create_card("Konfigurasi Kamera")
-        self.preview_box = QLabel("Umpan Uji"); self.preview_box.setAlignment(Qt.AlignCenter); self.preview_box.setFixedSize(UIScaling.scale(400), UIScaling.scale(250)); self.preview_box.setStyleSheet("background: #2D2D2D; border-radius: 10px; color: #CCC;")
+        self.preview_box = QLabel("Umpan Uji"); self.preview_box.setAlignment(Qt.AlignCenter); self.preview_box.setFixedSize(UIScaling.scale(400), UIScaling.scale(250))
+        self.preview_box.setStyleSheet(f"background: {C['input_bg']}; border-radius: 10px; color: {C['text_sub']}; border: 1px solid {C['input_border']};")
         cam_layout.addWidget(self.preview_box, 0, Qt.AlignCenter)
         self.btn_preview = QPushButton("Mulai Umpan Uji"); self.style_button(self.btn_preview, True); self.btn_preview.clicked.connect(self.toggle_preview); cam_layout.addWidget(self.btn_preview)
         
@@ -79,6 +103,7 @@ class GeneralSettingsPage(QWidget):
         h_params = QHBoxLayout(); self.proto = QComboBox(); self.proto.addItems(["rtsp", "http"]); self.style_input(self.proto); self.port = QLineEdit(); self.port.setPlaceholderText("554"); self.style_input(self.port)
         h_params.addWidget(QLabel("Proto:")); h_params.addWidget(self.proto); h_params.addWidget(QLabel("Port:")); h_params.addWidget(self.port); ip_layout.addLayout(h_params)
         self.path = QLineEdit(); self.path.setPlaceholderText("/live/ch1"); self.style_input(self.path); ip_layout.addWidget(QLabel("Path")); ip_layout.addWidget(self.path)
+        h_auth = QHBoxLayout(); self.user = QLineEdit(); self.user.setPlaceholderText("User"); self.style_input(self.user); self.passwd = QLineEdit(); self.passwd.setEchoMode(QLineEdit.Password); self.passwd.setPlaceholderText("Sandi"); self.style_input(self.passwd)
         h_auth.addWidget(self.user); h_auth.addWidget(self.passwd); ip_layout.addLayout(h_auth)
         
         h_disc = QHBoxLayout()
@@ -107,6 +132,9 @@ class GeneralSettingsPage(QWidget):
         v_plant = QVBoxLayout(); v_plant.addWidget(self.create_styled_label("Plant Default")); self.plant_input = QLineEdit("EVA1"); self.style_input(self.plant_input); v_plant.addWidget(self.plant_input)
         v_mach = QVBoxLayout(); v_mach.addWidget(self.create_styled_label("Mesin Default")); self.machine_input = QLineEdit("Mesin 08"); self.style_input(self.machine_input); v_mach.addWidget(self.machine_input)
         h_wo_cfg.addLayout(v_plant); h_wo_cfg.addLayout(v_mach)
+        p_layout.addWidget(self.create_styled_label("Delay Sensor (s):"))
+        self.delay = QLineEdit(); self.style_input(self.delay); p_layout.addWidget(self.delay)
+        
         p_layout.addLayout(h_wo_cfg)
         
         right.addWidget(p_card)
@@ -132,7 +160,7 @@ class GeneralSettingsPage(QWidget):
         h_ctrl.addWidget(self.btn_calibrate, 1); h_ctrl.addWidget(self.btn_debug_aruco)
         aruco_layout.addLayout(h_ctrl)
         
-        self.calibration_status = QLabel(""); self.calibration_status.setStyleSheet("color: #666; font-size: 11px; background: transparent; border: none;"); aruco_layout.addWidget(self.calibration_status)
+        self.calibration_status = QLabel(""); self.calibration_status.setStyleSheet(f"color: {C['text_sub']}; font-size: 11px; background: transparent; border: none;"); aruco_layout.addWidget(self.calibration_status)
         right.addWidget(aruco_card)
         
         # Camera Crop/Zoom Card
@@ -258,7 +286,7 @@ class GeneralSettingsPage(QWidget):
         test_layout.addLayout(h_test)
         
         self.lbl_test_status = QLabel("Status: Siap")
-        self.lbl_test_status.setStyleSheet(f"color: {self.theme.get('text_sub', '#8B95A5')}; font-size: 11px;")
+        self.lbl_test_status.setStyleSheet(f"color: {C['text_sub']}; font-size: 11px;")
         test_layout.addWidget(self.lbl_test_status)
         right.addWidget(test_card)
         
@@ -281,7 +309,7 @@ class GeneralSettingsPage(QWidget):
         from PySide6.QtWidgets import QTextEdit
         self.log_display = QTextEdit(); self.log_display.setReadOnly(True)
         self.log_display.setFixedHeight(UIScaling.scale(120))
-        self.log_display.setStyleSheet(f"background: #1C1C1E; color: #00FF00; font-family: 'Menlo', 'Courier New'; font-size: {UIScaling.scale_font(11)}px; padding: 8px; border-radius: 8px;")
+        self.log_display.setStyleSheet(f"background: {C['input_bg']}; color: {C['green']}; font-family: 'Menlo', 'Courier New'; font-size: {UIScaling.scale_font(11)}px; padding: 8px; border-radius: 8px; border: 1px solid {C['input_border']};")
         sync_layout.addWidget(self.log_display)
         right.addWidget(sync_card)
         
@@ -296,71 +324,117 @@ class GeneralSettingsPage(QWidget):
         scroll.setWidget(scroll_content); layout.addWidget(scroll)
 
     def create_card(self, title):
+        C = self._C
         card = QFrame()
         card.setObjectName("cardFrame")
-        card.setStyleSheet("""
-            QFrame#cardFrame {
-                background: white; 
+        card.setStyleSheet(f"""
+            QFrame#cardFrame {{
+                background: {C['surface']}; 
                 border-radius: 12px; 
-                border: 1px solid #E0E0E0;
-            }
-            QLabel {
+                border: 1px solid {C['input_border']};
+            }}
+            QLabel {{
                 border: none;
                 background: transparent;
-            }
+            }}
         """)
         l = QVBoxLayout(card)
         l.setContentsMargins(20, 20, 20, 20)
         l.setSpacing(12)
         lbl = QLabel(title.upper())
-        lbl.setStyleSheet("color: #007AFF; font-weight: bold; font-size: 11px; letter-spacing: 0.5px; border: none !important; background: transparent !important;")
+        lbl.setStyleSheet(f"color: {C['accent']}; font-weight: bold; font-size: 11px; letter-spacing: 0.5px; border: none !important; background: transparent !important;")
         l.addWidget(lbl)
         return card, l
 
     def create_styled_label(self, text):
+        C = self._C
         lbl = QLabel(text)
-        lbl.setStyleSheet("color: #1C1C1E; font-weight: bold; font-size: 13px; background: transparent; border: none;")
+        lbl.setStyleSheet(f"color: {C['text']}; font-weight: bold; font-size: 13px; background: transparent; border: none;")
         return lbl
 
     def style_button(self, btn, primary=False):
-        bg = "#007AFF" if primary else "#E8E8ED"
-        fg = "white" if primary else "#007AFF"
+        C = self._C
+        if primary:
+            bg, fg, hover = C['accent'], '#FFFFFF', C['accent_hover']
+        else:
+            bg, fg, hover = C['surface'], C['accent'], C['surface_hover']
         btn.setCursor(Qt.PointingHandCursor)
         btn.setStyleSheet(f"""
             QPushButton {{
-                background-color: {bg}; 
-                color: {fg}; 
-                border-radius: 8px; 
-                padding: 12px; 
-                font-weight: bold; 
-                font-size: {UIScaling.scale_font(14)}px; 
-                border: none;
+                background-color: {bg};
+                color: {fg};
+                border-radius: 8px;
+                padding: 12px;
+                font-weight: bold;
+                font-size: {UIScaling.scale_font(14)}px;
+                border: {'none' if primary else f'1px solid {C["input_border"]}'};
             }}
             QPushButton:hover {{
-                background-color: {"#005BB5" if primary else "#D1D1D6"};
+                background-color: {hover};
+            }}
+            QPushButton:disabled {{
+                background-color: {C['surface']};
+                color: {C['input_border']};
             }}
         """)
 
     def style_input(self, widget):
-        # Use class-specific selector to prevent inheritance to child widgets/labels
+        C = self._C
         cls = widget.__class__.__name__
         widget.setStyleSheet(f"""
             {cls} {{
-                border: 1px solid #D1D1D6; 
-                border-radius: 8px; 
-                padding: 10px; 
-                background: white; 
-                color: #1C1C1E;
+                border: 1px solid {C['input_border']};
+                border-radius: 8px;
+                padding: 10px;
+                background: {C['input_bg']};
+                color: {C['text']};
                 font-size: {UIScaling.scale_font(14)}px;
             }}
             {cls}:focus {{
-                border: 2px solid #007AFF;
+                border: 2px solid {C['input_focus']};
                 padding: 9px;
             }}
             QComboBox::drop-down {{
                 border: 0px;
             }}
+            QComboBox QAbstractItemView {{
+                background: {C['surface']};
+                color: {C['text']};
+                selection-background-color: {C['accent']};
+                selection-color: white;
+                border: 1px solid {C['input_border']};
+                border-radius: 4px;
+                padding: 4px;
+                outline: none;
+            }}
         """)
+        # Force non-native popup on macOS so stylesheet applies to dropdown
+        if isinstance(widget, QComboBox):
+            from PySide6.QtWidgets import QListView
+            view = QListView()
+            view.setStyleSheet(f"""
+                QListView {{
+                    background: {C['surface']};
+                    color: {C['text']};
+                    border: 1px solid {C['input_border']};
+                    border-radius: 4px;
+                    outline: none;
+                    padding: 4px;
+                }}
+                QListView::item {{
+                    padding: 8px;
+                    min-height: 28px;
+                    border-radius: 4px;
+                }}
+                QListView::item:hover {{
+                    background: {C['surface_hover']};
+                }}
+                QListView::item:selected {{
+                    background: {C['accent']};
+                    color: white;
+                }}
+            """)
+            widget.setView(view)
         # Connect to live update handler if not a combo (combos connected separately)
         if isinstance(widget, QLineEdit):
             widget.textChanged.connect(self.update_live_params)
@@ -376,6 +450,9 @@ class GeneralSettingsPage(QWidget):
         if layout_mode == "split": self.lay_mode.setCurrentIndex(1)
         elif layout_mode == "minimal": self.lay_mode.setCurrentIndex(2)
         else: self.lay_mode.setCurrentIndex(0)
+        
+        self.delay.setText(str(s.get("sensor_delay", 0.2)))
+        
         self.s_port.setText(s.get("sensor_port", "")); self.p_port.setText(s.get("plc_port", ""))
         self.p_tri.setText(str(s.get("plc_trigger_reg", 12)))
         self.p_res.setText(str(s.get("plc_result_reg", 100)))
@@ -543,6 +620,10 @@ class GeneralSettingsPage(QWidget):
         # Layout mode: 0=Classic, 1=Split, 2=Minimal
         layout_idx = self.lay_mode.currentIndex()
         s["layout_mode"] = ["classic", "split", "minimal"][layout_idx]
+        
+        try: s["sensor_delay"] = float(self.delay.text())
+        except: pass
+        
         cam_data = self.camera_combo.currentData()
         if isinstance(cam_data, str) and cam_data.isdigit():
             s["camera_index"] = int(cam_data)
@@ -811,6 +892,19 @@ class GeneralSettingsPage(QWidget):
         self.update_live_params()
 
     def update_auto_matrix_ui(self, is_auto):
+        if is_auto:
+            self.btn_auto_matrix.setText("Estimasi Matriks Otomatis: NYALA")
+            self.btn_auto_matrix.setStyleSheet(self.btn_auto_matrix.styleSheet().replace("#E8E8ED", "#4CAF50").replace("#007AFF", "white"))
+        else:
+            self.btn_auto_matrix.setText("Estimasi Matriks Otomatis: MATI")
+            self.style_button(self.btn_auto_matrix)
+            
+        # Disable/Enable manual fields
+        for field in [self.fx, self.fy, self.cx, self.cy]:
+            field.setReadOnly(is_auto)
+            field.setEnabled(not is_auto)
+            if is_auto:
+                field.setStyleSheet(field.styleSheet().replace("background: white", f"background: {self.theme['bg_panel']}"))
             else:
                 field.setStyleSheet(field.styleSheet().replace(f"background: {self.theme['bg_panel']}", "background: white"))
 
