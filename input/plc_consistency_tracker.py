@@ -36,8 +36,9 @@ class PLCConsistencyTracker:
         try:
             with open(self.csv_path, 'w', newline='') as f:
                 writer = csv.writer(f)
-                writer.writerow([
-                    "Index", "Timestamp", "SKU", "Size", "Pixel Value", "MM Value", 
+                    "Index", "Timestamp", "SKU", "Size", "Result", 
+                    "Length (px)", "Width (px)", "Length (mm)", "Width (mm)", 
+                    "Target (mm)", "Deviation (mm)",
                     "Pre-Cap Delay (ms)", "Post-Res Delay (ms)",
                     "PLC Input (D12)", "PLC Output (D100)"
                 ])
@@ -60,8 +61,13 @@ class PLCConsistencyTracker:
                    frame,
                    sku: str, 
                    size: str, 
-                   px_val: float, 
-                   mm_val: float, 
+                   result_category: str,
+                   px_len: float, 
+                   px_wid: float,
+                   mm_len: float, 
+                   mm_wid: float,
+                   target_mm: float,
+                   deviation_mm: float,
                    plc_input: int, 
                    plc_output: int,
                    pre_delay: int = 0,
@@ -87,8 +93,13 @@ class PLCConsistencyTracker:
                 "timestamp": timestamp,
                 "sku": sku,
                 "size": size,
-                "pixel": round(px_val, 3),
-                "mm": round(mm_val, 3),
+                "result": result_category,
+                "px_len": round(px_len, 3),
+                "px_wid": round(px_wid, 3),
+                "mm_len": round(mm_len, 3),
+                "mm_wid": round(mm_wid, 3),
+                "target_mm": round(target_mm, 3),
+                "deviation_mm": round(deviation_mm, 3),
                 "plc_input": plc_input,
                 "plc_output": plc_output,
                 "pre_delay": pre_delay,
@@ -103,12 +114,13 @@ class PLCConsistencyTracker:
                 with open(self.csv_path, 'a', newline='') as f:
                     writer = csv.writer(f)
                     writer.writerow([
-                        record["index"], record["timestamp"], record["sku"], record["size"],
-                        record["pixel"], record["mm"], record["pre_delay"], record["post_delay"],
+                        record["index"], record["timestamp"], record["sku"], record["size"], record["result"],
+                        record["px_len"], record["px_wid"], record["mm_len"], record["mm_wid"],
+                        record["target_mm"], record["deviation_mm"], record["pre_delay"], record["post_delay"],
                         record["plc_input"], record["plc_output"]
                     ])
                 
-            print(f"[TRACKER] SUCCESS: Added record #{index}: {sku} {size} -> {mm_val}mm")
+            print(f"[TRACKER] SUCCESS: Added record #{index}: {sku} {size} -> {mm_len}mm ({result_category})")
         except Exception as e:
             print(f"[TRACKER] ERROR adding record: {e}")
             import traceback
@@ -143,7 +155,7 @@ class PLCConsistencyTracker:
         })
 
         # --- Statistics Calculation ---
-        mm_values = [r["mm"] for r in self.records if r["mm"] > 0]
+        mm_values = [r["mm_len"] for r in self.records if r["mm_len"] > 0]
         count = len(mm_values)
         
         if count > 0:
@@ -187,13 +199,15 @@ class PLCConsistencyTracker:
         
         # --- Write Data Table ---
         data_start_row = start_row + len(summary_data) + 2
-        headers = ["Index", "Timestamp", "SKU", "Size", "Pixel Value", "MM Value", 
+        headers = ["Index", "Timestamp", "SKU", "Size", "Result", 
+                   "Length (px)", "Width (px)", "Length (mm)", "Width (mm)", 
+                   "Target (mm)", "Deviation (mm)",
                    "Pre-Cap Delay (ms)", "Post-Res Delay (ms)",
-                   "PLC Input (D12)", "PLC Output (D100)", "Image Link"]
+                   "PLC Input", "PLC Output", "Image Link"]
         
         for col, header in enumerate(headers):
             worksheet.write(data_start_row, col, header, header_format)
-            worksheet.set_column(col, col, 15)
+            worksheet.set_column(col, col, 14)
             
         for row_idx, rec in enumerate(self.records):
             row = data_start_row + 1 + row_idx
@@ -201,15 +215,31 @@ class PLCConsistencyTracker:
             worksheet.write(row, 1, rec["timestamp"], cell_format)
             worksheet.write(row, 2, rec["sku"], cell_format)
             worksheet.write(row, 3, rec["size"], cell_format)
-            worksheet.write(row, 4, rec["pixel"], cell_format)
-            worksheet.write(row, 5, rec["mm"], cell_format)
-            worksheet.write(row, 6, rec.get("pre_delay", 0), cell_format)
-            worksheet.write(row, 7, rec.get("post_delay", 0), cell_format)
-            worksheet.write(row, 8, rec["plc_input"], cell_format)
-            worksheet.write(row, 9, rec["plc_output"], cell_format)
+            
+            # Format Result cell
+            res = rec["result"]
+            res_c = cell_format
+            if "GOOD" in res or res == "OK":
+                res_c = workbook.add_format({'border': 1, 'align': 'center', 'bg_color': '#C6EFCE', 'font_color': '#006100'})
+            elif "REJECT" in res or "BS" in res:
+                res_c = workbook.add_format({'border': 1, 'align': 'center', 'bg_color': '#FFC7CE', 'font_color': '#9C0006'})
+            elif "OVEN" in res:
+                res_c = workbook.add_format({'border': 1, 'align': 'center', 'bg_color': '#FFEB9C', 'font_color': '#9C5700'})
+            worksheet.write(row, 4, res, res_c)
+            
+            worksheet.write(row, 5, rec["px_len"], cell_format)
+            worksheet.write(row, 6, rec["px_wid"], cell_format)
+            worksheet.write(row, 7, rec["mm_len"], cell_format)
+            worksheet.write(row, 8, rec["mm_wid"], cell_format)
+            worksheet.write(row, 9, rec["target_mm"], cell_format)
+            worksheet.write(row, 10, rec["deviation_mm"], cell_format)
+            worksheet.write(row, 11, rec.get("pre_delay", 0), cell_format)
+            worksheet.write(row, 12, rec.get("post_delay", 0), cell_format)
+            worksheet.write(row, 13, rec["plc_input"], cell_format)
+            worksheet.write(row, 14, rec["plc_output"], cell_format)
             
             # Link to image
-            worksheet.write_url(row, 10, f"external:{rec['image_path']}", cell_format, string="View Image")
+            worksheet.write_url(row, 15, f"external:{rec['image_path']}", cell_format, string="View Detection")
             
         workbook.close()
         return path

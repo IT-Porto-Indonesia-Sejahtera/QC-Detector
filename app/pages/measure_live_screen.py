@@ -1271,12 +1271,15 @@ class LiveCameraScreen(QWidget):
                     category = cat_result["category"]
                     detail = cat_result["detail"]
                     deviation_mm = cat_result["deviation_mm"]
-                    print(f"[CAPTURE] Size: {selected_size} | Otorisasi: {otorisasi} | Target: {cat_result['target_length_mm']} mm")
+                    target_mm = cat_result["target_length_mm"]
+                    print(f"[CAPTURE] Size: {selected_size} | Otorisasi: {otorisasi} | Target: {target_mm} mm")
                     print(f"[CAPTURE] Deviation: {deviation_mm:.2f} mm ({cat_result['deviation_size']:.4f} size units) => {detail}")
                 else:
                     # Logic Change: Force REJECT (BS) if no size selected
                     category = "REJECT"
                     detail = "No Size Selected"
+                    deviation_mm = 0.0
+                    target_mm = 0.0
                     print(f"[CAPTURE] No size selected, defaulting to REJECT/BS")
                 
                 self.val_detail_len.setText(f"{length_mm:.2f} mm")
@@ -1318,12 +1321,21 @@ class LiveCameraScreen(QWidget):
                 print(f"[DEBUG] Check active: {self.consistency_tracker.is_active} (ID: {id(self.consistency_tracker)})")
                 if self.consistency_tracker.is_active:
                     plc_input = self.plc_trigger.get_current_value() if self.plc_trigger else 0
+                    
+                    # Use processed frame if available, otherwise raw
+                    frame_to_save = self.captured_frame if self.captured_frame is not None else raw_frame
+                    
                     self.consistency_tracker.add_record(
-                        raw_frame,
+                        frame_to_save,
                         sku=self.current_sku,
                         size=self.current_size,
-                        px_val=px_length,
-                        mm_val=length_mm,
+                        result_category=detail,
+                        px_len=px_length,
+                        px_wid=px_width,
+                        mm_len=length_mm,
+                        mm_wid=width_mm,
+                        target_mm=target_mm,
+                        deviation_mm=deviation_mm,
                         plc_input=plc_input or 0,
                         plc_output=plc_val or 0,
                         pre_delay=getattr(self, 'delay_input_capture_ms', 0),
