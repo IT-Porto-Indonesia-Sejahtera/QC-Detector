@@ -36,6 +36,7 @@ class PLCConsistencyTracker:
         try:
             with open(self.csv_path, 'w', newline='') as f:
                 writer = csv.writer(f)
+                writer.writerow([
                     "Index", "Timestamp", "SKU", "Size", "Result", 
                     "Length (px)", "Width (px)", "Length (mm)", "Width (mm)", 
                     "Target (mm)", "Deviation (mm)",
