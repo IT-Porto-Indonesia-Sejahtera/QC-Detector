@@ -34,6 +34,7 @@ def fetch_wo_list(plant: str, machine: str, target_date: Optional[str] = None) -
             mi.id as id_wo,
             mi.name as nomor_wo,
             mi.state as status_wo,
+            mi.notes,
             pm.name as plant,
             ms.id as id_mps,
             ms.name as nomor_mps,
@@ -65,6 +66,7 @@ def fetch_wo_list(plant: str, machine: str, target_date: Optional[str] = None) -
             mi.id as id_wo,
             mi.name as nomor_wo,
             mi.state as status_wo,
+            mi.notes,
             pm.name as plant,
             ms.id as id_mps,
             ms.name as nomor_mps,
@@ -96,6 +98,7 @@ def fetch_wo_list(plant: str, machine: str, target_date: Optional[str] = None) -
             mi.id as id_wo,
             mi.name as nomor_wo,
             mi.state as status_wo,
+            mi.notes,
             pm.name as plant,
             ms.id as id_mps,
             ms.name as nomor_mps,
@@ -128,6 +131,7 @@ def fetch_wo_list(plant: str, machine: str, target_date: Optional[str] = None) -
         plant,
         shift,
         machine,
+        notes,
         STRING_AGG(CAST(product_id AS TEXT), ', ') AS list_product_id,
         STRING_AGG(CAST(product_code AS TEXT), ', ') AS list_product_code
     FROM WO
@@ -140,7 +144,8 @@ def fetch_wo_list(plant: str, machine: str, target_date: Optional[str] = None) -
         status_wo,
         plant,
         shift,
-        machine
+        machine,
+        notes
     ORDER BY 
         tanggal_produksi DESC, 
         nomor_wo;

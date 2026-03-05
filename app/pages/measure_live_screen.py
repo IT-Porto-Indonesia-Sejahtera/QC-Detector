@@ -8,7 +8,7 @@ import threading
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QComboBox, QFrame, QSizePolicy, QGridLayout, QMenu, QWidgetAction,
-    QLineEdit, QScrollArea, QApplication, QScroller, QMessageBox
+    QLineEdit, QScrollArea, QApplication, QScroller
 )
 from PySide6.QtCore import Qt, QTimer, QSize, QRect, Signal, QThread
 from PySide6.QtGui import QPixmap, QImage, QColor, QPainter, QAction, QDoubleValidator, QFont
@@ -845,28 +845,8 @@ class LiveCameraScreen(QWidget):
         self.lbl_bs.setFixedHeight(counter_height)
         self.lbl_bs.setStyleSheet(f"background-color: #D32F2F; color: white; font-weight: bold; font-size: {counter_font_size}px; border-radius: {counter_radius}px;")
         
-        # Reset Button
-        self.btn_reset = QPushButton("🗑️")
-        self.btn_reset.setFixedSize(UIScaling.scale(50), counter_height)
-        self.btn_reset.setCursor(Qt.PointingHandCursor)
-        self.btn_reset.setStyleSheet(f"""
-            QPushButton {{
-                background-color: #F5F5F5;
-                color: #666666;
-                border: 1px solid #E0E0E0;
-                border-radius: {counter_radius}px;
-                font-size: {UIScaling.scale_font(20)}px;
-            }}
-            QPushButton:hover {{
-                background-color: #EEEEEE;
-                color: #D32F2F;
-            }}
-        """)
-        self.btn_reset.clicked.connect(self.confirm_reset)
-        
-        counters_layout.addWidget(self.lbl_good, 2)
-        counters_layout.addWidget(self.lbl_bs, 2)
-        counters_layout.addWidget(self.btn_reset, 1)
+        counters_layout.addWidget(self.lbl_good)
+        counters_layout.addWidget(self.lbl_bs)
         
         layout.addLayout(counters_layout)
         
@@ -1490,34 +1470,6 @@ class LiveCameraScreen(QWidget):
         
         # Also save legacy file for backwards compatibility (current SKU only)
         JsonUtility.save_to_json(COUNTS_FILE, self.granular_counts)
-
-    def confirm_reset(self):
-        """Ask user for confirmation before resetting ALL counters in this shift."""
-        reply = QMessageBox.question(
-            self, "Konfirmasi Reset",
-            "Apakah Anda yakin ingin menghapus SEMUA hitungan QC untuk sesi ini?\n\nSemua data Good/BS yang tersimpan untuk semua SKU di sesi ini akan menjadi NOL.",
-            QMessageBox.Yes | QMessageBox.No, QMessageBox.No
-        )
-        
-        if reply == QMessageBox.Yes:
-            print("[Reset] User confirmed reset. Zeroing all counts...")
-            # 1. Clear session locals
-            self.good_count = 0
-            self.oven_count = 0
-            self.bs_count = 0
-            for k in self.granular_counts:
-                self.granular_counts[k] = 0
-            
-            # 2. Clear per-sku map
-            self.preset_counts = {}
-            
-            # 3. Save to RecordManager (zeros)
-            self.save_counters()
-            
-            # 4. Update UI
-            self.update_counters()
-            self.show_status("Selesai: Hitungan di-Reset", is_error=False)
-            QTimer.singleShot(1500, self.hide_status)
 
     def log_session_summary(self):
         """Log current session results to counts.log if there was activity."""

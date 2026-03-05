@@ -509,7 +509,7 @@ class PresetListPage(QWidget):
             "production_date": prod_date,
             "mps": enriched.get('nomor_mps', ''),
             "machine": machine,
-            "notes": "",
+            "notes": enriched.get('notes', ''),
             "status": "draft",
             "last_updated": datetime.now().strftime("%d/%m/%Y, %H:%M:%S"),
             "selected_skus": [],

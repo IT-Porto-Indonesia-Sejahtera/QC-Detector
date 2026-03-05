@@ -41,11 +41,22 @@ def get_product_sku(
         ptd.product_code,
         ptd.revisi,
         pm.name AS divisi,
-        ptd.size,
+        
+        (
+            SELECT string_agg(pav_size.name, ', ' ORDER BY pav_size.name DESC)
+            FROM product_attribute_line pal
+            JOIN product_attribute_line_product_attribute_value_rel rel_size 
+                ON rel_size.product_attribute_line_id = pal.id
+            JOIN product_attribute_value pav_size 
+                ON pav_size.id = rel_size.product_attribute_value_id
+            JOIN product_attribute pa 
+                ON pa.id = pal.attribute_id
+            WHERE pal.product_tmpl_id = pt.id AND pa.name ILIKE 'Size'
+        ) AS size,
+        
         pt.id as product_id,
         ptd.code_cetakan,
         ptd.normal_size AS perbesar_ukuran,
---         ptd.hardness,
         ptd.state,
         MAX(
             CASE
@@ -71,14 +82,13 @@ def get_product_sku(
         pav.attribute_id = 2
         AND ptd.state <> 'cancel'
         AND ptd.active = true
-        AND ptd.size IS NOT NULL
         AND pm.name = 'EVA1'
         AND lower(COALESCE(ptd.product_code, '')) NOT LIKE '%label%'
         AND lower(COALESCE(ptd.product_code, '')) NOT LIKE '%aksesoris%'
     GROUP BY
         ptd.id, ptd.name, ptd.otorisasi_type, ptd.is_portolady,
         pt.id, ptd.product_code, ptd.document_code, ptd.revisi,
-        pm.name, ptd.size, ptd.release_date, ptd.otorisasi_date,
+        pm.name, ptd.release_date, ptd.otorisasi_date,
         ptd.is_registered_haki, ptd.haki_submit_date, ptd.code_cetakan,
         ptd.normal_size, ptd.is_release_exdig, ct.name, ptd.is_no_brand,
         ptd.notes_tali, ptd.notes_accessories, ptd.hardness,
@@ -95,7 +105,7 @@ def get_product_sku(
 )
 SELECT *
 FROM ranked_data
-WHERE rn = 1
+WHERE rn = 1 
     {limit_clause}
     '''
     
@@ -107,7 +117,7 @@ WHERE rn = 1
         for row in result:
             # Parse Otorisasi (Perbesaran Ukuran)
             # Format examples: "+1.0", "+0.5", "pas", "Pas", "0"
-            raw_oto = str(row.get('perbesaran_ukuran', '')).lower().strip()
+            raw_oto = str(row.get('perbesar_ukuran', '')).lower().strip()
             oto_val = 0.0
             if raw_oto and raw_oto not in ['pas', 'none', 'null']:
                 try:
@@ -120,7 +130,7 @@ WHERE rn = 1
                 'id': row.get('product_id'), # Internal Database ID
                 'Nama Produk': row.get('product_code', 'Unknown'),
                 'Perbesaran Ukuran (Otorisasi)': oto_val,  # Now a float
-                'Raw Otorisasi': row.get('perbesaran_ukuran'), # Keep original just in case
+                'Raw Otorisasi': row.get('perbesar_ukuran'), # Keep original just in case
                 'List Size Available': row.get('size', ''),
                 'Kategori': row.get('divisi', 'Unknown'),
                 'Cover Image': row.get('cover_image'), # Direct URL

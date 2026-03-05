@@ -16,6 +16,8 @@ from backend.aruco_utils import detect_aruco_marker
 from app.widgets.aruco_calibration_dialog import ArucoCalibrationDialog
 from backend.get_product_sku import ProductSKUWorker
 from backend.sku_cache import set_sku_data, get_log_text, add_log
+from input.plc_consistency_tracker import PLCConsistencyTracker
+from app.utils.ip_camera_discovery import get_discovery, DiscoveredCamera
 
 SETTINGS_FILE = os.path.join("output", "settings", "app_settings.json")
 
@@ -26,6 +28,9 @@ class GeneralSettingsPage(QWidget):
         self.theme = ThemeManager.get_colors()
         self.cap_thread = None
         self.ip_presets = []
+        self.discovered_cameras = []
+        self.is_scanning = False
+        self.consistency_tracker = PLCConsistencyTracker()
         
         self.init_ui()
         self.detect_available_cameras()
@@ -74,8 +79,15 @@ class GeneralSettingsPage(QWidget):
         h_params = QHBoxLayout(); self.proto = QComboBox(); self.proto.addItems(["rtsp", "http"]); self.style_input(self.proto); self.port = QLineEdit(); self.port.setPlaceholderText("554"); self.style_input(self.port)
         h_params.addWidget(QLabel("Proto:")); h_params.addWidget(self.proto); h_params.addWidget(QLabel("Port:")); h_params.addWidget(self.port); ip_layout.addLayout(h_params)
         self.path = QLineEdit(); self.path.setPlaceholderText("/live/ch1"); self.style_input(self.path); ip_layout.addWidget(QLabel("Path")); ip_layout.addWidget(self.path)
-        h_auth = QHBoxLayout(); self.user = QLineEdit(); self.user.setPlaceholderText("User"); self.style_input(self.user); self.passwd = QLineEdit(); self.passwd.setEchoMode(QLineEdit.Password); self.passwd.setPlaceholderText("Sandi"); self.style_input(self.passwd)
         h_auth.addWidget(self.user); h_auth.addWidget(self.passwd); ip_layout.addLayout(h_auth)
+        
+        h_disc = QHBoxLayout()
+        self.btn_scan_cameras = QPushButton("🔍 Scan Jaringan"); self.style_button(self.btn_scan_cameras)
+        self.btn_scan_cameras.clicked.connect(self.scan_for_cameras)
+        self.discovered_combo = QComboBox(); self.discovered_combo.addItem("-- Ditemukan --")
+        self.style_input(self.discovered_combo); self.discovered_combo.currentIndexChanged.connect(self.on_discovered_camera_selected)
+        h_disc.addWidget(self.btn_scan_cameras); h_disc.addWidget(self.discovered_combo, 1); ip_layout.addLayout(h_disc)
+        
         left.addWidget(self.ip_section); left.addStretch()
         scroll_layout.addLayout(left, 1)
         
@@ -232,6 +244,23 @@ class GeneralSettingsPage(QWidget):
         v_d2 = QVBoxLayout(); v_d2.addWidget(self.create_styled_label("Delay Post-Result (ms)")); self.d2 = QLineEdit(); self.style_input(self.d2); v_d2.addWidget(self.d2)
         h_delays.addLayout(v_d1); h_delays.addLayout(v_d2); hw_layout.addLayout(h_delays)
         right.addWidget(hw_card)
+        
+        # PLC Consistency Test Card
+        test_card, test_layout = self.create_card("Uji Konsistensi PLC (Repeatability)")
+        test_layout.addWidget(self.create_styled_label("Rekam gambar & hasil untuk uji stabilitas:"))
+        h_test = QHBoxLayout()
+        self.btn_start_test = QPushButton("▶ Mulai Sesi"); self.style_button(self.btn_start_test, True)
+        self.btn_start_test.clicked.connect(self.start_consistency_test)
+        self.btn_stop_test = QPushButton("■ Berhenti & Ekspor"); self.style_button(self.btn_stop_test)
+        self.btn_stop_test.setEnabled(False)
+        self.btn_stop_test.clicked.connect(self.stop_consistency_test)
+        h_test.addWidget(self.btn_start_test); h_test.addWidget(self.btn_stop_test)
+        test_layout.addLayout(h_test)
+        
+        self.lbl_test_status = QLabel("Status: Siap")
+        self.lbl_test_status.setStyleSheet(f"color: {self.theme.get('text_sub', '#8B95A5')}; font-size: 11px;")
+        test_layout.addWidget(self.lbl_test_status)
+        right.addWidget(test_card)
         
         # Developer Tools Card (Hidden Features)
         dev_card, dev_layout = self.create_card("Alat Pengembang")
@@ -782,21 +811,77 @@ class GeneralSettingsPage(QWidget):
         self.update_live_params()
 
     def update_auto_matrix_ui(self, is_auto):
-        if is_auto:
-            self.btn_auto_matrix.setText("Estimasi Matriks Otomatis: NYALA")
-            self.btn_auto_matrix.setStyleSheet(self.btn_auto_matrix.styleSheet().replace("#E8E8ED", "#4CAF50").replace("#007AFF", "white"))
-        else:
-            self.btn_auto_matrix.setText("Estimasi Matriks Otomatis: MATI")
-            self.style_button(self.btn_auto_matrix)
-            
-        # Disable/Enable manual fields
-        for field in [self.fx, self.fy, self.cx, self.cy]:
-            field.setReadOnly(is_auto)
-            field.setEnabled(not is_auto)
-            if is_auto:
-                field.setStyleSheet(field.styleSheet().replace("background: white", f"background: {self.theme['bg_panel']}"))
             else:
                 field.setStyleSheet(field.styleSheet().replace(f"background: {self.theme['bg_panel']}", "background: white"))
+
+    # --- PLC Consistency Test Logic ---
+    
+    def start_consistency_test(self):
+        """Start a new consistency test session"""
+        self.consistency_tracker.start_session()
+        self.lbl_test_status.setText("Status: BERJALAN (Merekam...)")
+        self.lbl_test_status.setStyleSheet("color: #4CAF50; font-size: 11px; font-weight: bold;")
+        self.btn_start_test.setEnabled(False)
+        self.btn_stop_test.setEnabled(True)
+                
+    def stop_consistency_test(self):
+        """Stop current session and export results"""
+        path = self.consistency_tracker.stop_session()
+        count = self.consistency_tracker.get_count()
+        self.lbl_test_status.setText(f"Status: Diekspor {count} data ke Excel")
+        self.lbl_test_status.setStyleSheet("color: #007AFF; font-size: 11px;")
+        self.btn_start_test.setEnabled(True)
+        self.btn_stop_test.setEnabled(False)
+        
+        # Auto-open folder
+        import subprocess
+        try:
+            folder = os.path.dirname(path)
+            if os.path.exists(folder):
+                subprocess.run(["open", folder])
+        except:
+            pass
+
+    # --- Network Discovery Logic ---
+    
+    def scan_for_cameras(self):
+        if self.is_scanning: return
+        self.is_scanning = True
+        self.btn_scan_cameras.setText("⏳ Mencari...")
+        self.btn_scan_cameras.setEnabled(False)
+        self.calibration_status.setText("Mencari kamera di jaringan...")
+        self.calibration_status.setStyleSheet("color: #007AFF; font-size: 12px; font-style: italic;")
+        discovery = get_discovery()
+        discovery.discover_cameras_async(timeout=5.0, callback=self._on_cameras_discovered)
+    
+    def _on_cameras_discovered(self, cameras):
+        self.discovered_cameras = cameras
+        self.is_scanning = False
+        QTimer.singleShot(0, self._update_discovered_cameras_ui)
+    
+    def _update_discovered_cameras_ui(self):
+        self.btn_scan_cameras.setText("🔍 Scan Jaringan")
+        self.btn_scan_cameras.setEnabled(True)
+        self.discovered_combo.clear()
+        self.discovered_combo.addItem("-- Ditemukan --")
+        if self.discovered_cameras:
+            for cam in self.discovered_cameras:
+                self.discovered_combo.addItem(str(cam), cam)
+            self.calibration_status.setText(f"Ditemukan {len(self.discovered_cameras)} kamera")
+            self.calibration_status.setStyleSheet("color: #4CAF50; font-size: 12px; font-style: italic;")
+        else:
+            self.discovered_combo.addItem("Tidak ada kamera")
+            self.calibration_status.setText("Kamera tidak ditemukan. Masukkan manual.")
+            self.calibration_status.setStyleSheet("color: #FF9800; font-size: 12px; font-style: italic;")
+    
+    def on_discovered_camera_selected(self, index):
+        if index <= 0 or not self.discovered_cameras: return
+        cam = self.discovered_combo.currentData()
+        if cam and isinstance(cam, DiscoveredCamera):
+            self.ip_addr.setText(cam.ip)
+            self.port.setText(str(cam.port))
+            self.path.setText(cam.rtsp_path)
+            self.calibration_status.setText(f"Data diisi dari: {cam}")
 
     def fetch_sku_data(self):
         """Fetch product SKU data from database asynchronously."""

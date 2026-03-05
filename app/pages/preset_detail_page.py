@@ -737,6 +737,7 @@ class PresetDetailPage(QWidget):
         self.current_profile["shift"] = enriched.get('shift', '')
         self.current_profile["mps"] = enriched.get('nomor_mps', '')
         self.current_profile["machine"] = enriched.get('machine', '')
+        self.current_profile["notes"] = enriched.get('notes', '')
         
         prod_date = enriched.get('tanggal_produksi')
         if hasattr(prod_date, 'strftime'):

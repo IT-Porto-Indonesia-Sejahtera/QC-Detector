@@ -232,7 +232,7 @@ class WOSelectorOverlay(BaseOverlay):
 
     def create_wo_card(self, wo):
         card = QFrame()
-        card.setFixedHeight(UIScaling.scale(80))
+        card.setFixedHeight(UIScaling.scale(100))
         card.setCursor(Qt.PointingHandCursor)
         card.setStyleSheet(f"""
             QFrame {{
@@ -262,6 +262,14 @@ class WOSelectorOverlay(BaseOverlay):
         lbl_sub = QLabel(f"Shift: {shift} | {machine}")
         lbl_sub.setStyleSheet(f"font-size: {UIScaling.scale_font(12)}px; color: #666; border:none;")
         v_info.addWidget(lbl_sub)
+
+        # Notes Display
+        notes = wo.get('notes', '')
+        if notes:
+            lbl_notes = QLabel(f"📝 {notes}")
+            lbl_notes.setStyleSheet(f"font-size: {UIScaling.scale_font(11)}px; color: #92400E; font-style: italic; border:none;")
+            lbl_notes.setWordWrap(True)
+            v_info.addWidget(lbl_notes)
         
         layout.addLayout(v_info, 1)
         
