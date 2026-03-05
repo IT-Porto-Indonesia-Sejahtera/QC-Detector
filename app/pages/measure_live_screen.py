@@ -1166,6 +1166,15 @@ class LiveCameraScreen(QWidget):
         self.current_size = p.get("size", "---")
         self.current_otorisasi = float(p.get("otorisasi", 0) or 0)
         
+        # 3. Determine position (Left/Right) from preset team field
+        pos = str(p.get("team", "")).lower().strip()
+        if "right" in pos or "kanan" in pos or "team b" in pos or pos == "b":
+            self.current_position = "Right"
+        elif "left" in pos or "kiri" in pos or "team a" in pos or pos == "a":
+            self.current_position = "Left"
+        else:
+            self.current_position = "Left"  # Default
+        
         # 3. Load counters for the NEW SKU
         self.current_preset_idx = idx
         sku_counts = self.preset_counts.get(str(idx))
@@ -1304,18 +1313,17 @@ class LiveCameraScreen(QWidget):
                     self.good_count += 1
                     self.lbl_big_result.setText(f"{display_size}\nBAGUS")
                     self.lbl_big_result.setStyleSheet(f"color: white; background-color: {bg_color}; padding: {res_padding}px; border-radius: {res_radius}px; border: none; font-size: {res_font_size}px; font-weight: 900;")
-                    plc_val = self._write_plc_result(is_good=True)
+                    plc_val = self._write_plc_result(category, detail)
                 elif category == "OVEN":
                     self.oven_count += 1
                     self.lbl_big_result.setText(f"{display_size}\nOVEN")
                     self.lbl_big_result.setStyleSheet(f"color: white; background-color: {bg_color}; padding: {res_padding}px; border-radius: {res_radius}px; border: none; font-size: {res_font_size}px; font-weight: 900;")
-                    # TODO: Determine PLC behavior for OVEN
-                    plc_val = 0
+                    plc_val = self._write_plc_result(category, detail)
                 else:  # REJECT
                     self.bs_count += 1
                     self.lbl_big_result.setText(f"{display_size}\nBS")
                     self.lbl_big_result.setStyleSheet(f"color: white; background-color: {bg_color}; padding: {res_padding}px; border-radius: {res_radius}px; border: none; font-size: {res_font_size}px; font-weight: 900;")
-                    plc_val = self._write_plc_result(is_good=False)
+                    plc_val = self._write_plc_result(category, detail)
                 
                 # Record to consistency tracker if active
                 print(f"[DEBUG] Check active: {self.consistency_tracker.is_active} (ID: {id(self.consistency_tracker)})")
@@ -1931,29 +1939,48 @@ class LiveCameraScreen(QWidget):
             w = self.width()
             self.lbl_tracker_indicator.move(w - self.lbl_tracker_indicator.width() - 20, 100)
     
-    def _write_plc_result(self, is_good: bool):
+    def _write_plc_result(self, category: str, detail: str):
         """
-        Write QC result to PLC register (default 100).
-        Then wait for delay and pulse trigger Coil (default 100).
-        GOOD: random 1-4
-        BS/REJECT: random 5-8
+        Write QC result to PLC register based on category + position.
+        
+        Mapping (deterministic):
+        ┌──────────┬───────┬──────┐
+        │ Category │ Kanan │ Kiri │
+        ├──────────┼───────┼──────┤
+        │ GOOD 1   │   1   │   2  │
+        │ GOOD 2   │   3   │   4  │
+        │ OVEN 1   │   5   │   6  │
+        │ OVEN 2   │   7   │   8  │
+        │ REJECT   │   9   │   9  │
+        └──────────┴───────┴──────┘
         """
         if not self.plc_trigger or not self.plc_trigger.is_connected():
             print(f"[{time.strftime('%H:%M:%S')}] [PLC] Cannot write result - not connected")
-            return
+            return 0
         
-        # 1. Write Result to Data Register (D100/100)
+        position = getattr(self, 'current_position', 'Left')
+        is_right = (position == "Right")
+        
+        # Deterministic mapping
+        PLC_MAP = {
+            "GOOD 1":   (1, 2),   # (Right, Left)
+            "GOOD 2":   (3, 4),
+            "OVEN 1":   (5, 6),
+            "OVEN 2":   (7, 8),
+            "REJECT (UNDER)": (9, 9),
+            "REJECT (OVER)":  (9, 9),
+            "No Size Selected": (9, 9),
+        }
+        
+        pair = PLC_MAP.get(detail, (9, 9))  # Default to 9 (BS)
+        value = pair[0] if is_right else pair[1]
+        
+        # Write to PLC
         res_reg = int(self.settings.get("plc_result_reg", 100))
-        if is_good:
-            value = random.randint(1, 4)
-            print(f"[{time.strftime('%H:%M:%S')}] [PLC] >>> GOOD result: writing value {value} to Reg {res_reg}")
-        else:
-            value = random.randint(5, 8)
-            print(f"[{time.strftime('%H:%M:%S')}] [PLC] >>> BAD result: writing value {value} to Reg {res_reg}")
-        
+        print(f"[{time.strftime('%H:%M:%S')}] [PLC] >>> {detail} ({position}) = Value {value} -> Reg {res_reg}")
         self.plc_trigger.write_register(res_reg, value)
         
-        # 2. Pulsing Coil Trigger (1600) after delay
+        # 2. Pulsing Coil Trigger after delay
         def pulse_trigger():
             try:
                 trigger_coil = getattr(self, 'plc_trigger_coil_reg', 1600)
