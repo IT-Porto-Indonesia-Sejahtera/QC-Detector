@@ -16,6 +16,7 @@ from app.pages.report_list_page import ReportListPage
 from app.pages.report_detail_page import ReportDetailPage
 from app.utils.fetch_logger import log_info, log_error, log_warning
 from project_utilities.json_utility import JsonUtility
+from input.plc_consistency_tracker import PLCConsistencyTracker
 
 class MainWindow(QWidget):
     def __init__(self):
@@ -28,6 +29,11 @@ class MainWindow(QWidget):
         self.stack = QStackedWidget()
         layout = QVBoxLayout(self)
         layout.addWidget(self.stack)
+        
+        # Shared tracker for PLC Consistency Test
+        self.consistency_tracker = PLCConsistencyTracker()
+        print(f"[DEBUG] MainWindow Tracker Created ID: {id(self.consistency_tracker)}")
+        print(f"[DEBUG] MainWindow Tracker is_active: {self.consistency_tracker.is_active}")
 
         # Create pages
         self.menu_page = MenuScreen(controller=self)

@@ -1,6 +1,9 @@
 import cv2
 import csv
 import math
+import datetime
+import os
+import xlsxwriter
 from typing import List, Dict, Any, Optional
 
 class PLCConsistencyTracker:
@@ -27,6 +30,7 @@ class PLCConsistencyTracker:
         self.csv_path = os.path.join(self.session_dir, "consistency_log.csv")
         self.records = []
         self.is_active = True
+        print(f"[TRACKER] Session started: {self.session_id} (Active: {self.is_active})")
         
         # Initialize CSV with headers
         try:
@@ -63,38 +67,39 @@ class PLCConsistencyTracker:
                    pre_delay: int = 0,
                    post_delay: int = 0):
         """Add a new record to the current session"""
+        print(f"[TRACKER] Attempting to add record... (Active: {self.is_active}, CSV: {self.csv_path})")
         if not self.is_active:
             return
             
-        index = len(self.records) + 1
-        timestamp = datetime.datetime.now().strftime("%H:%M:%S.%f")[:-3]
-        
-        # Save image
-        img_filename = f"capture_{index:03d}_{sku}_{size}.jpg"
-        img_relative_path = os.path.join("images", img_filename)
-        img_absolute_path = os.path.join(self.session_dir, img_relative_path)
-        
-        cv2.imwrite(img_absolute_path, frame)
-        
-        record = {
-            "index": index,
-            "timestamp": timestamp,
-            "sku": sku,
-            "size": size,
-            "pixel": round(px_val, 3),
-            "mm": round(mm_val, 3),
-            "plc_input": plc_input,
-            "plc_output": plc_output,
-            "pre_delay": pre_delay,
-            "post_delay": post_delay,
-            "image_path": img_relative_path
-        }
-        
-        self.records.append(record)
-        
-        # Real-time CSV Logging
-        if self.csv_path:
-            try:
+        try:
+            index = len(self.records) + 1
+            timestamp = datetime.datetime.now().strftime("%H:%M:%S.%f")[:-3]
+            
+            # Save image
+            img_filename = f"capture_{index:03d}_{sku}_{size}.jpg"
+            img_relative_path = os.path.join("images", img_filename)
+            img_absolute_path = os.path.join(self.session_dir, img_relative_path)
+            
+            cv2.imwrite(img_absolute_path, frame)
+            
+            record = {
+                "index": index,
+                "timestamp": timestamp,
+                "sku": sku,
+                "size": size,
+                "pixel": round(px_val, 3),
+                "mm": round(mm_val, 3),
+                "plc_input": plc_input,
+                "plc_output": plc_output,
+                "pre_delay": pre_delay,
+                "post_delay": post_delay,
+                "image_path": img_relative_path
+            }
+            
+            self.records.append(record)
+            
+            # Real-time CSV Logging
+            if self.csv_path:
                 with open(self.csv_path, 'a', newline='') as f:
                     writer = csv.writer(f)
                     writer.writerow([
@@ -102,10 +107,12 @@ class PLCConsistencyTracker:
                         record["pixel"], record["mm"], record["pre_delay"], record["post_delay"],
                         record["plc_input"], record["plc_output"]
                     ])
-            except Exception as e:
-                print(f"[TRACKER] Error writing to CSV: {e}")
                 
-        print(f"[TRACKER] Added record #{index}: {sku} {size} -> {mm_val}mm (Delays: {pre_delay}/{post_delay}ms)")
+            print(f"[TRACKER] SUCCESS: Added record #{index}: {sku} {size} -> {mm_val}mm")
+        except Exception as e:
+            print(f"[TRACKER] ERROR adding record: {e}")
+            import traceback
+            traceback.print_exc()
 
     def export_to_excel(self) -> str:
         """Export records and automated statistics to Excel file using xlsxwriter"""

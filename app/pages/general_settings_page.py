@@ -30,7 +30,9 @@ class GeneralSettingsPage(QWidget):
         self.ip_presets = []
         self.discovered_cameras = []
         self.is_scanning = False
-        self.consistency_tracker = PLCConsistencyTracker()
+        # Use shared tracker from controller (MainWindow)
+        self.consistency_tracker = getattr(controller, 'consistency_tracker', PLCConsistencyTracker())
+        print(f"[DEBUG] GeneralSettingsPage Tracker ID: {id(self.consistency_tracker)}")
         
         # Industrial palette constants
         self._C = {

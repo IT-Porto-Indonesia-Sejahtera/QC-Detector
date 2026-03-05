@@ -217,7 +217,9 @@ class LiveCameraScreen(QWidget):
             self.setup_plc_trigger()
             
         # PLC Consistency Tracker
-        self.consistency_tracker = PLCConsistencyTracker()
+        # Use shared tracker from parent (MainWindow) if available
+        self.consistency_tracker = getattr(parent, 'consistency_tracker', PLCConsistencyTracker())
+        print(f"[DEBUG] LiveCameraScreen Tracker ID: {id(self.consistency_tracker)} (Active: {self.consistency_tracker.is_active})")
         
         # Tracker indicator (floating label)
         self.lbl_tracker_indicator = QLabel("RECORD #0")
@@ -451,6 +453,8 @@ class LiveCameraScreen(QWidget):
         else:
             self.render_presets()
             self.update_info_bar()
+            
+        self._update_tracker_ui()
             
         # Update running camera thread if active
         if self.cap_thread and self.cap_thread.isRunning():
@@ -1311,6 +1315,7 @@ class LiveCameraScreen(QWidget):
                     plc_val = self._write_plc_result(is_good=False)
                 
                 # Record to consistency tracker if active
+                print(f"[DEBUG] Check active: {self.consistency_tracker.is_active} (ID: {id(self.consistency_tracker)})")
                 if self.consistency_tracker.is_active:
                     plc_input = self.plc_trigger.get_current_value() if self.plc_trigger else 0
                     self.consistency_tracker.add_record(
