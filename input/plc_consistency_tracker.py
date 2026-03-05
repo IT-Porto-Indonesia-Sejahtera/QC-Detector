@@ -204,11 +204,19 @@ class PLCConsistencyTracker:
                    "Length (px)", "Width (px)", "Length (mm)", "Width (mm)", 
                    "Target (mm)", "Deviation (mm)",
                    "Pre-Cap Delay (ms)", "Post-Res Delay (ms)",
-                   "PLC Input", "PLC Output", "Image Link"]
+                   "PLC Input", "PLC Output", "Detection Image"]
         
         for col, header in enumerate(headers):
             worksheet.write(data_start_row, col, header, header_format)
             worksheet.set_column(col, col, 14)
+        
+        # Image column wider to fit thumbnails
+        worksheet.set_column(15, 15, 25)
+        
+        # Result cell formats (create once, reuse)
+        good_fmt = workbook.add_format({'border': 1, 'align': 'center', 'bg_color': '#C6EFCE', 'font_color': '#006100'})
+        reject_fmt = workbook.add_format({'border': 1, 'align': 'center', 'bg_color': '#FFC7CE', 'font_color': '#9C0006'})
+        oven_fmt = workbook.add_format({'border': 1, 'align': 'center', 'bg_color': '#FFEB9C', 'font_color': '#9C5700'})
             
         for row_idx, rec in enumerate(self.records):
             row = data_start_row + 1 + row_idx
@@ -217,15 +225,16 @@ class PLCConsistencyTracker:
             worksheet.write(row, 2, rec["sku"], cell_format)
             worksheet.write(row, 3, rec["size"], cell_format)
             
-            # Format Result cell
+            # Format Result cell with color
             res = rec["result"]
-            res_c = cell_format
             if "GOOD" in res or res == "OK":
-                res_c = workbook.add_format({'border': 1, 'align': 'center', 'bg_color': '#C6EFCE', 'font_color': '#006100'})
+                res_c = good_fmt
             elif "REJECT" in res or "BS" in res:
-                res_c = workbook.add_format({'border': 1, 'align': 'center', 'bg_color': '#FFC7CE', 'font_color': '#9C0006'})
+                res_c = reject_fmt
             elif "OVEN" in res:
-                res_c = workbook.add_format({'border': 1, 'align': 'center', 'bg_color': '#FFEB9C', 'font_color': '#9C5700'})
+                res_c = oven_fmt
+            else:
+                res_c = cell_format
             worksheet.write(row, 4, res, res_c)
             
             worksheet.write(row, 5, rec["px_len"], cell_format)
@@ -239,8 +248,19 @@ class PLCConsistencyTracker:
             worksheet.write(row, 13, rec["plc_input"], cell_format)
             worksheet.write(row, 14, rec["plc_output"], cell_format)
             
-            # Link to image
-            worksheet.write_url(row, 15, f"external:{rec['image_path']}", cell_format, string="View Detection")
+            # Embed detection image as thumbnail
+            img_path = os.path.join(self.session_dir, rec["image_path"])
+            if os.path.exists(img_path):
+                # Set row height to fit image (90px ≈ 67.5 points)
+                worksheet.set_row(row, 90)
+                # Scale image to fit cell (approx 160x90 px)
+                worksheet.insert_image(row, 15, img_path, {
+                    'x_scale': 0.15, 'y_scale': 0.15,
+                    'x_offset': 2, 'y_offset': 2,
+                    'object_position': 1
+                })
+            else:
+                worksheet.write(row, 15, "Image not found", cell_format)
             
         workbook.close()
         return path
