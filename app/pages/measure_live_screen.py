@@ -193,6 +193,24 @@ class LiveCameraScreen(QWidget):
         self.last_frame = None
         self.last_results = None
 
+        # PLC Consistency Tracker
+        # Use shared tracker from parent (MainWindow) if available
+        self.consistency_tracker = getattr(parent, 'consistency_tracker', PLCConsistencyTracker())
+        
+        # Tracker indicator (integrated label/badge)
+        self.lbl_tracker_indicator = QLabel("RECORD #0")
+        self.lbl_tracker_indicator.setAlignment(Qt.AlignCenter)
+        indicator_font = UIScaling.scale_font(14)
+        self.lbl_tracker_indicator.setStyleSheet(f"""
+            background-color: #F59E0B;
+            color: white;
+            font-weight: bold;
+            font-size: {indicator_font}px;
+            padding: 4px 12px;
+            border-radius: 6px;
+        """)
+        self.lbl_tracker_indicator.hide()
+
         # UI Setup
         self.init_ui()
         self.load_counters()
@@ -216,26 +234,8 @@ class LiveCameraScreen(QWidget):
         if PLC_AVAILABLE:
             self.setup_plc_trigger()
             
-        # PLC Consistency Tracker
-        # Use shared tracker from parent (MainWindow) if available
-        self.consistency_tracker = getattr(parent, 'consistency_tracker', PLCConsistencyTracker())
         print(f"[DEBUG] LiveCameraScreen Tracker ID: {id(self.consistency_tracker)} (Active: {self.consistency_tracker.is_active})")
         
-        # Tracker indicator (floating label)
-        self.lbl_tracker_indicator = QLabel("RECORD #0")
-        self.lbl_tracker_indicator.setParent(self)
-        self.lbl_tracker_indicator.setAlignment(Qt.AlignCenter)
-        indicator_font = UIScaling.scale_font(16)
-        self.lbl_tracker_indicator.setStyleSheet(f"""
-            background-color: rgba(255, 152, 0, 0.9);
-            color: white;
-            font-weight: bold;
-            font-size: {indicator_font}px;
-            padding: 10px;
-            border-radius: 10px;
-            border: 2px solid white;
-        """)
-        self.lbl_tracker_indicator.hide()
         
     def open_profile_dialog(self):
         # Check password first
@@ -568,6 +568,7 @@ class LiveCameraScreen(QWidget):
         
         # Hidden counters/details (needed for compatibility)
         self.lbl_good = QLabel("0"); self.lbl_good.setVisible(False)
+        self.lbl_oven = QLabel("0"); self.lbl_oven.setVisible(False)
         self.lbl_bs = QLabel("0"); self.lbl_bs.setVisible(False)
         self.lbl_big_result = QLabel("-"); self.lbl_big_result.setVisible(False)
         self.val_detail_sku = QLabel("-"); self.val_detail_sku.setVisible(False)
@@ -629,6 +630,10 @@ class LiveCameraScreen(QWidget):
         
         top_bar.addWidget(btn_back)
         top_bar.addStretch()
+        
+        # Add Record Indicator to Minimal Overlay
+        top_bar.addWidget(self.lbl_tracker_indicator)
+        top_bar.addSpacing(15)
         
         # Model Selection Dropdown (overlay style)
         self.model_combo = QComboBox()
@@ -783,6 +788,10 @@ class LiveCameraScreen(QWidget):
         top_ctrl_layout.addWidget(self.back_button)
         top_ctrl_layout.addWidget(self.info_bar, 1) 
         
+        # Add Record Indicator to Header
+        top_ctrl_layout.addWidget(self.lbl_tracker_indicator)
+        top_ctrl_layout.addSpacing(10) 
+        
         # Model selection for standard layouts
         self.model_combo = QComboBox()
         self.model_combo.addItem("YOLO-Seg (AI)", "yolo")
@@ -844,12 +853,18 @@ class LiveCameraScreen(QWidget):
         self.lbl_good.setFixedHeight(counter_height)
         self.lbl_good.setStyleSheet(f"background-color: #66BB6A; color: white; font-weight: bold; font-size: {counter_font_size}px; border-radius: {counter_radius}px;")
         
+        self.lbl_oven = QLabel(f"{self.oven_count}\nOven")
+        self.lbl_oven.setAlignment(Qt.AlignCenter)
+        self.lbl_oven.setFixedHeight(counter_height)
+        self.lbl_oven.setStyleSheet(f"background-color: #F59E0B; color: white; font-weight: bold; font-size: {counter_font_size}px; border-radius: {counter_radius}px;")
+        
         self.lbl_bs = QLabel(f"{self.bs_count}\nBS")
         self.lbl_bs.setAlignment(Qt.AlignCenter)
         self.lbl_bs.setFixedHeight(counter_height)
         self.lbl_bs.setStyleSheet(f"background-color: #D32F2F; color: white; font-weight: bold; font-size: {counter_font_size}px; border-radius: {counter_radius}px;")
         
         counters_layout.addWidget(self.lbl_good)
+        counters_layout.addWidget(self.lbl_oven)
         counters_layout.addWidget(self.lbl_bs)
         
         layout.addLayout(counters_layout)
@@ -1427,6 +1442,8 @@ class LiveCameraScreen(QWidget):
         if not hasattr(self, 'lbl_good') or not hasattr(self, 'lbl_bs'):
             return
         self.lbl_good.setText(f"{self.good_count}\nGood")
+        if hasattr(self, 'lbl_oven'):
+            self.lbl_oven.setText(f"{self.oven_count}\nOven")
         self.lbl_bs.setText(f"{self.bs_count}\nBS")
 
     def reset_counters(self):
@@ -1926,19 +1943,17 @@ class LiveCameraScreen(QWidget):
             count = self.consistency_tracker.get_count()
             self.lbl_tracker_indicator.setText(f"RECORD #{count}")
             self.lbl_tracker_indicator.show()
-            self.lbl_tracker_indicator.raise_()
         else:
             if hasattr(self, 'lbl_tracker_indicator'):
                 self.lbl_tracker_indicator.hide()
             
     def resizeEvent(self, event):
-        """Reposition floating indicators on resize"""
+        """Standard resize behavior (indicators now handled by layouts)"""
         super().resizeEvent(event)
-        if hasattr(self, 'lbl_tracker_indicator'):
-            # Position in top-right area
-            w = self.width()
-            self.lbl_tracker_indicator.move(w - self.lbl_tracker_indicator.width() - 20, 100)
-    
+        
+    def _reposition_tracker(self):
+        """Deprecated: Position now managed by layout managers."""
+        pass
     def _write_plc_result(self, category: str, detail: str):
         """
         Write QC result to PLC register based on category + position.
