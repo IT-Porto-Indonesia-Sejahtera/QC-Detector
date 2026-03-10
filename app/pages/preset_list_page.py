@@ -468,21 +468,24 @@ class PresetListPage(QWidget):
         plant = settings.get("plant", "EVA1")
         machine = settings.get("machine", "Mesin 08")
         
-        if not is_connected():
-            # If not connected, we can still show the overlay but it will be empty
-            # or we could allow manual creation. For now, let's try to fetch.
-            pass
+        # Fetch WO list safely — isolate DB errors from UI
+        wo_list = []
+        if is_connected():
+            try:
+                wo_list = fetch_wo_list(plant, machine)
+            except Exception as e:
+                print(f"[PresetListPage] Error fetching WOs: {e}")
+                import traceback
+                traceback.print_exc()
 
+        # Create overlay separately so a DB error doesn't prevent it from showing
         try:
-            # Synchronous fetch as requested
-            wo_list = fetch_wo_list(plant, machine)
             overlay = WOSelectorOverlay(self.window(), wo_list, plant=plant, machine=machine)
             overlay.wo_selected.connect(self._on_wo_selected)
         except Exception as e:
-            print(f"Error fetching WOs: {e}")
-            # Fallback to empty overlay or manual (manual not yet specifically requested)
-            overlay = WOSelectorOverlay(self.window(), [])
-            overlay.wo_selected.connect(self._on_wo_selected)
+            print(f"[PresetListPage] Error creating WO overlay: {e}")
+            import traceback
+            traceback.print_exc()
 
     def _on_wo_selected(self, wo_data):
         if not wo_data: return

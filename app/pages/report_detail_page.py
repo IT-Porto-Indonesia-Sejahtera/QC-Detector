@@ -1,9 +1,13 @@
 import math
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QFrame
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QFrame,
+    QTableWidget, QTableWidgetItem, QHeaderView, QFileDialog, QMessageBox
 )
 from PySide6.QtCore import Qt, QRectF
 from PySide6.QtGui import QPainter, QColor, QPen, QFont
+import os
+import csv
+from project_utilities.json_utility import JsonUtility
 
 from app.utils.theme_manager import ThemeManager
 from app.utils.ui_scaling import UIScaling
@@ -116,13 +120,41 @@ class ReportDetailPage(QWidget):
         h_layout.addWidget(lbl_title)
         h_layout.addStretch()
 
+        btn_export = QPushButton("Export CSV")
+        btn_export.setCursor(Qt.PointingHandCursor)
+        btn_export.setFixedHeight(UIScaling.scale(40))
+        btn_export.setStyleSheet(f"""
+            QPushButton {{
+                background-color: #2563EB;
+                color: white;
+                border-radius: {UIScaling.scale(8)}px;
+                padding: 0 {UIScaling.scale(16)}px;
+                font-size: {UIScaling.scale_font(14)}px;
+                font-weight: 700;
+                border: none;
+            }}
+            QPushButton:hover {{ background-color: #1D4ED8; }}
+            QPushButton:pressed {{ background-color: #1E40AF; }}
+        """)
+        btn_export.clicked.connect(self.export_csv)
+        h_layout.addWidget(btn_export)
+
         layout.addWidget(header)
 
         # ═══════════════════════════════════════
         # MAIN CONTENT (Split: Left chart + Right info)
         # ═══════════════════════════════════════
-        content = QWidget()
-        c_layout = QHBoxLayout(content)
+        from PySide6.QtWidgets import QScrollArea
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setStyleSheet("border: none;")
+        
+        scroll_content = QWidget()
+        scroll_layout = QVBoxLayout(scroll_content)
+        scroll_layout.setContentsMargins(0, 0, 0, 0)
+        scroll_layout.setSpacing(0)
+
+        c_layout = QHBoxLayout()
         c_layout.setContentsMargins(UIScaling.scale(24), UIScaling.scale(20), UIScaling.scale(24), UIScaling.scale(24))
         c_layout.setSpacing(UIScaling.scale(24))
 
@@ -216,7 +248,60 @@ class ReportDetailPage(QWidget):
 
         c_layout.addWidget(right_frame, 2)
 
-        layout.addWidget(content, 1)
+        # ═══════════════════════════════════════
+        # BOTTOM CONTENT (Table for Per-SKU breakdown)
+        # ═══════════════════════════════════════
+        bottom_frame = QFrame()
+        bottom_frame.setStyleSheet(f"""
+            QFrame {{
+                background-color: white;
+                border: 1.5px solid #E5E7EB;
+                border-radius: {UIScaling.scale(16)}px;
+            }}
+        """)
+        bottom_layout = QVBoxLayout(bottom_frame)
+        bottom_layout.setContentsMargins(UIScaling.scale(24), UIScaling.scale(20), UIScaling.scale(24), UIScaling.scale(20))
+        bottom_layout.setSpacing(UIScaling.scale(12))
+
+        lbl_table_title = QLabel("Detail Per SKU & Size")
+        lbl_table_title.setStyleSheet(f"font-size: {UIScaling.scale_font(18)}px; font-weight: 700; color: #111827; border: none;")
+        bottom_layout.addWidget(lbl_table_title)
+
+        self.sku_table = QTableWidget()
+        self.sku_table.setColumnCount(5)
+        self.sku_table.setHorizontalHeaderLabels(["SKU", "Size", "Good", "Oven", "BS"])
+        self.sku_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.sku_table.verticalHeader().setVisible(False)
+        self.sku_table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.sku_table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.sku_table.setStyleSheet(f"""
+            QTableWidget {{
+                border: 1px solid #E5E7EB;
+                border-radius: {UIScaling.scale(8)}px;
+                background-color: white;
+                gridline-color: #E5E7EB;
+                font-size: {UIScaling.scale_font(14)}px;
+            }}
+            QHeaderView::section {{
+                background-color: #F9FAFB;
+                padding: 8px;
+                border: 1px solid #E5E7EB;
+                font-weight: 600;
+                color: #374151;
+            }}
+        """)
+        bottom_layout.addWidget(self.sku_table)
+
+        scroll_layout.addLayout(c_layout)
+        
+        # Wrap bottom_frame in a layout with margins to match c_layout
+        bottom_wrapper = QHBoxLayout()
+        bottom_wrapper.setContentsMargins(UIScaling.scale(24), 0, UIScaling.scale(24), UIScaling.scale(24))
+        bottom_wrapper.addWidget(bottom_frame)
+        scroll_layout.addLayout(bottom_wrapper)
+        
+        scroll_area.setWidget(scroll_content)
+        layout.addWidget(scroll_area, 1)
 
     def _create_summary_box(self, value, label, color):
         box = QFrame()
@@ -312,6 +397,78 @@ class ReportDetailPage(QWidget):
             pie_data.append((bs, "#EF4444", "BS"))
         self.pie_chart.set_data(pie_data)
 
+        # ─── Load Per-SKU Counts into Table ───
+        per_sku_counts = record.get("per_sku_counts", {})
+        preset_id = record.get("preset_id")
+        
+        # Load profiles map to find the presets array
+        profiles_file = os.path.join("output", "settings", "profiles.json")
+        profiles = JsonUtility.load_from_json(profiles_file) or []
+        target_profile = None
+        for p in profiles:
+            if p.get("id") == preset_id:
+                target_profile = p
+                break
+
+        presets_arr = target_profile.get("presets", []) if target_profile else []
+        self._populate_table(presets_arr, per_sku_counts)
+
+    def _populate_table(self, presets_arr, per_sku_counts):
+        self.sku_table.setRowCount(0)
+        
+        # Build merged rows (combine multiple indices into valid entries)
+        # Even if profile was deleted or modified, we try to match indices
+        row_idx = 0
+        for idx_str, counts in per_sku_counts.items():
+            try:
+                idx = int(idx_str)
+                if idx < len(presets_arr):
+                    sku = presets_arr[idx].get("sku", "Unknown")
+                    size = presets_arr[idx].get("size", "Unknown")
+                else:
+                    sku = f"Slot {idx}"
+                    size = "-"
+            except ValueError:
+                sku = idx_str
+                size = "-"
+
+            c_good = counts.get("TOTAL GOOD", 0)
+            c_oven = counts.get("OVEN 1", 0) + counts.get("OVEN 2", 0)
+            c_bs = counts.get("TOTAL BS", 0)
+
+            # Skip rows with all zero values
+            if c_good == 0 and c_oven == 0 and c_bs == 0:
+                continue
+                
+            self.sku_table.insertRow(row_idx)
+            
+            # SKU
+            it_sku = QTableWidgetItem(str(sku))
+            it_sku.setTextAlignment(Qt.AlignCenter)
+            self.sku_table.setItem(row_idx, 0, it_sku)
+            
+            # Size
+            it_size = QTableWidgetItem(str(size))
+            it_size.setTextAlignment(Qt.AlignCenter)
+            self.sku_table.setItem(row_idx, 1, it_size)
+            
+            # Good
+            it_good = QTableWidgetItem(str(c_good))
+            it_good.setTextAlignment(Qt.AlignCenter)
+            self.sku_table.setItem(row_idx, 2, it_good)
+            
+            # Oven
+            it_oven = QTableWidgetItem(str(c_oven))
+            it_oven.setTextAlignment(Qt.AlignCenter)
+            self.sku_table.setItem(row_idx, 3, it_oven)
+            
+            # BS
+            it_bs = QTableWidgetItem(str(c_bs))
+            it_bs.setTextAlignment(Qt.AlignCenter)
+            self.sku_table.setItem(row_idx, 4, it_bs)
+            
+            row_idx += 1
+
     def _update_box_value(self, box, value):
         for child in box.findChildren(QLabel):
             if child.objectName() == "val":
@@ -321,3 +478,59 @@ class ReportDetailPage(QWidget):
     def go_back(self):
         if self.controller:
             self.controller.go_to_reports()
+
+    def export_csv(self):
+        if not self.current_record:
+            QMessageBox.warning(self, "Export", "No record loaded.")
+            return
+            
+        default_name = f"Report_{self.current_record.get('wo_number', 'unknown')}_{self.current_record.get('production_date', 'date').replace('/', '-')}.csv"
+        file_path, _ = QFileDialog.getSaveFileName(self, "Export Detail Report", default_name, "CSV Files (*.csv)")
+        
+        if not file_path:
+            return
+            
+        try:
+            with open(file_path, 'w', newline='', encoding='utf-8') as f:
+                writer = csv.writer(f)
+                
+                # Header Details
+                writer.writerow(["REPORT DETAIL"])
+                writer.writerow(["WO Number:", self.current_record.get('wo_number', '-')])
+                writer.writerow(["Machine:", self.current_record.get('machine', '-')])
+                writer.writerow(["Plant:", self.current_record.get('plant', '-')])
+                writer.writerow(["Shift:", self.current_record.get('shift', '-')])
+                writer.writerow(["Production Date:", self.current_record.get('production_date', '-')])
+                writer.writerow(["Finished At:", self.current_record.get('finished_at', '-')])
+                writer.writerow(["MPS:", self.current_record.get('mps', '-')])
+                writer.writerow([])
+                
+                # Summary
+                counts = self.current_record.get("counts", {})
+                good = counts.get("TOTAL GOOD", 0)
+                oven = counts.get("OVEN 1", 0) + counts.get("OVEN 2", 0)
+                bs = counts.get("TOTAL BS", 0)
+                total = good + oven + bs
+                
+                writer.writerow(["SUMMARY"])
+                writer.writerow(["Total Sandals", "Good", "Oven", "BS"])
+                writer.writerow([total, good, oven, bs])
+                writer.writerow([])
+                
+                # Per SKU Breakdown
+                writer.writerow(["PER SKU & SIZE BREAKDOWN"])
+                writer.writerow(["SKU", "Size", "Good", "Oven", "BS"])
+                
+                rows = self.sku_table.rowCount()
+                for r in range(rows):
+                    sku = self.sku_table.item(r, 0).text()
+                    size = self.sku_table.item(r, 1).text()
+                    c_good = self.sku_table.item(r, 2).text()
+                    c_oven = self.sku_table.item(r, 3).text()
+                    c_bs = self.sku_table.item(r, 4).text()
+                    
+                    writer.writerow([sku, size, c_good, c_oven, c_bs])
+                    
+            QMessageBox.information(self, "Export Successful", f"Report saved to:\n{file_path}")
+        except Exception as e:
+            QMessageBox.critical(self, "Export Error", f"Failed to export CSV:\n{e}")

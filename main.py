@@ -104,6 +104,10 @@ def install_crash_handlers():
 
 
 if __name__ == "__main__":
+    # Enable faulthandler to get tracebacks on segfaults (critical for Linux/Ubuntu debugging)
+    import faulthandler
+    faulthandler.enable()
+
     # Register signal handlers for graceful shutdown
     signal.signal(signal.SIGINT, signal_handler)   # Ctrl+C
     signal.signal(signal.SIGTERM, signal_handler)  # kill command

@@ -7,11 +7,42 @@ from PySide6.QtWidgets import (
     QComboBox
 )
 from PySide6.QtGui import QPixmap, QImage
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal, QThread
 from datetime import datetime
 from model.measurement import measure_sandals
 import project_utilities as putils
 from app.utils.ui_scaling import UIScaling
+
+class MeasurementWorker(QThread):
+    finished = Signal(list, object) # results, processed_img
+    error = Signal(str)
+
+    def __init__(self, image_path, method_data, output_path):
+        super().__init__()
+        self.image_path = image_path
+        self.method_data = method_data
+        self.output_path = output_path
+
+    def run(self):
+        try:
+            from model.measurement import measure_sandals
+            
+            use_sam = (self.method_data == "sam")
+            use_yolo = (self.method_data == "yolo")
+            use_advanced = (self.method_data == "advanced")
+            
+            results, processed_img = measure_sandals(
+                self.image_path,
+                mm_per_px=None,
+                draw_output=False,
+                save_out=self.output_path,
+                use_sam=use_sam,
+                use_yolo=use_yolo,
+                use_advanced=use_advanced
+            )
+            self.finished.emit(results, processed_img)
+        except Exception as e:
+            self.error.emit(str(e))
 
 class MeasurePhotoScreen(QWidget):
     def __init__(self, controller):
@@ -187,49 +218,51 @@ class MeasurePhotoScreen(QWidget):
         return QPixmap.fromImage(q_image)
 
     def measure_image(self):
-        """Run measurement and show result in GUI."""
+        """Run measurement using a background worker."""
         if not self.selected_image_path:
             print("[WARN] No image selected.")
             return
+
+        # Disable UI during measurement
+        self.measure_button.setEnabled(False)
+        self.measure_button.setText("⌛ Measuring...")
+        self.method_combo.setEnabled(False)
+        self.back_button.setEnabled(False)
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         output_filename = f"measured_{timestamp}.png"
         output_path = os.path.join(self.output_folder, output_filename)
 
-        # Get selected detection method
         method = self.method_combo.currentData()
-        use_sam = (method == "sam")
-        use_yolo = (method == "yolo")
-        use_advanced = (method == "advanced")
         
-        if use_advanced:
-            method_name = "Advanced (YOLO-X + SAM)"
-        elif use_yolo:
-            method_name = "YOLO-Seg (AI)"
-        elif use_sam:
-            method_name = "SAM (AI)"
-        else:
-            method_name = "Standard (Contour)"
-        print(f"[INFO] Measuring with {method_name}: {self.selected_image_path}")
-        
-        try:
-            results, processed_img = measure_sandals(
-                self.selected_image_path,
-                mm_per_px=None,
-                draw_output=False,
-                save_out=output_path,
-                use_sam=use_sam,
-                use_yolo=use_yolo,
-                use_advanced=use_advanced
-            )
+        # Start background worker
+        self.worker = MeasurementWorker(self.selected_image_path, method, output_path)
+        self.worker.finished.connect(self.on_measurement_finished)
+        self.worker.error.connect(self.on_measurement_error)
+        self.worker.start()
 
-            # Show inference time if using AI methods
-            if (use_sam or use_yolo or use_advanced) and results and 'inference_time_ms' in results[0]:
-                print(f"[{method_name}] Inference time: {results[0]['inference_time_ms']:.1f}ms")
-            
-            print("[RESULT]", results)
-            pixmap = self.cv2_to_pixmap(processed_img)
-            self.display_pixmap_scaled(pixmap)
+    def on_measurement_finished(self, results, processed_img):
+        """Handle successful measurement."""
+        # Re-enable UI
+        self.measure_button.setEnabled(True)
+        self.measure_button.setText("Measure")
+        self.method_combo.setEnabled(True)
+        self.back_button.setEnabled(True)
 
-        except Exception as e:
-            print("[ERROR]", e)
+        # Log results
+        method_name = self.method_combo.currentText()
+        if results and 'inference_time_ms' in results[0]:
+             print(f"[{method_name}] Inference time: {results[0]['inference_time_ms']:.1f}ms")
+        print("[RESULT]", results)
+
+        # Update Display
+        pixmap = self.cv2_to_pixmap(processed_img)
+        self.display_pixmap_scaled(pixmap)
+
+    def on_measurement_error(self, error_msg):
+        """Handle measurement errors."""
+        self.measure_button.setEnabled(True)
+        self.measure_button.setText("Measure")
+        self.method_combo.setEnabled(True)
+        self.back_button.setEnabled(True)
+        print("[ERROR]", error_msg)

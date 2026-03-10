@@ -85,7 +85,12 @@ class WOSelectorOverlay(BaseOverlay):
         self.machine_combo.setFixedHeight(UIScaling.scale(42))
         self.machine_combo.setStyleSheet(self._get_input_style())
         
-        machines = get_machine_list()
+        try:
+            machines = get_machine_list()
+        except Exception as e:
+            print(f"[WOSelectorOverlay] Error fetching machine list: {e}")
+            machines = ["Mesin 01", "Mesin 02", "Mesin 03", "Mesin 04", "Mesin 05",
+                        "Mesin 06", "Mesin 07", "Mesin 08", "Mesin 09", "Mesin 10"]
         self.machine_combo.addItems(machines)
         
         # Set default to "Mesin 08" or previous selection
