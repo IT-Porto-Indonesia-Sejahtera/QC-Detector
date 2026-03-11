@@ -393,6 +393,7 @@ class PresetDetailPage(QWidget):
             return "Meja Kanan"
         return t
 
+        return t
     # ─── LOAD DATA ────────────────────────────────────────
 
     def load_profile(self, profile):
@@ -554,14 +555,29 @@ class PresetDetailPage(QWidget):
         img_label.setText("?")
         layout.addWidget(img_label)
 
-        # SKU Name
+        # SKU Name & Height
+        info_vbox = QVBoxLayout()
+        info_vbox.setSpacing(2)
+        
         sku_name = QLabel()
+        sku_height = QLabel()
+        
         if data:
-            display_name = data.get("Nama Produk", data.get("code", "Unknown"))
+            code = data.get("code", data.get("product_code", "Unknown"))
+            display_name = data.get("Nama Produk", code)
             sku_name.setText(display_name)
             sku_name.setStyleSheet(f"font-size: {UIScaling.scale_font(16)}px; font-weight: 700; color: #111827; border: none;")
 
-            gdrive_id = data.get("gdrive_id", "")
+            # Check for height in product data (centralized from get_product_sku)
+            height = data.get("Master Height", 0)
+            if height:
+                sku_height.setText(f"Master Height: {height} mm")
+                sku_height.setStyleSheet(f"font-size: {UIScaling.scale_font(12)}px; font-weight: 600; color: #059669; border: none;")
+            else:
+                sku_height.setText("No Master Height (Default)")
+                sku_height.setStyleSheet(f"font-size: {UIScaling.scale_font(11)}px; color: #9CA3AF; border: none;")
+
+            gdrive_id = data.get("gdrive_id") or data.get("GDrive ID") or ""
             if gdrive_id:
                 if gdrive_id not in self.card_labels:
                     self.card_labels[gdrive_id] = []
@@ -570,8 +586,11 @@ class PresetDetailPage(QWidget):
         else:
             sku_name.setText("Tap to select SKU" if is_editable else "Empty")
             sku_name.setStyleSheet(f"font-size: {UIScaling.scale_font(15)}px; font-weight: 500; color: #9CA3AF; border: none;")
+            sku_height.setText("")
 
-        layout.addWidget(sku_name, 1)
+        info_vbox.addWidget(sku_name)
+        info_vbox.addWidget(sku_height)
+        layout.addLayout(info_vbox, 1)
 
         # Position button (clickable to toggle)
         raw_position = data.get("team", "") if data else ""
@@ -591,9 +610,44 @@ class PresetDetailPage(QWidget):
 
         layout.addWidget(btn_pos)
 
+        # Reset button
+        btn_reset = QPushButton()
+        btn_reset.setCursor(Qt.PointingHandCursor)
+        btn_reset.setFixedSize(UIScaling.scale(42), UIScaling.scale(42))
+        btn_reset.setStyleSheet(f"""
+            QPushButton {{
+                background-color: #FEE2E2;
+                border: 1.5px solid #FECACA;
+                border-radius: {UIScaling.scale(8)}px;
+                padding: {UIScaling.scale(8)}px;
+            }}
+            QPushButton:hover {{ background-color: #FECACA; }}
+            QPushButton:pressed {{ background-color: #FCA5A5; }}
+        """)
+        
+        # Trash icon (Simple SVG path)
+        trash_icon = """<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#DC2626" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>"""
+        try:
+            from PySide6.QtSvgWidgets import QSvgWidget
+            svg_widget = QSvgWidget()
+            svg_widget.load(trash_icon.encode('utf-8'))
+            svg_widget.setFixedSize(UIScaling.scale(20), UIScaling.scale(20))
+            
+            btn_reset_layout = QVBoxLayout(btn_reset)
+            btn_reset_layout.setContentsMargins(0, 0, 0, 0)
+            btn_reset_layout.setAlignment(Qt.AlignCenter)
+            btn_reset_layout.addWidget(svg_widget)
+        except ImportError:
+            btn_reset.setText("R") # Fallback if SvgWidgets not available
+            btn_reset.setStyleSheet(btn_reset.styleSheet() + " color: #DC2626; font-weight: bold;")
+        
+        btn_reset.clicked.connect(lambda _, idx=index: self.reset_sku_report(idx))
+        layout.addWidget(btn_reset)
+
         row_data = {
             "img": img_label,
             "name": sku_name,
+            "height": sku_height,
             "pos_btn": btn_pos,
             "data": data,
         }
@@ -603,6 +657,76 @@ class PresetDetailPage(QWidget):
             container.mousePressEvent = lambda e, idx=index: self.select_sku(idx)
 
         return container
+
+    def reset_sku_report(self, index):
+        """Reset the measurement counts for a specific SKU in this profile."""
+        if index < 0 or index >= len(self.sku_rows):
+            return
+            
+        row = self.sku_rows[index]
+        sku_data = row["data"]
+        if not sku_data:
+            return
+            
+        sku_code = sku_data.get("code")
+        if not sku_code:
+            return
+            
+        from PySide6.QtWidgets import QMessageBox
+        reply = QMessageBox.question(
+            self, "Konfirmasi Reset",
+            f"Reset laporan/hitung untuk SKU {sku_code}?\nData permanen di RecordManager akan ikut terhapus.",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No
+        )
+        
+        if reply != QMessageBox.Yes:
+            return
+            
+        # 1. Load records
+        records = RecordManager.get_all_records()
+        profile_id = self.current_profile.get("id")
+        
+        # 2. Find the active record for this profile
+        target_record = None
+        for r in records:
+            if r.get("preset_id") == profile_id:
+                target_record = r
+                break
+                
+        if not target_record:
+            QMessageBox.information(self, "Info", "Belum ada data rekaman untuk SKU ini.")
+            return
+            
+        # 3. Identify preset indices matching this SKU
+        profile_presets = self.current_profile.get("presets", [])
+        matching_indices = []
+        for i, p in enumerate(profile_presets):
+            if p.get("sku") == sku_code:
+                matching_indices.append(str(i))
+                
+        # 4. Clear matching entries in per_sku_counts
+        per_sku_counts = target_record.get("per_sku_counts", {})
+        cleared_count = 0
+        from app.data.record_manager import DEFAULT_COUNTS
+        
+        for idx_str in matching_indices:
+            if idx_str in per_sku_counts:
+                per_sku_counts[idx_str] = dict(DEFAULT_COUNTS)
+                cleared_count += 1
+                
+        # 5. Re-calculate aggregate counts
+        new_aggregate = dict(DEFAULT_COUNTS)
+        for val in per_sku_counts.values():
+            for key in new_aggregate:
+                new_aggregate[key] += val.get(key, 0)
+        
+        target_record["counts"] = new_aggregate
+        target_record["per_sku_counts"] = per_sku_counts
+        
+        # 6. Save
+        RecordManager._save(records)
+        
+        QMessageBox.information(self, "Selesai", f"Berhasil reset {cleared_count} preset untuk SKU {sku_code}.")
 
     def _toggle_sku_position(self, index):
         """Toggle position between Kiri and Kanan for a selected SKU."""
@@ -692,6 +816,15 @@ class PresetDetailPage(QWidget):
         row["pos_btn"].setText(display_pos)
         self._apply_pos_btn_style(row["pos_btn"], display_pos)
 
+        # Update Height
+        height = sku_data.get("Master Height", 0)
+        if height:
+            row["height"].setText(f"Master Height: {height} mm")
+            row["height"].setStyleSheet(f"font-size: {UIScaling.scale_font(12)}px; font-weight: 600; color: #059669; border: none;")
+        else:
+            row["height"].setText("No Master Height (Default)")
+            row["height"].setStyleSheet(f"font-size: {UIScaling.scale_font(11)}px; color: #9CA3AF; border: none;")
+
         gdrive_id = sku_data.get("gdrive_id", "")
         if gdrive_id:
             row["img"].setText("...")
@@ -752,14 +885,19 @@ class PresetDetailPage(QWidget):
 
         # Update SKUs
         new_skus = []
-        for sku in enriched.get("skus", []):
+        for idx, sku in enumerate(enriched.get("skus", [])):
+            # Distribute between Kiri and Kanan if multiple
+            team_pos = "Kiri" if idx == 0 else "Kanan"
+            
             new_skus.append({
                 "code": sku.get("code", sku.get("default_code", "")),
                 "Nama Produk": sku.get("Nama Produk", sku.get("name", "")),
                 "gdrive_id": sku.get("gdrive_id", ""),
                 "otorisasi": sku.get("otorisasi", 0),
                 "sizes": sku.get("sizes", "36,37,38,39,40,41,42,43,44"),
-                "team": "Kiri", # Default
+                "team": team_pos,
+                "Master Height": sku.get("Master Height", 0),
+                "id": sku.get("id")
             })
         self.current_profile["selected_skus"] = new_skus
 
@@ -768,10 +906,12 @@ class PresetDetailPage(QWidget):
         for idx, sku in enumerate(new_skus):
             code = sku["code"]
             oto = sku["otorisasi"]
+            product_id = sku.get("id")
             size_list = self._parse_sizes(sku["sizes"], code)
             for s in size_list:
                 presets.append({
                     "sku": code,
+                    "product_id": product_id,
                     "size": s,
                     "color_idx": (idx % 4) + 1,
                     "team": sku["team"],
@@ -779,9 +919,10 @@ class PresetDetailPage(QWidget):
                 })
         self.current_profile["presets"] = presets
 
-        # Refresh UI
+        # Refresh UI & Auto-Save
         self.load_profile(self.current_profile)
-        self._show_toast("✓ Data updated from Work Order")
+        self.save_preset()
+        self._show_toast("✓ Data updated and saved from Work Order")
 
     # ─── ACTIONS ──────────────────────────────────────────
 
@@ -852,12 +993,14 @@ class PresetDetailPage(QWidget):
                 code = data.get("code", "UNKNOWN")
                 team = data.get("team", "")
                 otorisasi = data.get("otorisasi", 0)
+                product_id = data.get("id")
                 selected_skus.append(data)
 
                 sizes = self._parse_sizes(data.get("sizes", ""), code)
                 for s in sizes:
                     presets.append({
                         "sku": code,
+                        "product_id": product_id,
                         "size": s,
                         "color_idx": (idx % 4) + 1,
                         "team": team,

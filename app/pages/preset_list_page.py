@@ -262,6 +262,35 @@ class PresetListPage(QWidget):
 
         self.render_list()
 
+    def _parse_sizes(self, size_str, code=""):
+        if not size_str:
+            return ["36", "37", "38", "39", "40", "41", "42", "43", "44"]
+        s = str(size_str).strip().upper()
+        if "," in s:
+            items = [x.strip() for x in s.split(",")]
+            result = []
+            for item in items:
+                if "/" in item and "MM" not in item:
+                    parts = item.split("/")
+                    result.append(parts[-1].strip())
+                else:
+                    result.append(item)
+            return result
+        def resolve_slash(val):
+            if "/" in val:
+                parts = val.split("/")
+                return parts[-1].strip()
+            return val
+        if "-" in s:
+            parts = s.split("-")
+            if len(parts) == 2:
+                start_s = resolve_slash(parts[0].strip()); end_s = resolve_slash(parts[1].strip())
+                if start_s.isdigit() and end_s.isdigit():
+                    start, end = int(start_s), int(end_s)
+                    if start < end: return [str(i) for i in range(start, end + 1)]
+        if "/" in s: return [resolve_slash(s)]
+        return [s]
+
     def save_profiles(self):
         try:
             JsonUtility.save_to_json(PROFILES_FILE, self.profiles)
@@ -521,14 +550,17 @@ class PresetListPage(QWidget):
 
         # Populate selected_skus from the enriched WO
         wo_skus = enriched.get("skus", [])
-        for sku in wo_skus:
+        for idx, sku in enumerate(wo_skus):
+            team_pos = "Kiri" if idx == 0 else "Kanan"
             new_profile["selected_skus"].append({
                 "code": sku.get("code", sku.get("default_code", "")),
                 "Nama Produk": sku.get("Nama Produk", sku.get("name", "")),
                 "gdrive_id": sku.get("gdrive_id", ""),
                 "otorisasi": sku.get("otorisasi", 0),
                 "sizes": sku.get("sizes", "36,37,38,39,40,41,42,43,44"),
-                "team": "Kiri", # Default position
+                "team": team_pos,
+                "Master Height": sku.get("Master Height", 0),
+                "id": sku.get("id")
             })
 
         # Generate internal presets list
@@ -536,11 +568,11 @@ class PresetListPage(QWidget):
         for idx, sku in enumerate(new_profile["selected_skus"]):
             code = sku["code"]
             oto = sku["otorisasi"]
-            # Helper to parse sizes (assuming it matches the one in ProfilesPage)
-            size_list = [s.strip() for s in sku["sizes"].split(',') if s.strip()]
+            size_list = self._parse_sizes(sku["sizes"], code)
             for s in size_list:
                 presets.append({
                     "sku": code,
+                    "product_id": sku.get("id"),
                     "size": s,
                     "color_idx": (idx % 4) + 1,
                     "team": sku["team"],

@@ -111,12 +111,31 @@ WHERE rn = 1
     
     result = fetch_all(query, as_dict=True)
     
+    # Load mastering data for height injection
+    sku_height_map = {}
+    try:
+        import os
+        from project_utilities.json_utility import JsonUtility
+        mastering_path = os.path.join("project_utilities", "mastering.json")
+        mastering_data = JsonUtility.load_from_json(mastering_path)
+        if isinstance(mastering_data, list):
+            for entry in mastering_data:
+                nilai = entry.get("nilai", 0)
+                skus = entry.get("sku", [])
+                if isinstance(skus, list):
+                    for s in skus: sku_height_map[s] = nilai
+                elif isinstance(skus, str):
+                    sku_height_map[skus] = nilai
+    except Exception as e:
+        print(f"[get_product_sku] Error loading mastering data: {e}")
+
     # Process and clean data
     cleaned_result = []
     if result:
         for row in result:
             # Parse Otorisasi (Perbesaran Ukuran)
             # Format examples: "+1.0", "+0.5", "pas", "Pas", "0"
+            raw_product_code = row.get('product_code', 'Unknown')
             raw_oto = str(row.get('perbesar_ukuran', '')).lower().strip()
             oto_val = 0.0
             if raw_oto and raw_oto not in ['pas', 'none', 'null']:
@@ -128,13 +147,15 @@ WHERE rn = 1
             # Map to clean dictionary
             cleaned_result.append({
                 'id': row.get('product_id'), # Internal Database ID
-                'Nama Produk': row.get('product_code', 'Unknown'),
+                'Nama Produk': raw_product_code,
                 'Perbesaran Ukuran (Otorisasi)': oto_val,  # Now a float
                 'Raw Otorisasi': row.get('perbesar_ukuran'), # Keep original just in case
                 'List Size Available': row.get('size', ''),
                 'Kategori': row.get('divisi', 'Unknown'),
                 'Cover Image': row.get('cover_image'), # Direct URL
-                'GDrive ID': row.get('cover_image') # Legacy support (aliased to URL)
+                'GDrive ID': row.get('cover_image'), # Legacy support (aliased to URL)
+                'gdrive_id': row.get('cover_image'), # Lowercase for easier UI access
+                'Master Height': sku_height_map.get(raw_product_code, 0) or sku_height_map.get(row.get('product_id'), 0)
             })
             
     return cleaned_result

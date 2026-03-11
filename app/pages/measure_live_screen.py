@@ -51,6 +51,7 @@ except ImportError:
 PRESETS_FILE = os.path.join("output", "settings", "presets.json")
 SETTINGS_FILE = os.path.join("output", "settings", "app_settings.json")
 COUNTS_FILE = os.path.join("output", "settings", "counts.json")
+MASTERING_FILE = os.path.join("project_utilities", "mastering.json")
 
 # Default Presets (Testing Grouping)
 DEFAULT_PRESETS = [
@@ -144,6 +145,9 @@ class LiveCameraScreen(QWidget):
         self.good_count = 0
         self.oven_count = 0
         self.bs_count = 0
+        self.current_wo = "---"
+        self.current_product_id = None
+        self.sku_height_map = {} # Mapping for dynamic height: SKU -> Nilai
         self.granular_counts = {
             "GOOD 1": 0,
             "GOOD 2": 0,
@@ -506,6 +510,9 @@ class LiveCameraScreen(QWidget):
             self.plc_poll_interval = int(self.settings.get("plc_poll_interval", 10))
             self.plc_trigger_reg = int(self.settings.get("plc_trigger_reg", 12))
             self.plc_result_reg = int(self.settings.get("plc_result_reg", 100))
+            
+            # Load dynamic height mastering
+            self.load_mastering_data()
         else:
             self.mm_per_px = 0.215984148
             self.camera_index = 0
@@ -532,6 +539,22 @@ class LiveCameraScreen(QWidget):
             self.plc_parity = "E"
             self.plc_baudrate = 9600
             self.plc_poll_interval = 10
+            self.sku_height_map = {}
+
+    def load_mastering_data(self):
+        """Build SKU -> Height mapping from mastering.json."""
+        self.sku_height_map = {}
+        data = JsonUtility.load_from_json(MASTERING_FILE)
+        if isinstance(data, list):
+            for entry in data:
+                nilai = entry.get("nilai", 0)
+                skus = entry.get("sku", [])
+                if isinstance(skus, list):
+                    for s in skus:
+                        self.sku_height_map[s] = nilai
+                elif isinstance(skus, str):
+                    self.sku_height_map[skus] = nilai
+        print(f"[Mastering] Loaded {len(self.sku_height_map)} SKU height mappings.")
 
     def setup_minimal_layout(self):
         """Minimal Layout: Full-screen preview with overlay controls."""
@@ -572,6 +595,7 @@ class LiveCameraScreen(QWidget):
         self.lbl_bs = QLabel("0"); self.lbl_bs.setVisible(False)
         self.lbl_big_result = QLabel("-"); self.lbl_big_result.setVisible(False)
         self.val_detail_sku = QLabel("-"); self.val_detail_sku.setVisible(False)
+        self.val_detail_wo = QLabel("-"); self.val_detail_wo.setVisible(False)
         self.val_detail_len = QLabel("-"); self.val_detail_len.setVisible(False)
         self.val_detail_wid = QLabel("-"); self.val_detail_wid.setVisible(False)
         self.val_detail_res = QLabel("-"); self.val_detail_res.setVisible(False)
@@ -883,6 +907,9 @@ class LiveCameraScreen(QWidget):
         details_layout = QGridLayout()
         self.lbl_detail_sku = QLabel("SKU/Ukuran :")
         self.val_detail_sku = QLabel("---/---")
+        
+        self.lbl_detail_wo = QLabel("Work Order"); self.lbl_detail_wo.setStyleSheet(f"font-size: {UIScaling.scale_font(12)}px; font-weight: 600; color: {self.theme['text_sub']}; border: none;")
+        self.val_detail_wo = QLabel("---")
         self.lbl_detail_len = QLabel("Panjang :")
         self.val_detail_len = QLabel("-")
         self.lbl_detail_wid = QLabel("Lebar :")
@@ -897,15 +924,16 @@ class LiveCameraScreen(QWidget):
         val_style = f"font-weight: bold; color: #333333; font-size: {detail_font_size}px;"
         
         for w in [self.lbl_detail_sku, self.lbl_detail_len, self.lbl_detail_wid, self.lbl_detail_oto, self.lbl_detail_res]: w.setStyleSheet(label_style)
-        for w in [self.val_detail_sku, self.val_detail_len, self.val_detail_wid, self.val_detail_oto, self.val_detail_res]: 
+        for w in [self.val_detail_sku, self.val_detail_wo, self.val_detail_len, self.val_detail_wid, self.val_detail_oto, self.val_detail_res]: 
             w.setAlignment(Qt.AlignRight)
             w.setStyleSheet(val_style)
             
         details_layout.addWidget(self.lbl_detail_sku, 0, 0); details_layout.addWidget(self.val_detail_sku, 0, 1)
-        details_layout.addWidget(self.lbl_detail_len, 1, 0); details_layout.addWidget(self.val_detail_len, 1, 1)
-        details_layout.addWidget(self.lbl_detail_wid, 2, 0); details_layout.addWidget(self.val_detail_wid, 2, 1)
-        details_layout.addWidget(self.lbl_detail_oto, 3, 0); details_layout.addWidget(self.val_detail_oto, 3, 1)
-        details_layout.addWidget(self.lbl_detail_res, 4, 0); details_layout.addWidget(self.val_detail_res, 4, 1)
+        details_layout.addWidget(self.lbl_detail_wo, 1, 0); details_layout.addWidget(self.val_detail_wo, 1, 1)
+        details_layout.addWidget(self.lbl_detail_len, 2, 0); details_layout.addWidget(self.val_detail_len, 2, 1)
+        details_layout.addWidget(self.lbl_detail_wid, 3, 0); details_layout.addWidget(self.val_detail_wid, 3, 1)
+        details_layout.addWidget(self.lbl_detail_oto, 4, 0); details_layout.addWidget(self.val_detail_oto, 4, 1)
+        details_layout.addWidget(self.lbl_detail_res, 5, 0); details_layout.addWidget(self.val_detail_res, 5, 1)
         
         layout.addLayout(details_layout)
         
@@ -1178,6 +1206,7 @@ class LiveCameraScreen(QWidget):
         
         # 2. Update SKU details
         self.current_sku = p.get("sku", "---")
+        self.current_product_id = p.get("product_id")
         self.current_size = p.get("size", "---")
         self.current_otorisasi = float(p.get("otorisasi", 0) or 0)
         
@@ -1208,7 +1237,9 @@ class LiveCameraScreen(QWidget):
                 self.granular_counts[k] = 0
         
         # Update UI
+        self.current_wo = self.active_profile_data.get("wo_number", "---")
         self.val_detail_sku.setText(f"{self.current_sku}/{self.current_size}")
+        self.val_detail_wo.setText(self.current_wo)
         if hasattr(self, 'val_detail_oto'):
             self.val_detail_oto.setText(f"{self.current_otorisasi:+.1f}")
             
@@ -1244,7 +1275,29 @@ class LiveCameraScreen(QWidget):
             # Apply Height Correction (Parallax)
             # Formula: mm_px_corrected = mm_px * (H - T) / H
             h_cam = getattr(self, 'mounting_height', 1000.0)
-            t_obj = getattr(self, 'sandal_thickness', 15.0)
+            
+            # Dynamic Thickness lookup: WO -> Product ID -> SKU -> Default Settings
+            t_obj = self.sku_height_map.get(self.current_wo)
+            
+            # Try Project ID (as int and str)
+            if t_obj is None and self.current_product_id is not None:
+                t_obj = self.sku_height_map.get(self.current_product_id)
+                if t_obj is None:
+                    t_obj = self.sku_height_map.get(str(self.current_product_id))
+            
+            # Fallback to SKU code
+            if t_obj is None:
+                t_obj = self.sku_height_map.get(self.current_sku)
+                
+            if t_obj is None:
+                t_obj = getattr(self, 'sandal_thickness', 15.0)
+                print(f"[Capture] ID/SKU/WO not found in mastering, using default thickness: {t_obj}")
+            else:
+                mapping_key = self.current_wo if self.current_wo in self.sku_height_map else self.current_sku
+                if self.current_product_id in self.sku_height_map or str(self.current_product_id) in self.sku_height_map:
+                    mapping_key = f"ID:{self.current_product_id}"
+                print(f"[Capture] Using dynamic height for {mapping_key}: {t_obj}")
+                
             mm_px_corrected = self.mm_per_px * (h_cam - t_obj) / h_cam if h_cam > 0 else self.mm_per_px
             
             # Determine detection method from combo box

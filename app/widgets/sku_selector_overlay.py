@@ -181,7 +181,8 @@ class SkuSelectorOverlay(BaseOverlay):
                             "otorisasi": item.get("Perbesaran Ukuran (Otorisasi)") or 0,
                             "kategori": item.get("Kategori"),
                             "sizes": item.get("List Size Available"),
-                            "coeff": code
+                            "coeff": code,
+                            "Master Height": item.get("Master Height", 0)
                         }
                         self.all_skus.append(norm)
                 except Exception as e:
@@ -344,6 +345,14 @@ class SkuSelectorOverlay(BaseOverlay):
         code_lbl.setWordWrap(True)
         
         layout.addWidget(code_lbl)
+        
+        # Height label (if exists)
+        height = sku.get("Master Height", 0)
+        if height:
+            height_lbl = QLabel(f"Height: {height} mm")
+            height_lbl.setStyleSheet(f"font-size: {UIScaling.scale_font(12)}px; font-weight: bold; color: #059669; background-color: #ECFDF5; border-radius: 4px; padding: 2px;")
+            height_lbl.setAlignment(Qt.AlignCenter)
+            layout.addWidget(height_lbl)
         
         # Click handler — prevent double-click
         def on_click(event, s=sku):

@@ -20,6 +20,7 @@ DEFAULT_COUNTS = {
     "REJECT (UNDER)": 0,
     "REJECT (OVER)": 0,
     "TOTAL GOOD": 0,
+    "TOTAL OVEN": 0,
     "TOTAL BS": 0,
 }
 

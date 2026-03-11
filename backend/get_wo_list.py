@@ -193,6 +193,8 @@ def enrich_wo_with_sku(wo_data: Dict[str, Any]) -> Dict[str, Any]:
             sku_info = get_sku_by_code(codes[i])
             
         if sku_info:
+            # Ensure Master Height is passed through from the cache
+            sku_info['Master Height'] = sku_info.get('Master Height', 0)
             enriched_skus.append(sku_info)
         elif i < len(codes):
             # Final fallback if not in cache at all
@@ -202,7 +204,8 @@ def enrich_wo_with_sku(wo_data: Dict[str, Any]) -> Dict[str, Any]:
                 'code': code,
                 'Nama Produk': code,
                 'otorisasi': 0,
-                'sizes': '36,37,38,39,40,41,42,43,44'
+                'sizes': '36,37,38,39,40,41,42,43,44',
+                'Master Height': 0
             })
             
     wo_data['skus'] = enriched_skus
