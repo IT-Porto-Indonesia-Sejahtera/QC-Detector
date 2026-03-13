@@ -524,7 +524,7 @@ class LiveCameraScreen(QWidget):
             # Camera crop settings
             self.camera_crop = self.settings.get("camera_crop", {})
             self.lens_distortion = self.settings.get("lens_distortion", {})
-            self.detection_model = self.settings.get("detection_model", "standard")
+            self.detection_model = self.settings.get("detection_model", "advanced")
             self.mounting_height = self.settings.get("mounting_height", 1000.0)
             self.sandal_thickness = self.settings.get("sandal_thickness", 15.0)
             self.aspect_ratio_correction = self.settings.get("aspect_ratio_correction", 1.0)
@@ -556,7 +556,7 @@ class LiveCameraScreen(QWidget):
             self.active_ip_preset_id = None
             self.camera_crop = {}
             self.lens_distortion = {}
-            self.detection_model = "standard"
+            self.detection_model = "advanced"
             self.mounting_height = 1000.0
             self.sandal_thickness = 15.0
             self.aspect_ratio_correction = 1.0
@@ -680,12 +680,12 @@ class LiveCameraScreen(QWidget):
         btn_back.setToolTip("Kembali ke Menu")
         btn_back.clicked.connect(self.go_back)
         
-        btn_settings = QPushButton("⚙️")
-        btn_settings.setFixedSize(btn_size, btn_size)
-        btn_settings.setStyleSheet(btn_style)
-        btn_settings.setCursor(Qt.PointingHandCursor)
-        btn_settings.setToolTip("Buka Pengaturan")
-        btn_settings.clicked.connect(self.show_settings_menu)
+        # btn_settings = QPushButton("⚙️")
+        # btn_settings.setFixedSize(btn_size, btn_size)
+        # btn_settings.setStyleSheet(btn_style)
+        # btn_settings.setCursor(Qt.PointingHandCursor)
+        # btn_settings.setToolTip("Buka Pengaturan")
+        # btn_settings.clicked.connect(self.show_settings_menu)
         
         # Finish WO Button (Minimal)
         btn_finish = QPushButton("✓")
@@ -718,39 +718,11 @@ class LiveCameraScreen(QWidget):
         top_bar.addWidget(btn_finish)
         top_bar.addSpacing(15)
         
-        # Model Selection Dropdown (overlay style)
-        self.model_combo = QComboBox()
-        self.model_combo.addItem("YOLO-Seg (AI - Disarankan)", "yolo")
-        self.model_combo.addItem("Standar (Siap Beige)", "standard")
-        self.model_combo.addItem("FastSAM (AI)", "sam")
-        self.model_combo.addItem("Lanjutan (YOLO-X + SAM)", "advanced")
-        # Find index for current model
-        idx = self.model_combo.findData(self.detection_model)
-        if idx != -1: self.model_combo.setCurrentIndex(idx)
+        # Model Selection removed per user request
+        # self.model_combo = QComboBox()
+        # ...
         
-        self.model_combo.setMinimumWidth(UIScaling.scale(150))
-        self.model_combo.setFixedHeight(btn_size)
-        self.model_combo.setStyleSheet(f"""
-            QComboBox {{
-                background-color: rgba(30, 30, 30, 0.6);
-                color: white;
-                border-radius: {UIScaling.scale(8)}px;
-                padding: 10px;
-                font-size: {UIScaling.scale_font(16)}px;
-                border: 2px solid rgba(255, 255, 255, 0.4);
-                font-weight: bold;
-            }}
-            QComboBox::drop-down {{ border: 0; }}
-            QComboBox QAbstractItemView {{
-                background-color: #1C1C1E;
-                color: white;
-                selection-background-color: #007AFF;
-            }}
-        """)
-        top_bar.addWidget(self.model_combo)
-        top_bar.addSpacing(10)
-        
-        top_bar.addWidget(btn_settings)
+        # top_bar.addWidget(btn_settings)
         
         overlay_layout.addLayout(top_bar)
         overlay_layout.addStretch() # Push everything up
@@ -849,12 +821,12 @@ class LiveCameraScreen(QWidget):
         self.info_bar.setStyleSheet(f"background-color: #F5F5F5; color: #333333; padding: 5px; border-radius: {info_bar_radius}px; font-weight: bold; font-size: {info_bar_font_size}px;")
         self.info_bar.setFixedHeight(ctrl_btn_size)
         
-        # Edit Button
-        btn_edit = QPushButton("Ubah")
-        btn_edit.setFixedSize(UIScaling.scale(60), ctrl_btn_size)
-        btn_edit_font_size = UIScaling.scale_font(12)
-        btn_edit.setStyleSheet(f"background-color: #F5F5F5; border-radius: {info_bar_radius}px; color: #333333; border: 1px solid #E0E0E0; font-size: {btn_edit_font_size}px;")
-        btn_edit.clicked.connect(self.open_profile_dialog)
+        # Edit Button -> Presets
+        self.btn_presets = QPushButton("Presets")
+        self.btn_presets.setFixedSize(UIScaling.scale(60), ctrl_btn_size)
+        btn_presets_font_size = UIScaling.scale_font(12)
+        self.btn_presets.setStyleSheet(f"background-color: #F5F5F5; border-radius: {info_bar_radius}px; color: #333333; border: 1px solid #E0E0E0; font-size: {btn_presets_font_size}px;")
+        self.btn_presets.clicked.connect(self.open_profile_dialog)
 
         # Finish button
         self.btn_finish = QPushButton("Validate")
@@ -878,11 +850,11 @@ class LiveCameraScreen(QWidget):
         # self.btn_switch.setStyleSheet(f"QPushButton {{ background: #E3F2FD; color: #1565C0; border-radius: {ctrl_btn_radius}px; font-size: {ctrl_btn_font_size}px; border: 1px solid #BBDEFB; }} QPushButton:hover {{ background: #BBDEFB; }}")
         # self.btn_switch.clicked.connect(self.on_switch_sides)
         
-        # Settings
-        self.settings_btn = QPushButton("⚙️")
-        self.settings_btn.setFixedSize(ctrl_btn_size, ctrl_btn_size)
-        self.settings_btn.setStyleSheet(f"QPushButton {{ background: #F5F5F5; color: #333333; border-radius: {ctrl_btn_radius}px; font-size: {ctrl_btn_font_size}px; border: 1px solid #E0E0E0; }} QPushButton:hover {{ background: #E8E8E8; }}")
-        self.settings_btn.clicked.connect(self.show_settings_menu)
+        # Settings removed
+        # self.settings_btn = QPushButton("⚙️")
+        # self.settings_btn.setFixedSize(ctrl_btn_size, ctrl_btn_size)
+        # self.settings_btn.setStyleSheet(f"QPushButton {{ background: #F5F5F5; color: #333333; border-radius: {ctrl_btn_radius}px; font-size: {ctrl_btn_font_size}px; border: 1px solid #E0E0E0; }} QPushButton:hover {{ background: #E8E8E8; }}")
+        # self.settings_btn.clicked.connect(self.show_settings_menu)
         
         top_ctrl_layout.addWidget(self.back_button)
         top_ctrl_layout.addWidget(self.info_bar, 1) 
@@ -891,38 +863,13 @@ class LiveCameraScreen(QWidget):
         top_ctrl_layout.addWidget(self.lbl_tracker_indicator)
         top_ctrl_layout.addSpacing(10) 
         
-        # Model selection for standard layouts
-        self.model_combo = QComboBox()
-        self.model_combo.addItem("YOLO-Seg (AI)", "yolo")
-        self.model_combo.addItem("Standar", "standard")
-        self.model_combo.addItem("FastSAM", "sam")
-        self.model_combo.addItem("Lanjutan (YOLO-X + SAM)", "advanced")
-        self.model_combo.setFixedWidth(UIScaling.scale(120))
-        self.model_combo.setFixedHeight(ctrl_btn_size)
-        
-        # Consistent styling for the combo box
-        self.model_combo.setStyleSheet(f"""
-            QComboBox {{
-                background-color: #F5F5F5;
-                color: #333333;
-                border: 1px solid #E0E0E0;
-                border-radius: {info_bar_radius}px;
-                padding: 1px 5px;
-                font-size: {UIScaling.scale_font(13)}px;
-                font-weight: bold;
-            }}
-            QComboBox::drop-down {{ border: 0; }}
-        """)
-        
-        idx = self.model_combo.findData(self.detection_model)
-        if idx != -1: self.model_combo.setCurrentIndex(idx)
-        top_ctrl_layout.addWidget(self.model_combo)
+        # Model selection removed
 
-        top_ctrl_layout.addWidget(btn_edit)
+        top_ctrl_layout.addWidget(self.btn_presets)
         top_ctrl_layout.addWidget(self.btn_finish)
         # Switch button removed (Position is now explicit Left/Right)
         # top_ctrl_layout.addWidget(self.btn_switch)
-        top_ctrl_layout.addWidget(self.settings_btn)
+        # top_ctrl_layout.addWidget(self.settings_btn)
         
         layout.addLayout(top_ctrl_layout)
         
@@ -938,7 +885,7 @@ class LiveCameraScreen(QWidget):
         self.preview_label.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Ignored)
         self.preview_label.setMinimumSize(UIScaling.scale(200), UIScaling.scale(150))
         
-        layout.addWidget(self.preview_label, stretch=1)
+        layout.addWidget(self.preview_label, stretch=3)
         
         # Counters
         counters_layout = QHBoxLayout()
@@ -973,11 +920,11 @@ class LiveCameraScreen(QWidget):
         self.lbl_big_result = QLabel("-\nSIAP")
         self.lbl_big_result.setAlignment(Qt.AlignCenter)
         self.lbl_big_result.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        big_result_font_size = UIScaling.scale_font(48)
+        big_result_font_size = UIScaling.scale_font(40) # Slightly smaller font
         big_result_radius = UIScaling.scale(15)
         self.lbl_big_result.setStyleSheet(f"color: #999999; background-color: white; font-size: {big_result_font_size}px; font-weight: 900; border-radius: {big_result_radius}px; border: 4px solid #E0E0E0;")
         
-        layout.addWidget(self.lbl_big_result, stretch=2)
+        layout.addWidget(self.lbl_big_result, stretch=1)
         
         # Details Box
         details_layout = QGridLayout()
@@ -1035,7 +982,7 @@ class LiveCameraScreen(QWidget):
             "active_profile_id": self.active_profile_id,
             "ip_camera_username": getattr(self, "ip_camera_username", ""),
             "ip_camera_password": getattr(self, "ip_camera_password", ""),
-            "detection_model": self.model_combo.currentData() if hasattr(self, 'model_combo') else self.detection_model
+            "detection_model": self.detection_model
         })
         JsonUtility.save_to_json(SETTINGS_FILE, settings)
 
@@ -1381,7 +1328,7 @@ class LiveCameraScreen(QWidget):
             mm_px_corrected = self.mm_per_px * (h_cam - t_obj) / h_cam if h_cam > 0 else self.mm_per_px
             
             # Determine detection method from combo box
-            selected_model = self.model_combo.currentData() if hasattr(self, 'model_combo') else self.detection_model
+            selected_model = self.detection_model
             use_sam = selected_model == "sam"
             use_yolo = selected_model == "yolo"
             use_advanced = selected_model == "advanced"
@@ -1508,8 +1455,7 @@ class LiveCameraScreen(QWidget):
                 # --- Log detection to detections.log ---
                 try:
                     det_logger = get_detection_logger()
-                    model_name = getattr(self, 'model_combo', None)
-                    model_used = model_name.currentText() if model_name else self.detection_model
+                    model_used = self.detection_model
                     profile_name = self.active_profile_data.get("name", "N/A") if self.active_profile_data else "N/A"
                     det_logger.info(
                         f"CAPTURE | SKU: {self.current_sku} | Size: {self.current_size} "
