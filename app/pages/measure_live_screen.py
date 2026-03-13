@@ -1154,7 +1154,7 @@ class LiveCameraScreen(QWidget):
                 r, c = divmod(i, columns)
                 
                 size = p.get("size", "??")
-                display_size = str(size)
+                display_size = p.get("display_size", str(size))
                 
                 color_idx = p.get("color_idx", 0)
                 bg_color = SKU_COLORS.get(color_idx, "#E0E0E0")
@@ -1265,7 +1265,9 @@ class LiveCameraScreen(QWidget):
         
         # Update UI
         self.current_wo = self.active_profile_data.get("wo_number", "---")
-        self.val_detail_sku.setText(f"{self.current_sku}/{self.current_size}")
+        # 4. Update Header Text (UI Only display size)
+        display_size = p.get("display_size", self.current_size)
+        self.val_detail_sku.setText(f"{self.current_sku}/{display_size}")
         self.val_detail_wo.setText(self.current_wo)
         if hasattr(self, 'val_detail_oto'):
             self.val_detail_oto.setText(f"{self.current_otorisasi:+.1f}")

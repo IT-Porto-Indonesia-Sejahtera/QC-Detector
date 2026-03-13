@@ -475,7 +475,7 @@ class PresetDetailPage(QWidget):
         self.notes_input.setPlainText(str(profile.get("notes") or ""))
 
         # Button visibility based on 3-status system
-        is_editable = (status == "draft")
+        is_editable = (status in ["draft", "on_process"])
         self.btn_save.setVisible(is_editable)
         self.btn_delete.setVisible(status != "on_process")
         # self.btn_start.setVisible(status == "draft") # Handled by new status logic
@@ -796,35 +796,56 @@ class PresetDetailPage(QWidget):
         s = str(size_str).strip().upper()
 
         if "," in s:
-            items = [x.strip() for x in s.split(",")]
+            raw_items = [x.strip() for x in s.split(",") if x.strip()]
+            
+            # Identify all integers for context checks
+            ints = []
+            for item in raw_items:
+                if item.isdigit():
+                    ints.append(int(item))
+
             result = []
-            for item in items:
-                if "/" in item and "MM" not in item:
-                    parts = item.split("/")
-                    result.append(parts[-1].strip())
+            for item in raw_items:
+                if item.isdigit():
+                    val = int(item)
+                    # Smart Pairing Rule:
+                    # 1. Partner (val-1) is missing
+                    # 2. Next Neighbor (val+1) is also missing (not part of a contiguous list)
+                    if val % 2 == 0 and (val-1) not in ints and (val+1) not in ints:
+                        result.append(f"{val-1}/{val}")
+                    else:
+                        result.append(item)
                 else:
+                    # Already slashed or non-numeric
                     result.append(item)
             return result
-
-        def resolve_slash(val):
-            if "/" in val:
-                parts = val.split("/")
-                return parts[-1].strip()
-            return val
 
         if "-" in s:
             parts = s.split("-")
             if len(parts) == 2:
-                start_s = resolve_slash(parts[0].strip())
-                end_s = resolve_slash(parts[1].strip())
+                start_s, end_s = parts[0].strip(), parts[1].strip()
                 if start_s.isdigit() and end_s.isdigit():
-                    start = int(start_s)
-                    end = int(end_s)
+                    start, end = int(start_s), int(end_s)
                     if start < end:
-                        return [str(i) for i in range(start, end + 1)]
+                        res = []
+                        curr = start
+                        while curr <= end:
+                            if curr % 2 != 0 and curr + 1 <= end:
+                                res.append(f"{curr}/{curr+1}")
+                                curr += 2
+                            else:
+                                if curr % 2 == 0:
+                                    res.append(f"{curr-1}/{curr}")
+                                else:
+                                    res.append(str(curr))
+                                curr += 1
+                        return res
 
-        if "/" in s:
-            return [resolve_slash(s)]
+        # Lone even number fallback
+        if s.isdigit():
+            val = int(s)
+            if val % 2 == 0:
+                return [f"{val-1}/{val}"]
 
         return [s]
 
@@ -848,6 +869,16 @@ class PresetDetailPage(QWidget):
     def save_preset(self):
         if not self.current_profile:
             return
+
+        # Show confirmation if on_process
+        if self.current_profile.get("status") == "on_process":
+            confirm = QMessageBox.question(
+                self, "Konfirmasi Simpan",
+                "Preset sedang berjalan (On Process). Apakah Anda yakin ingin menyimpan perubahan?",
+                QMessageBox.Yes | QMessageBox.No
+            )
+            if confirm == QMessageBox.No:
+                return
 
         try:
             all_profiles = JsonUtility.load_from_json(PROFILES_FILE) or []
@@ -877,10 +908,19 @@ class PresetDetailPage(QWidget):
 
                 sizes = self._parse_sizes(data.get("sizes", ""), code)
                 for s in sizes:
+                    display_val = str(s).strip()
+                    calc_size = display_val # Default
+                    
+                    if "/" in display_val:
+                        parts = display_val.split("/")
+                        if len(parts) == 2 and parts[1].strip().isdigit():
+                            calc_size = parts[1].strip()
+                    
                     presets.append({
                         "sku": code,
                         "product_id": product_id,
-                        "size": s,
+                        "size": calc_size,
+                        "display_size": display_val,
                         "color_idx": (idx % 4) + 1,
                         "team": team,
                         "otorisasi": otorisasi
