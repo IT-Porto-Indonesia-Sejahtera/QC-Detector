@@ -78,7 +78,7 @@ class RecordManager:
             "shift": preset.get("shift", ""),
             "production_date": preset.get("production_date", ""),
             "mps": preset.get("mps", ""),
-            "status": "active",
+            "status": "on_process",
             "started_at": datetime.now().strftime("%d/%m/%Y, %H:%M:%S"),
             "finished_at": None,
             "counts": dict(DEFAULT_COUNTS),

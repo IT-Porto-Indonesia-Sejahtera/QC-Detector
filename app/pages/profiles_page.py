@@ -901,8 +901,23 @@ class ProfilesPage(QWidget):
         self._toast_timer.start(2500)
 
     def go_back(self):
-        if self.controller:
-            self.controller.go_back()
+        msg = QMessageBox(self)
+        msg.setWindowTitle("Kembali")
+        msg.setText("Apakah Anda yakin ingin ke menu sebelumnya?")
+        msg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
+        msg.setStyleSheet("""
+            QMessageBox { background-color: white; }
+            QMessageBox QLabel { color: #333; font-size: 15px; padding: 12px; }
+            QPushButton {
+                background-color: #F3F4F6; color: #333;
+                border: 1px solid #D1D5DB; border-radius: 8px;
+                padding: 8px 24px; font-size: 14px; margin: 5px; font-weight: 600;
+            }
+            QPushButton:hover { background-color: #E5E7EB; }
+        """)
+        if msg.exec() == QMessageBox.Yes:
+            if self.controller:
+                self.controller.go_back()
 
     def refresh_data(self):
         self.load_profiles()

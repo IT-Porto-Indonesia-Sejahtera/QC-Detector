@@ -34,6 +34,7 @@ class PresetDetailPage(QWidget):
         self.image_loader = NetworkImageLoader(self)
         self.image_loader.image_loaded.connect(self.on_image_loaded)
         self.card_labels = {}
+        self._saved_snapshot = {}  # For unsaved changes detection
         self.init_ui()
 
     def init_ui(self):
@@ -89,8 +90,28 @@ class PresetDetailPage(QWidget):
         """)
         h_layout.addWidget(self.lbl_machine)
 
+        # Mulai QC button (moved from action bar to header)
+        self.btn_start = QPushButton("▶  Mulai QC")
+        self.btn_start.setCursor(Qt.PointingHandCursor)
+        self.btn_start.setFixedHeight(UIScaling.scale(48))
+        self.btn_start.setStyleSheet(f"""
+            QPushButton {{
+                background-color: #2563EB;
+                color: white;
+                border: none;
+                border-radius: {UIScaling.scale(12)}px;
+                padding: 0 {UIScaling.scale(28)}px;
+                font-size: {UIScaling.scale_font(15)}px;
+                font-weight: 700;
+            }}
+            QPushButton:hover {{ background-color: #1D4ED8; }}
+            QPushButton:pressed {{ background-color: #1E40AF; }}
+        """)
+        self.btn_start.clicked.connect(self.start_preset)
+        h_layout.addWidget(self.btn_start)
+
         # Ukur button
-        self.btn_ukur = QPushButton("▶  Ukur")
+        self.btn_ukur = QPushButton("▶  Buka Kamera QC")
         self.btn_ukur.setCursor(Qt.PointingHandCursor)
         self.btn_ukur.setFixedHeight(UIScaling.scale(48))
         self.btn_ukur.setStyleSheet(f"""
@@ -130,23 +151,16 @@ class PresetDetailPage(QWidget):
         self.btn_delete.clicked.connect(self.delete_preset)
         a_layout.addWidget(self.btn_delete)
 
-        self.btn_activate = self._make_action_btn("⚡ Aktifkan", "#2563EB", "white")
-        self.btn_activate.clicked.connect(self.activate_preset)
-        a_layout.addWidget(self.btn_activate)
-
-        self.btn_finish = self._make_action_btn("✓  Selesai", "#F59E0B", "white")
+        self.btn_finish = self._make_action_btn("✓  Validate", "#F59E0B", "white")
         self.btn_finish.clicked.connect(self.finish_preset)
         a_layout.addWidget(self.btn_finish)
 
-        self.btn_resync = self._make_action_btn("🔄  Sync from WO", "white", "#2563EB")
-        self.btn_resync.setStyleSheet(self.btn_resync.styleSheet() + f"border: 1.5px solid #2563EB; border-radius: {UIScaling.scale(10)}px;")
-        self.btn_resync.clicked.connect(self.re_sync_wo)
-        a_layout.addWidget(self.btn_resync)
+        # Sync from WO button removed per user request
 
         a_layout.addStretch()
 
         # Status badge
-        lbl_status_label = QLabel("Status")
+        lbl_status_label = QLabel("Status WO:")
         lbl_status_label.setStyleSheet(f"font-size: {UIScaling.scale_font(14)}px; font-weight: 600; color: #6B7280;")
         a_layout.addWidget(lbl_status_label)
 
@@ -177,7 +191,7 @@ class PresetDetailPage(QWidget):
         left_layout.setSpacing(UIScaling.scale(14))
 
         # WO header
-        self.lbl_wo_header = QLabel("Presets dari WO :")
+        self.lbl_wo_header = QLabel("Informasi Work Order :")
         self.lbl_wo_header.setStyleSheet(f"font-size: {UIScaling.scale_font(12)}px; color: #9CA3AF; font-weight: 600; border: none; letter-spacing: 0.5px;")
         left_layout.addWidget(self.lbl_wo_header)
 
@@ -227,7 +241,7 @@ class PresetDetailPage(QWidget):
         
         # QC Results Section
         left_layout.addSpacing(UIScaling.scale(10))
-        lbl_qc = QLabel("📊  QC Summary")
+        lbl_qc = QLabel("📊  Rangkuman Hasil QC")
         lbl_qc.setStyleSheet(f"font-size: {UIScaling.scale_font(14)}px; font-weight: 700; color: #1F2937; border: none;")
         left_layout.addWidget(lbl_qc)
         
@@ -279,12 +293,15 @@ class PresetDetailPage(QWidget):
             border-top-left-radius: {UIScaling.scale(16)}px;
             border-top-right-radius: {UIScaling.scale(16)}px;
         """)
-        sh_layout = QHBoxLayout(sku_header)
-        sh_layout.setContentsMargins(UIScaling.scale(20), 0, UIScaling.scale(20), 0)
+        # Header
+        right_header = QHBoxLayout()
+        right_header.setContentsMargins(UIScaling.scale(20), 0, UIScaling.scale(20), 0)
 
-        lbl_sku_title = QLabel("📦  SKU Configuration")
-        lbl_sku_title.setStyleSheet(f"font-size: {UIScaling.scale_font(15)}px; font-weight: 700; color: #1F2937; border: none;")
-        sh_layout.addWidget(lbl_sku_title)
+        lbl_sku = QLabel("📦  Daftar Tipe yang Dikerjakan")
+        lbl_sku.setStyleSheet(f"font-size: {UIScaling.scale_font(15)}px; font-weight: 700; color: #1F2937; border: none;")
+        right_header.addWidget(lbl_sku)
+        right_header.addStretch()
+        sku_header.setLayout(right_header) # Set the layout for sku_header
 
         right_layout.addWidget(sku_header)
 
@@ -388,12 +405,23 @@ class PresetDetailPage(QWidget):
             return ""
         t = team_str.strip()
         if "Kiri" in t or "Left" in t:
-            return "Meja Kiri"
+            return "Jalur Kiri"
         elif "Kanan" in t or "Right" in t:
-            return "Meja Kanan"
+            return "Jalur Kanan"
         return t
 
-        return t
+    def _get_status_style(self, color, bg_color):
+        return f"""
+            font-size: {UIScaling.scale_font(14)}px;
+            font-weight: 800;
+            color: {color};
+            background-color: {bg_color};
+            padding: {UIScaling.scale(6)}px {UIScaling.scale(18)}px;
+            border: 2px solid {color};
+            border-radius: {UIScaling.scale(10)}px;
+            letter-spacing: 0.5px;
+        """
+
     # ─── LOAD DATA ────────────────────────────────────────
 
     def load_profile(self, profile):
@@ -401,26 +429,37 @@ class PresetDetailPage(QWidget):
         self.card_labels = {}
 
         status = profile.get("status", "draft")
+        # Auto-migrate old statuses
+        if status == "ready":
+            status = "draft"
+            profile["status"] = "draft"
+        elif status == "active":
+            status = "on_process"
+            profile["status"] = "on_process"
 
-        # Status badge styling
-        status_display = {
-            "draft":  ("Draft",  "#92400E", "#FEF3C7", "#FCD34D"),
-            "ready":  ("Ready",  "#065F46", "#ECFDF5", "#A7F3D0"),
-            "active": ("Active", "#1E40AF", "#DBEAFE", "#93C5FD"),
-            "done":   ("Done",   "#6B7280", "#F3F4F6", "#D1D5DB"),
-        }
-        disp = status_display.get(status, status_display["draft"])
-        self.lbl_status.setText(disp[0])
-        self.lbl_status.setStyleSheet(f"""
-            font-size: {UIScaling.scale_font(14)}px;
-            font-weight: 800;
-            color: {disp[1]};
-            background-color: {disp[2]};
-            padding: {UIScaling.scale(6)}px {UIScaling.scale(18)}px;
-            border: 2px solid {disp[3]};
-            border-radius: {UIScaling.scale(10)}px;
-            letter-spacing: 0.5px;
-        """)
+        # Status badge styling (3 states only)
+        # Status badge styling (3 states only)
+        if status == "draft":
+            self.lbl_status.setText("  Draft  ")
+            self.lbl_status.setStyleSheet(self._get_status_style("#F59E0B", "#FEF3C7"))
+            self.btn_start.setVisible(True)
+            self.btn_finish.setVisible(False)
+            self.btn_ukur.setVisible(False)
+            self.btn_ukur.setEnabled(False)
+        elif status == "on_process":
+            self.lbl_status.setText("  On Process  ")
+            self.lbl_status.setStyleSheet(self._get_status_style("#2563EB", "#DBEAFE"))
+            self.btn_start.setVisible(False)
+            self.btn_finish.setVisible(True)
+            self.btn_ukur.setVisible(True)
+            self.btn_ukur.setEnabled(True)
+        else: # status == "done"
+            self.lbl_status.setText("  Done  ")
+            self.lbl_status.setStyleSheet(self._get_status_style("#6B7280", "#F3F4F6"))
+            self.btn_start.setVisible(False)
+            self.btn_finish.setVisible(False)
+            self.btn_ukur.setVisible(False)
+            self.btn_ukur.setEnabled(False)
 
         # WO info
         wo = profile.get("wo_number", profile.get("name", "Untitled"))
@@ -435,14 +474,14 @@ class PresetDetailPage(QWidget):
         self.info_mps.setText(str(profile.get("nomor_mps") or profile.get("mps") or ""))
         self.notes_input.setPlainText(str(profile.get("notes") or ""))
 
-        # Button visibility based on status
-        is_editable = status in ("draft", "ready")
+        # Button visibility based on 3-status system
+        is_editable = (status == "draft")
         self.btn_save.setVisible(is_editable)
-        self.btn_delete.setVisible(status != "active")
-        self.btn_activate.setVisible(status == "ready")
-        self.btn_finish.setVisible(status == "active")
-        self.btn_ukur.setVisible(status in ("ready", "active"))
-        self.btn_resync.setVisible(is_editable)
+        self.btn_delete.setVisible(status != "on_process")
+        # self.btn_start.setVisible(status == "draft") # Handled by new status logic
+        # self.btn_finish.setVisible(status == "on_process") # Handled by new status logic
+        # self.btn_ukur.setVisible(status == "on_process") # Handled by new status logic
+        # self.btn_resync.setVisible(is_editable)
 
         # Disable editing for detail fields (always read-only as requested)
         # Use high contrast black color
@@ -495,6 +534,9 @@ class PresetDetailPage(QWidget):
             self.lbl_total.setText("0")
 
         self._render_sku_rows(profile, is_editable)
+
+        # Snapshot for unsaved changes detection
+        self._saved_snapshot = self._take_snapshot()
 
     def _render_sku_rows(self, profile, is_editable):
         while self.sku_layout.count():
@@ -571,10 +613,10 @@ class PresetDetailPage(QWidget):
             # Check for height in product data (centralized from get_product_sku)
             height = data.get("Master Height", 0)
             if height:
-                sku_height.setText(f"Master Height: {height} mm")
+                sku_height.setText(f"Tinggi Master: {height} mm")
                 sku_height.setStyleSheet(f"font-size: {UIScaling.scale_font(12)}px; font-weight: 600; color: #059669; border: none;")
             else:
-                sku_height.setText("No Master Height (Default)")
+                sku_height.setText("Tinggi Master Belum Diatur (Gunakan Standar)")
                 sku_height.setStyleSheet(f"font-size: {UIScaling.scale_font(11)}px; color: #9CA3AF; border: none;")
 
             gdrive_id = data.get("gdrive_id") or data.get("GDrive ID") or ""
@@ -584,7 +626,7 @@ class PresetDetailPage(QWidget):
                 self.card_labels[gdrive_id].append(img_label)
                 self.image_loader.load_image(gdrive_id)
         else:
-            sku_name.setText("Tap to select SKU" if is_editable else "Empty")
+            sku_name.setText("← Pilih Tipe" if is_editable else "Kosong")
             sku_name.setStyleSheet(f"font-size: {UIScaling.scale_font(15)}px; font-weight: 500; color: #9CA3AF; border: none;")
             sku_height.setText("")
 
@@ -610,39 +652,7 @@ class PresetDetailPage(QWidget):
 
         layout.addWidget(btn_pos)
 
-        # Reset button
-        btn_reset = QPushButton()
-        btn_reset.setCursor(Qt.PointingHandCursor)
-        btn_reset.setFixedSize(UIScaling.scale(42), UIScaling.scale(42))
-        btn_reset.setStyleSheet(f"""
-            QPushButton {{
-                background-color: #FEE2E2;
-                border: 1.5px solid #FECACA;
-                border-radius: {UIScaling.scale(8)}px;
-                padding: {UIScaling.scale(8)}px;
-            }}
-            QPushButton:hover {{ background-color: #FECACA; }}
-            QPushButton:pressed {{ background-color: #FCA5A5; }}
-        """)
-        
-        # Trash icon (Simple SVG path)
-        trash_icon = """<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#DC2626" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>"""
-        try:
-            from PySide6.QtSvgWidgets import QSvgWidget
-            svg_widget = QSvgWidget()
-            svg_widget.load(trash_icon.encode('utf-8'))
-            svg_widget.setFixedSize(UIScaling.scale(20), UIScaling.scale(20))
-            
-            btn_reset_layout = QVBoxLayout(btn_reset)
-            btn_reset_layout.setContentsMargins(0, 0, 0, 0)
-            btn_reset_layout.setAlignment(Qt.AlignCenter)
-            btn_reset_layout.addWidget(svg_widget)
-        except ImportError:
-            btn_reset.setText("R") # Fallback if SvgWidgets not available
-            btn_reset.setStyleSheet(btn_reset.styleSheet() + " color: #DC2626; font-weight: bold;")
-        
-        btn_reset.clicked.connect(lambda _, idx=index: self.reset_sku_report(idx))
-        layout.addWidget(btn_reset)
+        # Reset button removed per user request
 
         row_data = {
             "img": img_label,
@@ -658,75 +668,7 @@ class PresetDetailPage(QWidget):
 
         return container
 
-    def reset_sku_report(self, index):
-        """Reset the measurement counts for a specific SKU in this profile."""
-        if index < 0 or index >= len(self.sku_rows):
-            return
-            
-        row = self.sku_rows[index]
-        sku_data = row["data"]
-        if not sku_data:
-            return
-            
-        sku_code = sku_data.get("code")
-        if not sku_code:
-            return
-            
-        from PySide6.QtWidgets import QMessageBox
-        reply = QMessageBox.question(
-            self, "Konfirmasi Reset",
-            f"Reset laporan/hitung untuk SKU {sku_code}?\nData permanen di RecordManager akan ikut terhapus.",
-            QMessageBox.Yes | QMessageBox.No, QMessageBox.No
-        )
-        
-        if reply != QMessageBox.Yes:
-            return
-            
-        # 1. Load records
-        records = RecordManager.get_all_records()
-        profile_id = self.current_profile.get("id")
-        
-        # 2. Find the active record for this profile
-        target_record = None
-        for r in records:
-            if r.get("preset_id") == profile_id:
-                target_record = r
-                break
-                
-        if not target_record:
-            QMessageBox.information(self, "Info", "Belum ada data rekaman untuk SKU ini.")
-            return
-            
-        # 3. Identify preset indices matching this SKU
-        profile_presets = self.current_profile.get("presets", [])
-        matching_indices = []
-        for i, p in enumerate(profile_presets):
-            if p.get("sku") == sku_code:
-                matching_indices.append(str(i))
-                
-        # 4. Clear matching entries in per_sku_counts
-        per_sku_counts = target_record.get("per_sku_counts", {})
-        cleared_count = 0
-        from app.data.record_manager import DEFAULT_COUNTS
-        
-        for idx_str in matching_indices:
-            if idx_str in per_sku_counts:
-                per_sku_counts[idx_str] = dict(DEFAULT_COUNTS)
-                cleared_count += 1
-                
-        # 5. Re-calculate aggregate counts
-        new_aggregate = dict(DEFAULT_COUNTS)
-        for val in per_sku_counts.values():
-            for key in new_aggregate:
-                new_aggregate[key] += val.get(key, 0)
-        
-        target_record["counts"] = new_aggregate
-        target_record["per_sku_counts"] = per_sku_counts
-        
-        # 6. Save
-        RecordManager._save(records)
-        
-        QMessageBox.information(self, "Selesai", f"Berhasil reset {cleared_count} preset untuk SKU {sku_code}.")
+    # reset_sku_report method removed per user request
 
     def _toggle_sku_position(self, index):
         """Toggle position between Kiri and Kanan for a selected SKU."""
@@ -758,7 +700,7 @@ class PresetDetailPage(QWidget):
             btn.setStyleSheet("border: none; background: transparent;")
             return
 
-        if "Kiri" in text:
+        if "Jalur Kiri" in text:
             btn.setStyleSheet(f"""
                 QPushButton {{
                     font-size: {UIScaling.scale_font(13)}px;
@@ -771,7 +713,7 @@ class PresetDetailPage(QWidget):
                 }}
                 QPushButton:hover {{ background-color: #BFDBFE; }}
             """)
-        elif "Kanan" in text:
+        elif "Jalur Kanan" in text:
             btn.setStyleSheet(f"""
                 QPushButton {{
                     font-size: {UIScaling.scale_font(13)}px;
@@ -819,10 +761,10 @@ class PresetDetailPage(QWidget):
         # Update Height
         height = sku_data.get("Master Height", 0)
         if height:
-            row["height"].setText(f"Master Height: {height} mm")
+            row["height"].setText(f"Tinggi Master: {height} mm")
             row["height"].setStyleSheet(f"font-size: {UIScaling.scale_font(12)}px; font-weight: 600; color: #059669; border: none;")
         else:
-            row["height"].setText("No Master Height (Default)")
+            row["height"].setText("Tinggi Master Belum Diatur (Gunakan Standar)")
             row["height"].setStyleSheet(f"font-size: {UIScaling.scale_font(11)}px; color: #9CA3AF; border: none;")
 
         gdrive_id = sku_data.get("gdrive_id", "")
@@ -843,86 +785,7 @@ class PresetDetailPage(QWidget):
                 except RuntimeError:
                     pass
 
-    # ─── WO RE-SYNC ───────────────────────────────────────
-
-    def re_sync_wo(self):
-        """Allow user to pick a new WO and update this preset's fields."""
-        settings = JsonUtility.load_from_json(SETTINGS_FILE) or {}
-        plant = settings.get("plant", "EVA1")
-        machine = self.current_profile.get("machine") or settings.get("machine", "Mesin 08")
-        
-        try:
-            wo_list = fetch_wo_list(plant, machine)
-            overlay = WOSelectorOverlay(self.window(), wo_list, plant=plant, machine=machine)
-            overlay.wo_selected.connect(self._on_wo_reselected)
-        except Exception as e:
-            self._show_toast(f"Error fetching WOs: {e}", is_error=True)
-
-    def _on_wo_reselected(self, wo_data):
-        if not wo_data or not self.current_profile: return
-        
-        # Enrich
-        enriched = enrich_wo_with_sku(wo_data)
-        
-        # Update metadata
-        self.current_profile["wo_number"] = enriched.get('nomor_wo', 'Untitled')
-        self.current_profile["plant"] = enriched.get('plant', '')
-        self.current_profile["shift"] = enriched.get('shift', '')
-        self.current_profile["mps"] = enriched.get('nomor_mps', '')
-        self.current_profile["machine"] = enriched.get('machine', '')
-        self.current_profile["notes"] = enriched.get('notes', '')
-        
-        prod_date = enriched.get('tanggal_produksi')
-        if hasattr(prod_date, 'strftime'):
-            self.current_profile["production_date"] = prod_date.strftime("%d/%m/%Y")
-        else:
-            self.current_profile["production_date"] = str(prod_date or datetime.now().strftime("%d/%m/%Y"))
-
-        # Update Name
-        wo_num = self.current_profile["wo_number"]
-        mac = self.current_profile["machine"]
-        self.current_profile["name"] = f"{wo_num} - {mac}" if mac else wo_num
-
-        # Update SKUs
-        new_skus = []
-        for idx, sku in enumerate(enriched.get("skus", [])):
-            # Distribute between Kiri and Kanan if multiple
-            team_pos = "Kiri" if idx == 0 else "Kanan"
-            
-            new_skus.append({
-                "code": sku.get("code", sku.get("default_code", "")),
-                "Nama Produk": sku.get("Nama Produk", sku.get("name", "")),
-                "gdrive_id": sku.get("gdrive_id", ""),
-                "otorisasi": sku.get("otorisasi", 0),
-                "sizes": sku.get("sizes", "36,37,38,39,40,41,42,43,44"),
-                "team": team_pos,
-                "Master Height": sku.get("Master Height", 0),
-                "id": sku.get("id")
-            })
-        self.current_profile["selected_skus"] = new_skus
-
-        # Update internal presets
-        presets = []
-        for idx, sku in enumerate(new_skus):
-            code = sku["code"]
-            oto = sku["otorisasi"]
-            product_id = sku.get("id")
-            size_list = self._parse_sizes(sku["sizes"], code)
-            for s in size_list:
-                presets.append({
-                    "sku": code,
-                    "product_id": product_id,
-                    "size": s,
-                    "color_idx": (idx % 4) + 1,
-                    "team": sku["team"],
-                    "otorisasi": oto
-                })
-        self.current_profile["presets"] = presets
-
-        # Refresh UI & Auto-Save
-        self.load_profile(self.current_profile)
-        self.save_preset()
-        self._show_toast("✓ Data updated and saved from Work Order")
+    # Sync from WO removed per user request
 
     # ─── ACTIONS ──────────────────────────────────────────
 
@@ -965,6 +828,23 @@ class PresetDetailPage(QWidget):
 
         return [s]
 
+    def _take_snapshot(self):
+        """Capture current UI state for unsaved changes detection."""
+        return {
+            "notes": self.notes_input.toPlainText().strip(),
+            "plant": self.info_plant.text().strip(),
+            "shift": self.info_shift.text().strip(),
+            "date": self.info_date.text().strip(),
+            "mps": self.info_mps.text().strip(),
+            "skus": [r["data"].get("code", "") if r["data"] else "" for r in self.sku_rows],
+        }
+
+    def _has_unsaved_changes(self):
+        """Check if current UI state differs from the last saved snapshot."""
+        if not self._saved_snapshot:
+            return False
+        return self._take_snapshot() != self._saved_snapshot
+
     def save_preset(self):
         if not self.current_profile:
             return
@@ -981,8 +861,7 @@ class PresetDetailPage(QWidget):
         self.current_profile["notes"] = self.notes_input.toPlainText().strip()
         self.current_profile["last_updated"] = datetime.now().strftime("%d/%m/%Y, %H:%M:%S")
 
-        if self.current_profile.get("status") == "draft":
-            self.current_profile["status"] = "ready"
+        # Draft stays Draft on save — status only changes via Start/Finish
 
         presets = []
         selected_skus = []
@@ -990,7 +869,7 @@ class PresetDetailPage(QWidget):
             data = row["data"]
             if data:
                 data = data.copy()
-                code = data.get("code", "UNKNOWN")
+                code = data.get("code") or data.get("Nama Produk") or "UNKNOWN"
                 team = data.get("team", "")
                 otorisasi = data.get("otorisasi", 0)
                 product_id = data.get("id")
@@ -1026,11 +905,41 @@ class PresetDetailPage(QWidget):
 
         JsonUtility.save_to_json(PROFILES_FILE, all_profiles)
         self.load_profile(self.current_profile)
+        self._saved_snapshot = self._take_snapshot()  # Reset snapshot after save
         self._show_toast("✓ Preset tersimpan!")
 
-    def activate_preset(self):
+    def start_preset(self):
+        """Start this preset — enforces single on_process rule."""
         if not self.current_profile:
             return
+
+        try:
+            all_profiles = JsonUtility.load_from_json(PROFILES_FILE) or []
+        except:
+            all_profiles = []
+
+        # Check if another preset is already on_process
+        for p in all_profiles:
+            if p.get("status") in ("on_process", "active") and p.get("id") != self.current_profile.get("id"):
+                wo = p.get("wo_number", p.get("name", ""))
+                msg = QMessageBox(self)
+                msg.setWindowTitle("Preset Sedang Berjalan")
+                msg.setText(f"Preset '{wo}' masih berjalan.\nSelesaikan preset tersebut terlebih dahulu.")
+                msg.setStandardButtons(QMessageBox.Ok)
+                msg.setStyleSheet("""
+                    QMessageBox { background-color: white; }
+                    QMessageBox QLabel { color: #333; font-size: 15px; padding: 12px; }
+                    QPushButton {
+                        background-color: #2563EB; color: white;
+                        border: none; border-radius: 8px;
+                        padding: 8px 24px; font-size: 14px; margin: 5px; font-weight: 600;
+                    }
+                    QPushButton:hover { background-color: #1D4ED8; }
+                """)
+                msg.exec()
+                return
+
+        # Save first, then set to on_process
         self.save_preset()
 
         try:
@@ -1039,12 +948,10 @@ class PresetDetailPage(QWidget):
             all_profiles = []
 
         for p in all_profiles:
-            if p.get("status") == "active":
-                p["status"] = "ready"
             if p.get("id") == self.current_profile.get("id"):
-                p["status"] = "active"
+                p["status"] = "on_process"
 
-        self.current_profile["status"] = "active"
+        self.current_profile["status"] = "on_process"
         JsonUtility.save_to_json(PROFILES_FILE, all_profiles)
 
         settings = JsonUtility.load_from_json(SETTINGS_FILE) or {}
@@ -1052,11 +959,31 @@ class PresetDetailPage(QWidget):
         JsonUtility.save_to_json(SETTINGS_FILE, settings)
 
         self.load_profile(self.current_profile)
-        self._show_toast("✓ Preset diaktifkan!")
+        
+        # Directly open camera after starting
+        self.run_preset()
 
     def finish_preset(self):
         if not self.current_profile:
             return
+
+        msg = QMessageBox(self)
+        msg.setWindowTitle("Selesaikan Preset")
+        msg.setText("Selesaikan preset ini?\nPreset akan dipindahkan ke Report.")
+        msg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
+        msg.setStyleSheet("""
+            QMessageBox { background-color: white; }
+            QMessageBox QLabel { color: #333; font-size: 15px; padding: 12px; }
+            QPushButton {
+                background-color: #F3F4F6; color: #333;
+                border: 1px solid #D1D5DB; border-radius: 8px;
+                padding: 8px 24px; font-size: 14px; margin: 5px; font-weight: 600;
+            }
+            QPushButton:hover { background-color: #E5E7EB; }
+        """)
+        if msg.exec() != QMessageBox.Yes:
+            return
+
         self.current_profile["status"] = "done"
 
         # Finalize the record (set finished_at)
@@ -1073,7 +1000,10 @@ class PresetDetailPage(QWidget):
             pass
 
         self.load_profile(self.current_profile)
-        self._show_toast("✓ Preset selesai!")
+        self._show_toast("✓ Preset selesai! Dipindahkan ke Report.")
+
+        # Navigate back to list after a short delay
+        QTimer.singleShot(1000, self.go_back)
 
     def delete_preset(self):
         if not self.current_profile:
@@ -1103,13 +1033,60 @@ class PresetDetailPage(QWidget):
             self.go_back()
 
     def run_preset(self):
-        if self.current_profile.get("status") in ("draft", "ready"):
-            self.save_preset()
-            self.activate_preset()
+        """Run measurement — only works if preset is on_process."""
+        if self.current_profile.get("status") != "on_process":
+            self._show_toast("Preset harus dalam status 'On Process' untuk diukur.", is_error=True)
+            return
         if self.controller:
             self.controller.go_to_live()
 
     def go_back(self):
+        # Check for unsaved changes
+        if self.current_profile and self.current_profile.get("status") == "draft" and self._has_unsaved_changes():
+            msg = QMessageBox(self)
+            msg.setWindowTitle("Perubahan Belum Disimpan")
+            msg.setText("Ada perubahan yang belum disimpan.\nIngin menyimpan perubahan ini sebelum kembali?")
+            msg.setStandardButtons(QMessageBox.Save | QMessageBox.Discard | QMessageBox.Cancel)
+            msg.button(QMessageBox.Save).setText("Simpan")
+            msg.button(QMessageBox.Discard).setText("Jangan Simpan")
+            msg.button(QMessageBox.Cancel).setText("Batal")
+            msg.setStyleSheet("""
+                QMessageBox { background-color: white; }
+                QMessageBox QLabel { color: #333; font-size: 15px; padding: 12px; }
+                QPushButton {
+                    background-color: #F3F4F6; color: #333;
+                    border: 1px solid #D1D5DB; border-radius: 8px;
+                    padding: 8px 24px; font-size: 14px; margin: 5px; font-weight: 600;
+                }
+                QPushButton:hover { background-color: #E5E7EB; }
+            """)
+            result = msg.exec()
+            if result == QMessageBox.Save:
+                self.save_preset()
+            elif result == QMessageBox.Cancel:
+                return
+            # Discard → just navigate back without saving
+            # Since we removed the initial save in preset_list_page, 
+            # navigating back here will naturally discard the new profile.
+
+        else:
+            msg = QMessageBox(self)
+            msg.setWindowTitle("Kembali")
+            msg.setText("Apakah Anda yakin ingin ke halaman sebelumnya?")
+            msg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
+            msg.setStyleSheet("""
+                QMessageBox { background-color: white; }
+                QMessageBox QLabel { color: #333; font-size: 15px; padding: 12px; }
+                QPushButton {
+                    background-color: #F3F4F6; color: #333;
+                    border: 1px solid #D1D5DB; border-radius: 8px;
+                    padding: 8px 24px; font-size: 14px; margin: 5px; font-weight: 600;
+                }
+                QPushButton:hover { background-color: #E5E7EB; }
+            """)
+            if msg.exec() != QMessageBox.Yes:
+                return
+
         if self.controller:
             self.controller.go_to_profiles()
 

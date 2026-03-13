@@ -25,6 +25,7 @@ from app.utils.ui_scaling import UIScaling
 from backend.size_categorization import categorize_measurement, get_category_color
 from app.widgets.settings_overlay import SettingsOverlay
 from app.data.record_manager import RecordManager
+from app.widgets.slide_confirm_overlay import SlideConfirmOverlay
 
 # Global list to hold stuck threads so they aren't garbage collected abruptly
 _zombie_threads = []
@@ -439,6 +440,38 @@ class LiveCameraScreen(QWidget):
         else:
             self.presets = DEFAULT_PRESETS
 
+    def on_finish_wo(self):
+        """Open the slide-to-confirm overlay to close the WO."""
+        if not self.active_profile_id:
+            return
+            
+        overlay = SlideConfirmOverlay(self)
+        overlay.confirmed.connect(self.finalize_wo_logic)
+        overlay.show_overlay()
+
+    def finalize_wo_logic(self):
+        """Finalize the current WO and go back to menu."""
+        print(f"[Live] Finalizing WO: {self.active_profile_id}")
+        
+        # 1. Finalize record (set finished_at)
+        RecordManager.finalize_record(self.active_profile_id)
+        
+        # 2. Update status in profiles.json
+        try:
+            profiles = JsonUtility.load_from_json(PROFILES_FILE) or []
+            for p in profiles:
+                if p.get("id") == self.active_profile_id:
+                    p["status"] = "done"
+                    break
+            JsonUtility.save_to_json(PROFILES_FILE, profiles)
+        except Exception as e:
+            print(f"[Live] Error updating status: {e}")
+            
+        # 3. Go back to main menu
+        if self.parent_widget:
+            self.parent_widget.go_to_home()
+
+
     def refresh_data(self):
         """Refresh settings and profile data from JSON files."""
         print("Refreshing LiveCameraScreen data...")
@@ -510,6 +543,7 @@ class LiveCameraScreen(QWidget):
             self.plc_poll_interval = int(self.settings.get("plc_poll_interval", 10))
             self.plc_trigger_reg = int(self.settings.get("plc_trigger_reg", 12))
             self.plc_result_reg = int(self.settings.get("plc_result_reg", 100))
+            self.sensor_delay = float(self.settings.get("sensor_delay", 0.0))
             
             # Load dynamic height mastering
             self.load_mastering_data()
@@ -539,6 +573,7 @@ class LiveCameraScreen(QWidget):
             self.plc_parity = "E"
             self.plc_baudrate = 9600
             self.plc_poll_interval = 10
+            self.sensor_delay = 0.0
             self.sku_height_map = {}
 
     def load_mastering_data(self):
@@ -652,11 +687,35 @@ class LiveCameraScreen(QWidget):
         btn_settings.setToolTip("Buka Pengaturan")
         btn_settings.clicked.connect(self.show_settings_menu)
         
+        # Finish WO Button (Minimal)
+        btn_finish = QPushButton("✓")
+        btn_finish.setFixedSize(btn_size, btn_size)
+        btn_finish.setStyleSheet(f"""
+            QPushButton {{
+                background-color: rgba(245, 158, 11, 0.6);
+                color: white;
+                border-radius: {btn_size//2}px;
+                font-size: {UIScaling.scale_font(24)}px;
+                border: 2px solid rgba(255, 255, 255, 0.4);
+            }}
+            QPushButton:hover {{
+                background-color: rgba(245, 158, 11, 0.8);
+                border: 2px solid white;
+            }}
+        """)
+        btn_finish.setCursor(Qt.PointingHandCursor)
+        btn_finish.setToolTip("Validate (Selesai)")
+        btn_finish.clicked.connect(self.on_finish_wo)
+        
         top_bar.addWidget(btn_back)
         top_bar.addStretch()
         
         # Add Record Indicator to Minimal Overlay
         top_bar.addWidget(self.lbl_tracker_indicator)
+        top_bar.addSpacing(15)
+        
+        # Finish button
+        top_bar.addWidget(btn_finish)
         top_bar.addSpacing(15)
         
         # Model Selection Dropdown (overlay style)
@@ -796,6 +855,22 @@ class LiveCameraScreen(QWidget):
         btn_edit_font_size = UIScaling.scale_font(12)
         btn_edit.setStyleSheet(f"background-color: #F5F5F5; border-radius: {info_bar_radius}px; color: #333333; border: 1px solid #E0E0E0; font-size: {btn_edit_font_size}px;")
         btn_edit.clicked.connect(self.open_profile_dialog)
+
+        # Finish button
+        self.btn_finish = QPushButton("Validate")
+        self.btn_finish.setFixedSize(UIScaling.scale(90), ctrl_btn_size)
+        self.btn_finish.setStyleSheet(f"""
+            QPushButton {{
+                background-color: #F59E0B; 
+                color: white; 
+                border-radius: {info_bar_radius}px; 
+                font-weight: bold; 
+                font-size: {UIScaling.scale_font(13)}px;
+            }}
+            QPushButton:hover {{ background-color: #D97706; }}
+        """)
+        self.btn_finish.setCursor(Qt.PointingHandCursor)
+        self.btn_finish.clicked.connect(self.on_finish_wo)
         
         # Switch Button (Arrows) - REMOVED
         # self.btn_switch = QPushButton("⇄")
@@ -844,6 +919,7 @@ class LiveCameraScreen(QWidget):
         top_ctrl_layout.addWidget(self.model_combo)
 
         top_ctrl_layout.addWidget(btn_edit)
+        top_ctrl_layout.addWidget(self.btn_finish)
         # Switch button removed (Position is now explicit Left/Right)
         # top_ctrl_layout.addWidget(self.btn_switch)
         top_ctrl_layout.addWidget(self.settings_btn)
@@ -1094,7 +1170,7 @@ class LiveCameraScreen(QWidget):
         grouped = {}
         order = []
         for p in presets:
-            sku = p.get("sku", "Unknown SKU") or "Unknown SKU"
+            sku = p.get("sku") or p.get("Nama Produk") or "Unknown SKU"
             if sku not in grouped:
                 grouped[sku] = []
                 order.append(sku)
@@ -1202,10 +1278,13 @@ class LiveCameraScreen(QWidget):
         
         # 1. Save current granular counts to the preset_counts map for the OLD SKU
         if self.current_preset_idx >= 0:
-            self.preset_counts[str(self.current_preset_idx)] = dict(self.granular_counts)
+            old_p = self.presets[self.current_preset_idx]
+            old_sku = old_p.get("sku") or old_p.get("Nama Produk") or "UNKNOWN"
+            old_key = f"{old_sku}_{old_p.get('size', '')}"
+            self.preset_counts[old_key] = dict(self.granular_counts)
         
         # 2. Update SKU details
-        self.current_sku = p.get("sku", "---")
+        self.current_sku = p.get("sku") or p.get("Nama Produk") or "UNKNOWN"
         self.current_product_id = p.get("product_id")
         self.current_size = p.get("size", "---")
         self.current_otorisasi = float(p.get("otorisasi", 0) or 0)
@@ -1221,7 +1300,8 @@ class LiveCameraScreen(QWidget):
         
         # 3. Load counters for the NEW SKU
         self.current_preset_idx = idx
-        sku_counts = self.preset_counts.get(str(idx))
+        new_key = f"{self.current_sku}_{self.current_size}"
+        sku_counts = self.preset_counts.get(new_key)
         if sku_counts:
             # Found existing counts for this SKU button
             self.granular_counts = dict(sku_counts)
@@ -1519,7 +1599,9 @@ class LiveCameraScreen(QWidget):
                 
                 # If we have a selected preset, load its specific counts
                 if self.current_preset_idx >= 0:
-                    data = self.preset_counts.get(str(self.current_preset_idx), {})
+                    p = self.presets[self.current_preset_idx]
+                    key = f"{p.get('sku', '')}_{p.get('size', '')}"
+                    data = self.preset_counts.get(key, {})
                     if data:
                         self.good_count = data.get("TOTAL GOOD", 0)
                         self.oven_count = data.get("TOTAL OVEN", 0)
@@ -1552,7 +1634,9 @@ class LiveCameraScreen(QWidget):
         if self.active_profile_id:
             # 1. Update the per-sku map with current session data
             if self.current_preset_idx >= 0:
-                self.preset_counts[str(self.current_preset_idx)] = dict(self.granular_counts)
+                p = self.presets[self.current_preset_idx]
+                key = f"{p.get('sku', '')}_{p.get('size', '')}"
+                self.preset_counts[key] = dict(self.granular_counts)
             
             # 2. Calculate aggregate total for the profile record
             aggregate_counts = {k: 0 for k in self.granular_counts}
@@ -1884,7 +1968,12 @@ class LiveCameraScreen(QWidget):
     def on_sensor_trigger(self):
         """Called when sensor detects object within threshold"""
         if not self.is_paused and self.live_frame is not None:
-            print("[Sensor] Trigger received - capturing frame")
+            delay = getattr(self, 'sensor_delay', 0.0)
+            if delay > 0:
+                print(f"[Sensor] Trigger received - waiting {delay}s before capture")
+                time.sleep(delay)
+            else:
+                print("[Sensor] Trigger received - capturing frame")
             # Emit signal to safely call capture_frame on main thread
             self.sensor_triggered.emit()
     
@@ -1952,11 +2041,11 @@ class LiveCameraScreen(QWidget):
             delay = getattr(self, 'delay_input_capture_ms', 0)
             if delay > 0:
                 print(f"[PLC] TRIGGER RECEIVED - Waiting {delay}ms before capture...")
-                QTimer.singleShot(delay, self.plc_triggered.emit)
-            else:
-                print("[PLC] TRIGGER FIRED! Capturing frame...")
-                # Emit signal to safely call capture_frame on main thread
-                self.plc_triggered.emit()
+                time.sleep(delay / 1000.0)
+            
+            print("[PLC] TRIGGER FIRED! Capturing frame...")
+            # Emit signal to safely call capture_frame on main thread
+            self.plc_triggered.emit()
     
     def on_plc_value_update(self, value):
         """Called when PLC register value is read (addr 12 / plc_trigger_reg).

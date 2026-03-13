@@ -1,7 +1,8 @@
 import math
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QFrame,
-    QTableWidget, QTableWidgetItem, QHeaderView, QFileDialog, QMessageBox
+    QTableWidget, QTableWidgetItem, QHeaderView, QFileDialog, QMessageBox,
+    QLineEdit
 )
 from PySide6.QtCore import Qt, QRectF
 from PySide6.QtGui import QPainter, QColor, QPen, QFont
@@ -191,9 +192,9 @@ class ReportDetailPage(QWidget):
         summary_row = QHBoxLayout()
         summary_row.setSpacing(UIScaling.scale(12))
 
-        self.box_good = self._create_summary_box("0", "Good", "#10B981")
-        self.box_oven = self._create_summary_box("0", "Oven", "#F59E0B")
-        self.box_bs = self._create_summary_box("0", "BS", "#EF4444")
+        self.box_good = self._create_summary_box("0", "Good", "#D1FAE5")
+        self.box_oven = self._create_summary_box("0", "Oven", "#FEF3C7")
+        self.box_bs = self._create_summary_box("0", "BS", "#FEE2E2")
 
         summary_row.addWidget(self.box_good)
         summary_row.addWidget(self.box_oven)
@@ -263,31 +264,68 @@ class ReportDetailPage(QWidget):
         bottom_layout.setContentsMargins(UIScaling.scale(24), UIScaling.scale(20), UIScaling.scale(24), UIScaling.scale(20))
         bottom_layout.setSpacing(UIScaling.scale(12))
 
-        lbl_table_title = QLabel("Detail Per SKU & Size")
-        lbl_table_title.setStyleSheet(f"font-size: {UIScaling.scale_font(18)}px; font-weight: 700; color: #111827; border: none;")
-        bottom_layout.addWidget(lbl_table_title)
+        # Search/Filter Bar
+        filter_layout = QHBoxLayout()
+        filter_layout.setSpacing(UIScaling.scale(10))
+        
+        lbl_search = QLabel("🔍")
+        lbl_search.setStyleSheet(f"font-size: {UIScaling.scale_font(16)}px; border: none; background: transparent;")
+        filter_layout.addWidget(lbl_search)
+        
+        self.search_input = QLineEdit()
+        self.search_input.setPlaceholderText("Cari Tipe atau Size...")
+        self.search_input.setFixedHeight(UIScaling.scale(36))
+        self.search_input.setStyleSheet(f"""
+            QLineEdit {{
+                background-color: #F9FAFB;
+                border: 1.5px solid #E5E7EB;
+                border-radius: {UIScaling.scale(8)}px;
+                padding: 0 {UIScaling.scale(12)}px;
+                font-size: {UIScaling.scale_font(13)}px;
+                color: #374151;
+            }}
+            QLineEdit:focus {{ border-color: #2563EB; background-color: white; }}
+        """)
+        self.search_input.textChanged.connect(self.filter_table)
+        filter_layout.addWidget(self.search_input)
+        filter_layout.addStretch()
+        
+        bottom_layout.addLayout(filter_layout)
 
         self.sku_table = QTableWidget()
-        self.sku_table.setColumnCount(5)
-        self.sku_table.setHorizontalHeaderLabels(["SKU", "Size", "Good", "Oven", "BS"])
+        self.sku_table.setColumnCount(8)
+        self.sku_table.setHorizontalHeaderLabels(["Tipe", "Size", "Good 1", "Good 2", "Oven 1", "Oven 2", "BS Under", "BS Over"])
         self.sku_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.sku_table.verticalHeader().setVisible(False)
         self.sku_table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.sku_table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.sku_table.setAlternatingRowColors(True)
+        self.sku_table.setSortingEnabled(True)
         self.sku_table.setStyleSheet(f"""
             QTableWidget {{
                 border: 1px solid #E5E7EB;
-                border-radius: {UIScaling.scale(8)}px;
+                border-radius: {UIScaling.scale(10)}px;
                 background-color: white;
-                gridline-color: #E5E7EB;
+                alternate-background-color: #F9FAFB;
+                gridline-color: #F3F4F6;
                 font-size: {UIScaling.scale_font(14)}px;
+                color: #111827;
+                selection-background-color: #EFF6FF;
+                selection-color: #1E40AF;
             }}
             QHeaderView::section {{
-                background-color: #F9FAFB;
-                padding: 8px;
-                border: 1px solid #E5E7EB;
-                font-weight: 600;
+                background-color: #F3F4F6;
+                padding: {UIScaling.scale(10)}px;
+                border: none;
+                border-bottom: 2px solid #E5E7EB;
+                font-weight: 800;
                 color: #374151;
+                font-size: {UIScaling.scale_font(13)}px;
+                text-align: center;
+            }}
+            QTableWidget::item {{
+                padding: {UIScaling.scale(10)}px;
+                border-bottom: 1px solid #F3F4F6;
             }}
         """)
         bottom_layout.addWidget(self.sku_table)
@@ -302,6 +340,18 @@ class ReportDetailPage(QWidget):
         
         scroll_area.setWidget(scroll_content)
         layout.addWidget(scroll_area, 1)
+
+    def filter_table(self, text):
+        """Filter table rows based on search text."""
+        search_text = text.lower()
+        for row in range(self.sku_table.rowCount()):
+            match = False
+            for col in range(2): # Only filter by Tipe (0) and Size (1)
+                item = self.sku_table.item(row, col)
+                if item and search_text in item.text().lower():
+                    match = True
+                    break
+            self.sku_table.setRowHidden(row, not match)
 
     def _create_summary_box(self, value, label, color):
         box = QFrame()
@@ -323,7 +373,7 @@ class ReportDetailPage(QWidget):
         lbl_val.setStyleSheet(f"""
             font-size: {UIScaling.scale_font(24)}px;
             font-weight: 800;
-            color: white;
+            color: #111827;
             border: none;
         """)
         lbl_val.setObjectName("val")
@@ -334,7 +384,7 @@ class ReportDetailPage(QWidget):
         lbl_name.setStyleSheet(f"""
             font-size: {UIScaling.scale_font(13)}px;
             font-weight: 700;
-            color: rgba(255,255,255,0.9);
+            color: #374151;
             border: none;
         """)
         box_layout.addWidget(lbl_name)
@@ -420,24 +470,33 @@ class ReportDetailPage(QWidget):
         # Even if profile was deleted or modified, we try to match indices
         row_idx = 0
         for idx_str, counts in per_sku_counts.items():
-            try:
-                idx = int(idx_str)
-                if idx < len(presets_arr):
-                    sku = presets_arr[idx].get("sku", "Unknown")
-                    size = presets_arr[idx].get("size", "Unknown")
-                else:
-                    sku = f"Slot {idx}"
+            # Check if using new key format "SKU_Size"
+            if "_" in str(idx_str):
+                parts = str(idx_str).split("_", 1)
+                sku = parts[0]
+                size = parts[1] if len(parts) > 1 else "-"
+            else:
+                try:
+                    idx = int(idx_str)
+                    if idx < len(presets_arr):
+                        sku = presets_arr[idx].get("sku", "Unknown")
+                        size = presets_arr[idx].get("size", "Unknown")
+                    else:
+                        sku = f"Slot {idx}"
+                        size = "-"
+                except ValueError:
+                    sku = idx_str
                     size = "-"
-            except ValueError:
-                sku = idx_str
-                size = "-"
 
-            c_good = counts.get("TOTAL GOOD", 0)
-            c_oven = counts.get("OVEN 1", 0) + counts.get("OVEN 2", 0)
-            c_bs = counts.get("TOTAL BS", 0)
+            c_good1 = counts.get("GOOD 1", 0)
+            c_good2 = counts.get("GOOD 2", 0)
+            c_oven1 = counts.get("OVEN 1", 0)
+            c_oven2 = counts.get("OVEN 2", 0)
+            c_bs_under = counts.get("REJECT (UNDER)", 0)
+            c_bs_over = counts.get("REJECT (OVER)", 0)
 
             # Skip rows with all zero values
-            if c_good == 0 and c_oven == 0 and c_bs == 0:
+            if sum([c_good1, c_good2, c_oven1, c_oven2, c_bs_under, c_bs_over]) == 0:
                 continue
                 
             self.sku_table.insertRow(row_idx)
@@ -452,20 +511,12 @@ class ReportDetailPage(QWidget):
             it_size.setTextAlignment(Qt.AlignCenter)
             self.sku_table.setItem(row_idx, 1, it_size)
             
-            # Good
-            it_good = QTableWidgetItem(str(c_good))
-            it_good.setTextAlignment(Qt.AlignCenter)
-            self.sku_table.setItem(row_idx, 2, it_good)
-            
-            # Oven
-            it_oven = QTableWidgetItem(str(c_oven))
-            it_oven.setTextAlignment(Qt.AlignCenter)
-            self.sku_table.setItem(row_idx, 3, it_oven)
-            
-            # BS
-            it_bs = QTableWidgetItem(str(c_bs))
-            it_bs.setTextAlignment(Qt.AlignCenter)
-            self.sku_table.setItem(row_idx, 4, it_bs)
+            # Metrics columns (2-7)
+            metrics = [c_good1, c_good2, c_oven1, c_oven2, c_bs_under, c_bs_over]
+            for i, val in enumerate(metrics):
+                it = QTableWidgetItem(str(val))
+                it.setTextAlignment(Qt.AlignCenter)
+                self.sku_table.setItem(row_idx, i + 2, it)
             
             row_idx += 1
 
@@ -476,8 +527,23 @@ class ReportDetailPage(QWidget):
                 break
 
     def go_back(self):
-        if self.controller:
-            self.controller.go_to_reports()
+        msg = QMessageBox(self)
+        msg.setWindowTitle("Kembali")
+        msg.setText("Apakah Anda yakin ingin ke halaman sebelumnya?")
+        msg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
+        msg.setStyleSheet("""
+            QMessageBox { background-color: white; }
+            QMessageBox QLabel { color: #333; font-size: 15px; padding: 12px; }
+            QPushButton {
+                background-color: #F3F4F6; color: #333;
+                border: 1px solid #D1D5DB; border-radius: 8px;
+                padding: 8px 24px; font-size: 14px; margin: 5px; font-weight: 600;
+            }
+            QPushButton:hover { background-color: #E5E7EB; }
+        """)
+        if msg.exec() == QMessageBox.Yes:
+            if self.controller:
+                self.controller.go_to_reports()
 
     def export_csv(self):
         if not self.current_record:
@@ -518,18 +584,16 @@ class ReportDetailPage(QWidget):
                 writer.writerow([])
                 
                 # Per SKU Breakdown
-                writer.writerow(["PER SKU & SIZE BREAKDOWN"])
-                writer.writerow(["SKU", "Size", "Good", "Oven", "BS"])
+                writer.writerow(["PER TIPE & SIZE BREAKDOWN"])
+                writer.writerow(["Tipe", "Size", "Good 1", "Good 2", "Oven 1", "Oven 2", "BS Under", "BS Over"])
                 
                 rows = self.sku_table.rowCount()
                 for r in range(rows):
-                    sku = self.sku_table.item(r, 0).text()
-                    size = self.sku_table.item(r, 1).text()
-                    c_good = self.sku_table.item(r, 2).text()
-                    c_oven = self.sku_table.item(r, 3).text()
-                    c_bs = self.sku_table.item(r, 4).text()
-                    
-                    writer.writerow([sku, size, c_good, c_oven, c_bs])
+                    row_data = []
+                    for c in range(8):
+                        item = self.sku_table.item(r, c)
+                        row_data.append(item.text() if item else "-")
+                    writer.writerow(row_data)
                     
             QMessageBox.information(self, "Export Successful", f"Report saved to:\n{file_path}")
         except Exception as e:

@@ -64,7 +64,7 @@ class WOSelectorOverlay(BaseOverlay):
         """)
         btn_back.clicked.connect(self.close_overlay)
         
-        lbl_title = QLabel("Select TODAY's Work Order")
+        lbl_title = QLabel("Pilih Work Order Hari Ini")
         lbl_title.setStyleSheet(f"font-size: {UIScaling.scale_font(18)}px; font-weight: bold; color: {self.theme['text_main']};")
         lbl_title.setAlignment(Qt.AlignCenter)
         
@@ -103,6 +103,7 @@ class WOSelectorOverlay(BaseOverlay):
             idx_08 = self.machine_combo.findText("Mesin 08")
             if idx_08 != -1: self.machine_combo.setCurrentIndex(idx_08)
             
+        self.machine_combo.currentIndexChanged.connect(self.re_fetch)
         filter_row.addWidget(self.machine_combo, 2)
         
         # Date Input
@@ -111,6 +112,7 @@ class WOSelectorOverlay(BaseOverlay):
         self.date_input.setFixedHeight(UIScaling.scale(42))
         self.date_input.setDisplayFormat("dd/MM/yyyy")
         self.date_input.setStyleSheet(self._get_input_style() + "QDateEdit::drop-down { border:none; width: 30px; }")
+        self.date_input.dateChanged.connect(self.re_fetch)
         filter_row.addWidget(self.date_input, 1)
         
         # Refresh Button
@@ -129,13 +131,14 @@ class WOSelectorOverlay(BaseOverlay):
             QPushButton:hover {{ background-color: #1D4ED8; }}
         """)
         self.btn_refresh.clicked.connect(self.re_fetch)
+        self.btn_refresh.setVisible(False)  # Hidden as requested by user
         filter_row.addWidget(self.btn_refresh)
         
         layout.addLayout(filter_row)
         
         # Search Filter (Existing)
         self.search_input = QLineEdit()
-        self.search_input.setPlaceholderText("🔍 Quick search in results...")
+        self.search_input.setPlaceholderText("🔍 Cari Nomor WO...")
         self.search_input.setFixedHeight(UIScaling.scale(40))
         self.search_input.setStyleSheet(self._get_input_style())
         self.search_input.textChanged.connect(self.render_list)
@@ -222,8 +225,8 @@ class WOSelectorOverlay(BaseOverlay):
                     filtered_list.append(wo)
 
         if not filtered_list:
-            msg = "No Work Orders found." if not query else f"No matches for '{query}'"
-            lbl = QLabel(msg + "\nAdjust filters or check connection.")
+            msg = "Tidak ada Work Order." if not query else f"Work Order '{query}' tidak ditemukan."
+            lbl = QLabel(msg + "\nSilakan periksa filter Mesin dan Tanggal.")
             lbl.setAlignment(Qt.AlignCenter)
             lbl.setStyleSheet("color: #666; font-size: 14px; margin-top: 50px; border:none;")
             self.wo_layout.addWidget(lbl)
@@ -264,7 +267,13 @@ class WOSelectorOverlay(BaseOverlay):
         
         shift = wo.get('shift', '')
         machine = wo.get('machine', '')
-        lbl_sub = QLabel(f"Shift: {shift} | {machine}")
+        date = wo.get('tanggal_produksi', '')
+        if hasattr(date, 'strftime'):
+            date = date.strftime('%d/%m/%Y')
+        else:
+            date = str(date)
+            
+        lbl_sub = QLabel(f"Shift: {shift} | {machine} | {date}")
         lbl_sub.setStyleSheet(f"font-size: {UIScaling.scale_font(12)}px; color: #666; border:none;")
         v_info.addWidget(lbl_sub)
 

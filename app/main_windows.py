@@ -10,9 +10,8 @@ from app.pages.measure_live_screen import LiveCameraScreen
 from app.pages.capture_dataset_screen import CaptureDatasetScreen
 from app.pages.general_settings_page import GeneralSettingsPage
 from app.pages.profiles_page import ProfilesPage
-from app.pages.preset_list_page import PresetListPage
+from app.pages.preset_report_page import PresetReportPage
 from app.pages.preset_detail_page import PresetDetailPage
-from app.pages.report_list_page import ReportListPage
 from app.pages.report_detail_page import ReportDetailPage
 from app.utils.fetch_logger import log_info, log_error, log_warning
 from project_utilities.json_utility import JsonUtility
@@ -43,9 +42,8 @@ class MainWindow(QWidget):
         self.dataset_page = CaptureDatasetScreen(parent=self)
         self.settings_page = GeneralSettingsPage(controller=self)
         self.profiles_page = ProfilesPage(controller=self)
-        self.preset_list_page = PresetListPage(controller=self)
+        self.preset_report_page = PresetReportPage(controller=self)
         self.preset_detail_page = PresetDetailPage(controller=self)
-        self.report_list_page = ReportListPage(controller=self)
         self.report_detail_page = ReportDetailPage(controller=self)
 
         # Add to stack
@@ -56,9 +54,8 @@ class MainWindow(QWidget):
         self.stack.addWidget(self.dataset_page)
         self.stack.addWidget(self.settings_page)
         self.stack.addWidget(self.profiles_page)
-        self.stack.addWidget(self.preset_list_page)
+        self.stack.addWidget(self.preset_report_page)
         self.stack.addWidget(self.preset_detail_page)
-        self.stack.addWidget(self.report_list_page)
         self.stack.addWidget(self.report_detail_page)
 
         self.stack.setCurrentWidget(self.menu_page)
@@ -204,16 +201,18 @@ class MainWindow(QWidget):
         
     def go_to_profiles(self, from_live=False):
         self.from_live = from_live
-        self.preset_list_page.refresh_data()
-        self.stack.setCurrentWidget(self.preset_list_page)
+        self.preset_report_page.set_initial_tab(PresetReportPage.TAB_PRESET)
+        self.preset_report_page.refresh_data()
+        self.stack.setCurrentWidget(self.preset_report_page)
 
     def go_to_preset_detail(self, profile_data):
         self.preset_detail_page.load_profile(profile_data)
         self.stack.setCurrentWidget(self.preset_detail_page)
 
     def go_to_reports(self):
-        self.report_list_page.refresh_data()
-        self.stack.setCurrentWidget(self.report_list_page)
+        self.preset_report_page.set_initial_tab(PresetReportPage.TAB_REPORT)
+        self.preset_report_page.refresh_data()
+        self.stack.setCurrentWidget(self.preset_report_page)
 
     def go_to_report_detail(self, record):
         self.report_detail_page.load_record(record)
