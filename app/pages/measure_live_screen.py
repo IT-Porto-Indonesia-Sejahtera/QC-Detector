@@ -1334,6 +1334,7 @@ class LiveCameraScreen(QWidget):
             use_sam = selected_model == "sam"
             use_yolo = selected_model == "yolo"
             use_advanced = selected_model == "advanced"
+            print(f"[DEBUG] Active Detection Model: {selected_model} (Advanced={use_advanced})")
 
             # Process with selected detection method
             results, processed = measure_live_sandals(
