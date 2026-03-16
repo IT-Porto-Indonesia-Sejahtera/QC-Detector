@@ -514,9 +514,10 @@ class PresetDetailPage(QWidget):
 
         # Load QC counts if available
         from app.data.record_manager import RecordManager
-        record = RecordManager.get_record_by_preset_id(profile.get("id"))
-        if record and "counts" in record:
-            c = record["counts"]
+        self.current_record = RecordManager.get_record_by_preset_id(profile.get("id"))
+        
+        if self.current_record and "counts" in self.current_record:
+            c = self.current_record["counts"]
             good = c.get("TOTAL GOOD", 0)
             # Aggregate Oven 1 + Oven 2 or use TOTAL OVEN if exists
             oven = c.get("TOTAL OVEN", c.get("OVEN 1", 0) + c.get("OVEN 2", 0))
@@ -604,9 +605,13 @@ class PresetDetailPage(QWidget):
         sku_name = QLabel()
         sku_height = QLabel()
         
+        sku_code = ""
+        sku_size = ""
+
         if data:
-            code = data.get("code", data.get("product_code", "Unknown"))
-            display_name = data.get("Nama Produk", code)
+            sku_code = data.get("code", data.get("product_code", "Unknown"))
+            sku_size = data.get("size", data.get("Ukuran", ""))
+            display_name = data.get("Nama Produk", sku_code)
             sku_name.setText(display_name)
             sku_name.setStyleSheet(f"font-size: {UIScaling.scale_font(16)}px; font-weight: 700; color: #111827; border: none;")
 
@@ -654,19 +659,99 @@ class PresetDetailPage(QWidget):
 
         # Reset button removed per user request
 
+        # Check if SKU has data/measurements
+        has_data = False
+        if data and self.current_record:
+            sku_code = data.get("code") or data.get("product_code")
+            per_sku_counts = self.current_record.get("per_sku_counts", {})
+            
+            # Check all sizes for this SKU
+            prefix = f"{sku_code}_"
+            for key, counts in per_sku_counts.items():
+                if key.startswith(prefix):
+                    total_activity = sum([
+                        counts.get("TOTAL GOOD", 0),
+                        counts.get("TOTAL OVEN", 0),
+                        counts.get("TOTAL BS", 0)
+                    ])
+                    if total_activity > 0:
+                        has_data = True
+                        break
+
+        # Delete Button (Visible if editable and NOT has_data and data exists)
+        if is_editable and data and not has_data:
+            btn_del = QPushButton("✕")
+            btn_del.setFixedSize(UIScaling.scale(32), UIScaling.scale(32))
+            btn_del.setCursor(Qt.PointingHandCursor)
+            btn_del.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: #FEE2E2;
+                    color: #EF4444;
+                    border: 1px solid #FECACA;
+                    border-radius: {UIScaling.scale(8)}px;
+                    font-size: {UIScaling.scale_font(14)}px;
+                    font-weight: 800;
+                }}
+                QPushButton:hover {{ background-color: #FECACA; }}
+            """)
+            btn_del.clicked.connect(lambda _, idx=index: self.delete_sku(idx))
+            layout.addWidget(btn_del)
+        elif has_data:
+            # Show a lock icon or badge
+            lbl_lock = QLabel("🔒")
+            lbl_lock.setStyleSheet("font-size: 16px; border: none;")
+            lbl_lock.setToolTip("Sudah ada data pengukuran (Terkunci)")
+            layout.addWidget(lbl_lock)
+
         row_data = {
             "img": img_label,
             "name": sku_name,
             "height": sku_height,
             "pos_btn": btn_pos,
             "data": data,
+            "has_data": has_data
         }
         self.sku_rows.append(row_data)
 
-        if is_editable:
+        if is_editable and not has_data:
             container.mousePressEvent = lambda e, idx=index: self.select_sku(idx)
+        elif has_data:
+            # Visually indicate locked state
+            container.setStyleSheet(f"""
+                QFrame {{
+                    background-color: #F3F4F6;
+                    border: 1.5px solid #D1D5DB;
+                    border-left: {UIScaling.scale(5)}px solid #9CA3AF;
+                    border-radius: {UIScaling.scale(14)}px;
+                }}
+            """)
+            container.setToolTip("Sudah ada data pengukuran (Daftar ini tidak dapat diubah/dihapus)")
 
         return container
+
+    def delete_sku(self, index):
+        """Remove a SKU from the profile's selected_skus list."""
+        if not self.current_profile:
+            return
+            
+        selected_skus = self.current_profile.get("selected_skus", [])
+        if 0 <= index < len(selected_skus):
+            # Check if it has data before deleting (safety check)
+            row = self.sku_rows[index]
+            if row.get("has_data"):
+                self._show_toast("SKU yang sudah memiliki data tidak dapat dihapus!", is_error=True)
+                return
+
+            confirm = QMessageBox.question(
+                self, "Hapus Tipe",
+                f"Hapus tipe '{row['name'].text()}'?",
+                QMessageBox.Yes | QMessageBox.No
+            )
+            if confirm == QMessageBox.Yes:
+                selected_skus.pop(index)
+                self.current_profile["selected_skus"] = selected_skus
+                self._render_sku_rows(self.current_profile, True)
+                self._show_toast("Tipe dihapus")
 
     # reset_sku_report method removed per user request
 

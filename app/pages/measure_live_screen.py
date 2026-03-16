@@ -481,6 +481,12 @@ class LiveCameraScreen(QWidget):
         old_layout_mode = getattr(self, 'layout_mode', None)
         self.load_settings()
         self.load_active_profile()
+        
+        # Bounds check current_preset_idx after loading new presets
+        if self.current_preset_idx >= len(self.presets):
+             print(f"Preset index {self.current_preset_idx} out of range (max {len(self.presets)-1}). Resetting to -1.")
+             self.current_preset_idx = -1
+             
         self.load_counters() # Restore saved counts for this profile
         
         # If layout mode changed, we need a full UI rebuild
@@ -1224,11 +1230,13 @@ class LiveCameraScreen(QWidget):
         self.log_session_summary()
         
         # 1. Save current granular counts to the preset_counts map for the OLD SKU
-        if self.current_preset_idx >= 0:
+        if 0 <= self.current_preset_idx < len(self.presets):
             old_p = self.presets[self.current_preset_idx]
             old_sku = old_p.get("sku") or old_p.get("Nama Produk") or "UNKNOWN"
             old_key = f"{old_sku}_{old_p.get('size', '')}"
             self.preset_counts[old_key] = dict(self.granular_counts)
+        elif self.current_preset_idx >= 0:
+            print(f"[Warning] current_preset_idx {self.current_preset_idx} out of range in on_preset_clicked")
         
         # 2. Update SKU details
         self.current_sku = p.get("sku") or p.get("Nama Produk") or "UNKNOWN"
@@ -1247,21 +1255,27 @@ class LiveCameraScreen(QWidget):
         
         # 3. Load counters for the NEW SKU
         self.current_preset_idx = idx
-        new_key = f"{self.current_sku}_{self.current_size}"
-        sku_counts = self.preset_counts.get(new_key)
-        if sku_counts:
-            # Found existing counts for this SKU button
-            self.granular_counts = dict(sku_counts)
-            self.good_count = self.granular_counts.get("TOTAL GOOD", 0)
-            self.oven_count = self.granular_counts.get("TOTAL OVEN", 0)
-            self.bs_count = self.granular_counts.get("TOTAL BS", 0)
+        
+        # Bounds check before accessing presets
+        if 0 <= self.current_preset_idx < len(self.presets):
+            new_key = f"{self.current_sku}_{self.current_size}"
+            sku_counts = self.preset_counts.get(new_key)
+            if sku_counts:
+                # Found existing counts for this SKU button
+                self.granular_counts = dict(sku_counts)
+                self.good_count = self.granular_counts.get("TOTAL GOOD", 0)
+                self.oven_count = self.granular_counts.get("TOTAL OVEN", 0)
+                self.bs_count = self.granular_counts.get("TOTAL BS", 0)
+            else:
+                # New SKU button, initialize with zeros
+                self.good_count = 0
+                self.oven_count = 0
+                self.bs_count = 0
+                for k in self.granular_counts:
+                    self.granular_counts[k] = 0
         else:
-            # New SKU button, initialize with zeros
-            self.good_count = 0
-            self.oven_count = 0
-            self.bs_count = 0
-            for k in self.granular_counts:
-                self.granular_counts[k] = 0
+            print(f"[Error] on_preset_clicked: index {idx} out of range for presets (len={len(self.presets)})")
+            self.current_preset_idx = -1
         
         # Update UI
         self.current_wo = self.active_profile_data.get("wo_number", "---")
@@ -1547,7 +1561,7 @@ class LiveCameraScreen(QWidget):
                 self.preset_counts = record.get("per_sku_counts", {})
                 
                 # If we have a selected preset, load its specific counts
-                if self.current_preset_idx >= 0:
+                if 0 <= self.current_preset_idx < len(self.presets):
                     p = self.presets[self.current_preset_idx]
                     key = f"{p.get('sku', '')}_{p.get('size', '')}"
                     data = self.preset_counts.get(key, {})
@@ -1582,7 +1596,7 @@ class LiveCameraScreen(QWidget):
         """Save current counters to RecordManager for the active preset."""
         if self.active_profile_id:
             # 1. Update the per-sku map with current session data
-            if self.current_preset_idx >= 0:
+            if 0 <= self.current_preset_idx < len(self.presets):
                 p = self.presets[self.current_preset_idx]
                 key = f"{p.get('sku', '')}_{p.get('size', '')}"
                 self.preset_counts[key] = dict(self.granular_counts)
