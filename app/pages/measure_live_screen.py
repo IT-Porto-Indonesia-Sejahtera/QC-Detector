@@ -1403,8 +1403,10 @@ class LiveCameraScreen(QWidget):
                     target_mm = 0.0
                     print(f"[CAPTURE] No size selected, defaulting to REJECT/BS")
                 
-                self.val_detail_len.setText(f"{length_mm:.2f} mm")
-                self.val_detail_wid.setText(f"{width_mm:.2f} mm")
+                len_size = length_mm * 0.15
+                wid_size = width_mm * 0.15
+                self.val_detail_len.setText(f"{length_mm:.2f} mm ({len_size:.2f})")
+                self.val_detail_wid.setText(f"{width_mm:.2f} mm ({wid_size:.2f})")
                 self.val_detail_res.setText(category)
 
                 # Increment Granular Counters
