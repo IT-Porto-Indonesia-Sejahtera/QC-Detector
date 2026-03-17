@@ -39,7 +39,7 @@ class PLCConsistencyTracker:
                 writer.writerow([
                     "Index", "Timestamp", "SKU", "Size", "Result", 
                     "Length (px)", "Width (px)", "Length (mm)", "Width (mm)", 
-                    "Target (mm)", "Deviation (mm)",
+                    "Target (mm)", "Deviation (mm)", "Size Deviation",
                     "Pre-Cap Delay (ms)", "Post-Res Delay (ms)",
                     "PLC Input (D12)", "PLC Output (D100)"
                 ])
@@ -101,6 +101,7 @@ class PLCConsistencyTracker:
                 "mm_wid": round(mm_wid, 3),
                 "target_mm": round(target_mm, 3),
                 "deviation_mm": round(deviation_mm, 3),
+                "size_deviation": round(deviation_mm * 0.15, 3),
                 "plc_input": plc_input,
                 "plc_output": plc_output,
                 "pre_delay": pre_delay,
@@ -117,7 +118,8 @@ class PLCConsistencyTracker:
                     writer.writerow([
                         record["index"], record["timestamp"], record["sku"], record["size"], record["result"],
                         record["px_len"], record["px_wid"], record["mm_len"], record["mm_wid"],
-                        record["target_mm"], record["deviation_mm"], record["pre_delay"], record["post_delay"],
+                        record["target_mm"], record["deviation_mm"], record["size_deviation"],
+                        record["pre_delay"], record["post_delay"],
                         record["plc_input"], record["plc_output"]
                     ])
                 
@@ -202,7 +204,7 @@ class PLCConsistencyTracker:
         data_start_row = start_row + len(summary_data) + 2
         headers = ["Index", "Timestamp", "SKU", "Size", "Result", 
                    "Length (px)", "Width (px)", "Length (mm)", "Width (mm)", 
-                   "Target (mm)", "Deviation (mm)",
+                   "Target (mm)", "Deviation (mm)", "Size Deviation",
                    "Pre-Cap Delay (ms)", "Post-Res Delay (ms)",
                    "PLC Input", "PLC Output", "Detection Image"]
         
@@ -243,10 +245,11 @@ class PLCConsistencyTracker:
             worksheet.write(row, 8, rec["mm_wid"], cell_format)
             worksheet.write(row, 9, rec["target_mm"], cell_format)
             worksheet.write(row, 10, rec["deviation_mm"], cell_format)
-            worksheet.write(row, 11, rec.get("pre_delay", 0), cell_format)
-            worksheet.write(row, 12, rec.get("post_delay", 0), cell_format)
-            worksheet.write(row, 13, rec["plc_input"], cell_format)
-            worksheet.write(row, 14, rec["plc_output"], cell_format)
+            worksheet.write(row, 11, rec["size_deviation"], cell_format)
+            worksheet.write(row, 12, rec.get("pre_delay", 0), cell_format)
+            worksheet.write(row, 13, rec.get("post_delay", 0), cell_format)
+            worksheet.write(row, 14, rec["plc_input"], cell_format)
+            worksheet.write(row, 15, rec["plc_output"], cell_format)
             
             # Embed detection image as thumbnail
             img_path = os.path.join(self.session_dir, rec["image_path"])
@@ -254,13 +257,13 @@ class PLCConsistencyTracker:
                 # Set row height to fit image (90px ≈ 67.5 points)
                 worksheet.set_row(row, 90)
                 # Scale image to fit cell (approx 160x90 px)
-                worksheet.insert_image(row, 15, img_path, {
+                worksheet.insert_image(row, 16, img_path, {
                     'x_scale': 0.15, 'y_scale': 0.15,
                     'x_offset': 2, 'y_offset': 2,
                     'object_position': 1
                 })
             else:
-                worksheet.write(row, 15, "Image not found", cell_format)
+                worksheet.write(row, 16, "Image not found", cell_format)
             
         workbook.close()
         return path

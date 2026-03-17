@@ -696,48 +696,49 @@ class ProfilesPage(QWidget):
 
     def _parse_sizes(self, size_str, code=""):
         if not size_str:
-            if any(x in code.upper() for x in ["S","M","L","XL"]):
+            if code and any(x in code.upper() for x in ["S", "M", "L", "XL"]):
                 return ["S", "M", "L", "XL"]
-            return ["36","37","38","39","40","41","42","43","44"]
+            return ["36", "37", "38", "39", "40", "41", "42", "43", "44"]
             
         s = str(size_str).strip().upper()
         
-        if "," in s:
-            items = [x.strip() for x in s.split(",")]
-            result = []
-            for item in items:
-                if "/" in item and "MM" not in item:
-                    parts = item.split("/")
-                    result.append(parts[-1].strip())
-                else:
-                    result.append(item)
-            return result
+        # Helper to resolve single items (slashes/hyphens)
+        def process_item(item):
+            item = item.strip()
+            # Handle Slash (take last part, e.g., 41/42 -> 42)
+            if "/" in item and "MM" not in item:
+                return [item.split("/")[-1].strip()]
+            
+            # Handle Hyphen (expand range, e.g., 40-42 -> 40, 41, 42)
+            if "-" in item and not any(c.isalpha() for c in item):
+                parts = item.split("-")
+                if len(parts) == 2:
+                    try:
+                        start = int(parts[0].strip())
+                        end = int(parts[1].strip())
+                        if start < end:
+                            return [str(i) for i in range(start, end + 1)]
+                        elif start == end:
+                            return [str(start)]
+                    except ValueError:
+                        pass
+            return [item]
 
-        if any(x in s for x in ["SMALL", "MEDIUM", "LARGE", "MM"]):
-            return [s]
-
-        def resolve_slash(val):
-            if "/" in val:
-                parts = val.split("/")
-                return parts[-1].strip() 
-            return val
-
-        if "-" in s:
-            parts = s.split("-")
-            if len(parts) == 2:
-                start_s = resolve_slash(parts[0].strip())
-                end_s = resolve_slash(parts[1].strip())
+        # 1. Split by comma
+        raw_items = [x.strip() for x in s.split(",")]
+        result = []
+        for ri in raw_items:
+            result.extend(process_item(ri))
+            
+        # Unique list, preserving order
+        seen = set()
+        unique_result = []
+        for x in result:
+            if x not in seen:
+                unique_result.append(x)
+                seen.add(x)
                 
-                if start_s.isdigit() and end_s.isdigit():
-                    start = int(start_s)
-                    end = int(end_s)
-                    if start < end:
-                        return [str(i) for i in range(start, end + 1)]
-            
-        if "/" in s:
-            return [resolve_slash(s)]
-            
-        return [s]
+        return unique_result
 
     def save_current_profile(self):
         if not self.current_editing:

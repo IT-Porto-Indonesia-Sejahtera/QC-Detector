@@ -148,9 +148,13 @@ WHERE rn = 1
             cleaned_result.append({
                 'id': row.get('product_id'), # Internal Database ID
                 'Nama Produk': raw_product_code,
+                'code': raw_product_code, # Alias for easier UI access
+                'product_code': raw_product_code, # Alias for easier UI access
                 'Perbesaran Ukuran (Otorisasi)': oto_val,  # Now a float
+                'otorisasi': oto_val, # Alias for easier UI access
                 'Raw Otorisasi': row.get('perbesar_ukuran'), # Keep original just in case
                 'List Size Available': row.get('size', ''),
+                'sizes': row.get('size', ''), # Alias for easier UI access
                 'Kategori': row.get('divisi', 'Unknown'),
                 'Cover Image': row.get('cover_image'), # Direct URL
                 'GDrive ID': row.get('cover_image'), # Legacy support (aliased to URL)

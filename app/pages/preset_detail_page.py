@@ -610,18 +610,34 @@ class PresetDetailPage(QWidget):
 
         if data:
             sku_code = data.get("code", data.get("product_code", "Unknown"))
-            sku_size = data.get("size", data.get("Ukuran", ""))
+            sizes_str = data.get("sizes", "")
+            otorisasi = data.get("otorisasi", 0)
+            
             display_name = data.get("Nama Produk", sku_code)
             sku_name.setText(display_name)
             sku_name.setStyleSheet(f"font-size: {UIScaling.scale_font(16)}px; font-weight: 700; color: #111827; border: none;")
 
+            # Size & Otorisasi Info
+            info_h_layout = QHBoxLayout()
+            info_h_layout.setSpacing(UIScaling.scale(10))
+            
+            lbl_sizes = QLabel(f"Size: {sizes_str}" if sizes_str else "Size: -")
+            lbl_sizes.setStyleSheet(f"font-size: {UIScaling.scale_font(11)}px; color: #4B5563; border: none;")
+            
+            lbl_oto = QLabel(f"Oto: {otorisasi}")
+            lbl_oto.setStyleSheet(f"font-size: {UIScaling.scale_font(11)}px; font-weight: 600; color: #2563EB; border: none;")
+            
+            info_h_layout.addWidget(lbl_sizes)
+            info_h_layout.addWidget(lbl_oto)
+            info_h_layout.addStretch()
+
             # Check for height in product data (centralized from get_product_sku)
             height = data.get("Master Height", 0)
             if height:
-                sku_height.setText(f"Tinggi Master: {height} mm")
+                sku_height.setText(f"Master: {height} mm")
                 sku_height.setStyleSheet(f"font-size: {UIScaling.scale_font(12)}px; font-weight: 600; color: #059669; border: none;")
             else:
-                sku_height.setText("Tinggi Master Belum Diatur (Gunakan Standar)")
+                sku_height.setText("Standard Height")
                 sku_height.setStyleSheet(f"font-size: {UIScaling.scale_font(11)}px; color: #9CA3AF; border: none;")
 
             gdrive_id = data.get("gdrive_id") or data.get("GDrive ID") or ""
@@ -634,8 +650,11 @@ class PresetDetailPage(QWidget):
             sku_name.setText("← Pilih Tipe" if is_editable else "Kosong")
             sku_name.setStyleSheet(f"font-size: {UIScaling.scale_font(15)}px; font-weight: 500; color: #9CA3AF; border: none;")
             sku_height.setText("")
+            info_h_layout = None
 
         info_vbox.addWidget(sku_name)
+        if info_h_layout:
+            info_vbox.addLayout(info_h_layout)
         info_vbox.addWidget(sku_height)
         layout.addLayout(info_vbox, 1)
 

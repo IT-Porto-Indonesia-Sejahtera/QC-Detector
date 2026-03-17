@@ -125,7 +125,12 @@ class GeneralSettingsPage(QWidget):
         self.mm_px = QLineEdit(); self.style_input(self.mm_px); p_layout.addWidget(self.mm_px)
         
         p_layout.addWidget(self.create_styled_label("Model Deteksi Default:"))
-        self.det_model = QComboBox(); self.det_model.addItem("Standard (Contour)", "standard"); self.det_model.addItem("SAM (AI)", "sam"); self.style_input(self.det_model); p_layout.addWidget(self.det_model)
+        self.det_model = QComboBox()
+        self.det_model.addItem("Standard (Contour)", "standard")
+        self.det_model.addItem("SAM (AI)", "sam")
+        self.det_model.addItem("Advanced (YOLO + SAM)", "advanced")
+        self.style_input(self.det_model)
+        p_layout.addWidget(self.det_model)
         
         p_layout.addWidget(self.create_styled_label("Mode Tata Letak:"))
         self.lay_mode = QComboBox(); self.lay_mode.addItems(["Classic", "Split", "Minimal"]); self.style_input(self.lay_mode); p_layout.addWidget(self.lay_mode)
@@ -468,8 +473,12 @@ class GeneralSettingsPage(QWidget):
         self.d1.setText(str(s.get("delay_input_capture_ms", 0)))
         self.d2.setText(str(s.get("delay_result_trigger_ms", 0)))
         
-        det_mode = s.get("detection_model", "standard")
-        self.det_model.setCurrentIndex(self.det_model.findData(det_mode))
+        det_mode = s.get("detection_model", "advanced")
+        idx = self.det_model.findData(det_mode)
+        if idx != -1:
+            self.det_model.setCurrentIndex(idx)
+        else:
+            self.det_model.setCurrentIndex(self.det_model.findData("advanced"))
         
         self.ip_presets = s.get("ip_camera_presets", [])
         self.marker_size.setText(str(s.get("aruco_marker_size", 50.0)))
@@ -642,7 +651,7 @@ class GeneralSettingsPage(QWidget):
         s["plc_poll_interval"] = int(self.p_poll.text() or 10)
         s["delay_input_capture_ms"] = int(self.d1.text() or 0)
         s["delay_result_trigger_ms"] = int(self.d2.text() or 0)
-        s["detection_model"] = self.det_model.currentData()
+        s["detection_model"] = self.det_model.currentData() or "advanced"
         if s["camera_index"] == "ip":
             pid = self.ip_preset_combo.currentData()
             p = next((x for x in self.ip_presets if x["id"] == pid), None)

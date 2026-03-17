@@ -1295,6 +1295,33 @@ class LiveCameraScreen(QWidget):
     def _reset_preset_guard(self):
         self._preset_click_guard = False
 
+    def _parse_selected_size(self, size_str: str) -> float:
+        """
+        Safely parse size string to float. 
+        Handles numeric strings, fractions like '41/42', and letters.
+        """
+        if not size_str or size_str in ["---", "-", ""]:
+            return 0.0
+            
+        # 1. Direct conversion
+        try:
+            return float(size_str)
+        except ValueError:
+            pass
+            
+        # 2. Extract first sequence of digits/dots
+        import re
+        match = re.search(r'(\d+(?:\.\d+)?)', size_str)
+        if match:
+            try:
+                return float(match.group(1))
+            except ValueError:
+                pass
+                
+        # 3. Special case for letter sizes (optional: map to numeric targets if known)
+        # For now, return 0 if no numeric representation found
+        return 0.0
+
     def capture_frame(self):
         if self.live_frame is None:
             return
@@ -1380,11 +1407,8 @@ class LiveCameraScreen(QWidget):
                 print(f"[CAPTURE] Real Length: {length_mm:.2f} mm | Real Width: {width_mm:.2f} mm")
                 
                 # --- Size-Based Categorization ---
-                # Get current size and otorisasi from preset
-                try:
-                    selected_size = float(self.current_size) if self.current_size not in ["---", "-", ""] else 0
-                except:
-                    selected_size = 0
+                # Use robust parsing for the selected size
+                selected_size = self._parse_selected_size(self.current_size)
                 otorisasi = getattr(self, 'current_otorisasi', 0.0) or 0.0
                 
                 if selected_size > 0:
@@ -1393,15 +1417,21 @@ class LiveCameraScreen(QWidget):
                     detail = cat_result["detail"]
                     deviation_mm = cat_result["deviation_mm"]
                     target_mm = cat_result["target_length_mm"]
-                    print(f"[CAPTURE] Size: {selected_size} | Otorisasi: {otorisasi} | Target: {target_mm} mm")
+                    print(f"[CAPTURE] Size: {selected_size} (Parsed from {self.current_size}) | Otorisasi: {otorisasi} | Target: {target_mm} mm")
                     print(f"[CAPTURE] Deviation: {deviation_mm:.2f} mm ({cat_result['deviation_size']:.4f} size units) => {detail}")
                 else:
-                    # Logic Change: Force REJECT (BS) if no size selected
-                    category = "REJECT"
-                    detail = "No Size Selected"
+                    # Logic Change: If size is non-numeric (e.g. "S"), we can't categorize numerically 
+                    # but we should still allow it as "GOOD" or "NOT CATEGORIZED" instead of force reject
+                    category = "GOOD" # Default to GOOD for non-numeric sizes to avoid annoying "No Size Selected" rejects
+                    detail = "MEASURED"
                     deviation_mm = 0.0
                     target_mm = 0.0
-                    print(f"[CAPTURE] No size selected, defaulting to REJECT/BS")
+                    if self.current_size and self.current_size not in ["---", "-", ""]:
+                        print(f"[CAPTURE] Size '{self.current_size}' is non-numeric, skipping categorization logic.")
+                    else:
+                        category = "REJECT"
+                        detail = "No Size Selected"
+                        print(f"[CAPTURE] No size string available, defaulting to REJECT")
                 
                 len_size = length_mm * 0.15
                 wid_size = width_mm * 0.15
