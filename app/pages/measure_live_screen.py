@@ -1507,7 +1507,7 @@ class LiveCameraScreen(QWidget):
                     model_used = self.detection_model
                     profile_name = self.active_profile_data.get("name", "N/A") if self.active_profile_data else "N/A"
                     det_logger.info(
-                        f"CAPTURE | SKU: {self.current_sku} | Size: {self.current_size} "
+                        f"CAPTURE | SKU: {self.current_sku} | Size: {self.current_size} (Oto: {self.current_otorisasi:+.1f}) "
                         f"| Length: {length_mm:.2f}mm | Width: {width_mm:.2f}mm "
                         f"| Result: {category} | Detail: {detail} "
                         f"| Model: {model_used} | Profile: {profile_name}"
