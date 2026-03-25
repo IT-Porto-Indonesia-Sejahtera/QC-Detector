@@ -1683,8 +1683,9 @@ class LiveCameraScreen(QWidget):
         # Auto-Recalibration Logic
         # ---------------------------------------------------------------------
         self.frame_counter += 1
-        if self.frame_counter % 10 == 0:  # Check every 10 frames
+        if self.frame_counter % 3 == 0:  # Check every 10 frames
             self.check_auto_calibration(frame)
+            self.frame_counter = 0
 
     def check_auto_calibration(self, frame):
         import time
