@@ -505,6 +505,7 @@ class GeneralSettingsPage(QWidget):
         self.sandal_t.setText(str(s.get("sandal_thickness", 15.0)))
         # Load crop settings
         crop = s.get("camera_crop", {})
+        
         self.crop_left.setText(str(crop.get("left", 0)))
         self.crop_right.setText(str(crop.get("right", 0)))
         self.crop_top.setText(str(crop.get("top", 0)))

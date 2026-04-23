@@ -21,6 +21,7 @@ from app.widgets.preset_profile_overlay import PresetProfileOverlay, PROFILES_FI
 from app.utils.theme_manager import ThemeManager
 from app.utils.camera_utils import open_video_capture
 from app.utils.capture_thread import VideoCaptureThread
+from app.utils.sony_capture_thread import SonyCaptureThread
 from app.utils.ui_scaling import UIScaling
 from backend.size_categorization import categorize_measurement, get_category_color
 from app.widgets.settings_overlay import SettingsOverlay
@@ -521,6 +522,7 @@ class LiveCameraScreen(QWidget):
         if self.settings:
             self.mm_per_px = self.settings.get("mm_per_px", 0.215984148)
             self.camera_index = self.settings.get("camera_index", 0)
+            self.camera_type = self.settings.get("camera_type", "usb")  # "usb", "ip", or "sony"
             self.active_profile_id = self.settings.get("active_profile_id", None)
             self.layout_mode = self.settings.get("layout_mode", "split") # split or classic
             
@@ -556,6 +558,7 @@ class LiveCameraScreen(QWidget):
         else:
             self.mm_per_px = 0.215984148
             self.camera_index = 0
+            self.camera_type = "usb"
             self.active_profile_id = None
             self.layout_mode = "split"
             self.ip_presets = []
@@ -1323,6 +1326,18 @@ class LiveCameraScreen(QWidget):
         return 0.0
 
     def capture_frame(self):
+        # --- Sony Full-Res Mode: Request a still capture instead of grabbing from video ---
+        camera_type = getattr(self, 'camera_type', 'usb')
+        if camera_type == "sony" and isinstance(self.cap_thread, SonyCaptureThread):
+            if self.cap_thread._gphoto2_available:
+                print("[Live] Sony mode: Requesting full-res still capture via gphoto2...")
+                self.cap_thread.request_still_capture()
+                self.show_status("📸 Mengambil foto resolusi penuh...", is_error=False)
+                return  # The still_captured signal will handle processing
+            else:
+                # gphoto2 not available, fall through to use live preview frame
+                print("[Live] Sony mode: gphoto2 not available, using live preview frame.")
+        
         if self.live_frame is None:
             return
             
@@ -1839,32 +1854,50 @@ class LiveCameraScreen(QWidget):
     def start_camera(self):
         if self.cap_thread is None:
             source = self.camera_index
+            camera_type = getattr(self, 'camera_type', 'usb')
             
-            # If IP camera is active, resolve the preset
-            if source == "ip":
-                preset = next((p for p in self.ip_presets if p["id"] == self.active_ip_preset_id), None)
-                if not preset and self.ip_presets:
-                    preset = self.ip_presets[0]
-                if preset:
-                    source = preset
-                else:
-                    source = 0 
-            elif isinstance(source, str) and source.isdigit():
-                source = int(source)
-            
-            is_ip = not isinstance(source, int)
-            
-            
-            # Start background capture with crop params
-            self.cap_thread = VideoCaptureThread(source, is_ip, 
-                                                 crop_params=self.camera_crop, 
-                                                 distortion_params=self.lens_distortion, 
-                                                 aspect_ratio_correction=getattr(self, 'aspect_ratio_correction', 1.0),
-                                                 force_width=getattr(self, 'force_width', 0),
-                                                 force_height=getattr(self, 'force_height', 0))
-            self.cap_thread.frame_ready.connect(self.on_frame_received)
-            self.cap_thread.connection_failed.connect(self.on_camera_connection_failed)
-            self.cap_thread.start()
+            # --- Sony Camera Mode ---
+            if camera_type == "sony":
+                usb_idx = int(source) if isinstance(source, (int, str)) and str(source).isdigit() else 0
+                print(f"[Live] Starting Sony A7 III capture on USB index {usb_idx}")
+                self.cap_thread = SonyCaptureThread(
+                    usb_index=usb_idx,
+                    crop_params=self.camera_crop,
+                    distortion_params=self.lens_distortion,
+                    aspect_ratio_correction=getattr(self, 'aspect_ratio_correction', 1.0),
+                    force_width=getattr(self, 'force_width', 0),
+                    force_height=getattr(self, 'force_height', 0)
+                )
+                self.cap_thread.frame_ready.connect(self.on_frame_received)
+                self.cap_thread.still_captured.connect(self.on_sony_still_captured)
+                self.cap_thread.connection_failed.connect(self.on_camera_connection_failed)
+                self.cap_thread.start()
+            else:
+                # --- Standard USB / IP Camera Mode (unchanged) ---
+                # If IP camera is active, resolve the preset
+                if source == "ip":
+                    preset = next((p for p in self.ip_presets if p["id"] == self.active_ip_preset_id), None)
+                    if not preset and self.ip_presets:
+                        preset = self.ip_presets[0]
+                    if preset:
+                        source = preset
+                    else:
+                        source = 0 
+                elif isinstance(source, str) and source.isdigit():
+                    source = int(source)
+                
+                is_ip = not isinstance(source, int)
+                
+                # Start background capture with crop params
+                self.cap_thread = VideoCaptureThread(source, is_ip, 
+                                                     crop_params=self.camera_crop, 
+                                                     distortion_params=self.lens_distortion, 
+                                                     aspect_ratio_correction=getattr(self, 'aspect_ratio_correction', 1.0),
+                                                     force_width=getattr(self, 'force_width', 0),
+                                                     force_height=getattr(self, 'force_height', 0))
+                self.cap_thread.frame_ready.connect(self.on_frame_received)
+                self.cap_thread.connection_failed.connect(self.on_camera_connection_failed)
+                self.cap_thread.start()
             
         self.is_paused = False
         
@@ -1874,6 +1907,38 @@ class LiveCameraScreen(QWidget):
         # Start PLC trigger if available
         self.start_plc_trigger()
         
+    def on_sony_still_captured(self, full_res_frame):
+        """
+        Handle a full-resolution still image captured by the Sony camera.
+        This replaces the live preview frame with the high-res image and
+        runs the standard QC measurement pipeline on it.
+        """
+        print(f"[Live] Sony full-res still received: {full_res_frame.shape[1]}x{full_res_frame.shape[0]}")
+        
+        # Temporarily replace live_frame with the full-res image
+        original_frame = self.live_frame
+        self.live_frame = full_res_frame
+        
+        # Run the standard capture_frame pipeline (skips the Sony gphoto2 branch
+        # because we set live_frame directly and call the processing logic)
+        if self.live_frame is not None:
+            # Hide the "capturing..." status
+            self.hide_status()
+            
+            # Reuse the existing capture logic by calling it with a flag
+            # We temporarily mark camera_type as "usb" to skip the gphoto2 branch
+            saved_type = self.camera_type
+            self.camera_type = "_sony_still"  # Internal flag to skip gphoto2 re-trigger
+            self.capture_frame()
+            self.camera_type = saved_type  # Restore
+        else:
+            self.hide_status()
+            print("[Live] Sony still: frame was None after processing.")
+        
+        # Restore original live_frame for continued preview
+        if original_frame is not None:
+            self.live_frame = original_frame
+
     def on_camera_connection_failed(self, error):
         print(f"[Live] Camera connection failed: {error}")
         error_font_size = UIScaling.scale_font(28)
@@ -1891,6 +1956,8 @@ class LiveCameraScreen(QWidget):
                 try:
                     self.cap_thread.frame_ready.disconnect(self.on_frame_received)
                     self.cap_thread.connection_failed.disconnect(self.on_camera_connection_failed)
+                    if isinstance(self.cap_thread, SonyCaptureThread):
+                        self.cap_thread.still_captured.disconnect(self.on_sony_still_captured)
                 except Exception:
                     pass
                     
