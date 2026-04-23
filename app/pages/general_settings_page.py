@@ -95,8 +95,27 @@ class GeneralSettingsPage(QWidget):
         self.btn_preview = QPushButton("Mulai Umpan Uji"); self.style_button(self.btn_preview, True); self.btn_preview.clicked.connect(self.toggle_preview); cam_layout.addWidget(self.btn_preview)
         
         cam_layout.addWidget(QLabel("Sumber Kamera:"))
-        self.camera_combo = QComboBox(); self.camera_combo.addItem("IP Network Camera", "ip"); self.camera_combo.currentIndexChanged.connect(self.on_camera_change); self.style_input(self.camera_combo); cam_layout.addWidget(self.camera_combo)
+        self.camera_combo = QComboBox()
+        self.camera_combo.addItem("IP Network Camera", "ip")
+        self.camera_combo.addItem("Sony A7 Mark III (USB)", "sony")
+        self.camera_combo.currentIndexChanged.connect(self.on_camera_change)
+        self.style_input(self.camera_combo)
+        cam_layout.addWidget(self.camera_combo)
         left.addWidget(cam_card)
+        
+        # --- Sony A7 Section ---
+        self.sony_section, sony_layout = self.create_card("Detail Sony A7 Mark III")
+        sony_layout.addWidget(self.create_styled_label("Pastikan kamera diatur ke mode 'USB Streaming' atau dihubungkan via Capture Card."))
+        h_sony = QHBoxLayout()
+        h_sony.addWidget(QLabel("Pilih Port USB:"))
+        self.sony_usb_index = QComboBox()
+        for i in range(10):
+            self.sony_usb_index.addItem(f"Port USB {i}", i)
+        self.style_input(self.sony_usb_index)
+        h_sony.addWidget(self.sony_usb_index, 1)
+        sony_layout.addLayout(h_sony)
+        left.addWidget(self.sony_section)
+        self.sony_section.setVisible(False)
         
         self.ip_section, ip_layout = self.create_card("Detail Kamera IP")
         h_preset = QHBoxLayout(); self.ip_preset_combo = QComboBox(); self.ip_preset_combo.currentIndexChanged.connect(self.on_ip_preset_change); self.style_input(self.ip_preset_combo); btn_new = QPushButton("+ Baru"); self.style_button(btn_new); btn_new.clicked.connect(self.add_new_preset)
@@ -526,8 +545,15 @@ class GeneralSettingsPage(QWidget):
 
         self.update_preset_combo()
         cam_idx = s.get("camera_index", 0)
-        if cam_idx == "ip": 
+        cam_type = s.get("camera_type", "usb")
+        
+        if cam_idx == "ip" or cam_type == "ip": 
             self.camera_combo.setCurrentIndex(self.camera_combo.findData("ip"))
+        elif cam_type == "sony":
+            self.camera_combo.setCurrentIndex(self.camera_combo.findData("sony"))
+            if self.sony_usb_index.findData(cam_idx) == -1:
+                self.sony_usb_index.addItem(f"Port USB {cam_idx}", cam_idx)
+            self.sony_usb_index.setCurrentIndex(self.sony_usb_index.findData(cam_idx))
         else:
             if self.camera_combo.findData(cam_idx) == -1: 
                 self.camera_combo.insertItem(0, f"USB Camera {cam_idx}", cam_idx)
@@ -596,7 +622,10 @@ class GeneralSettingsPage(QWidget):
         self.ip_presets.append(new_p); self.update_preset_combo(); self.ip_preset_combo.setCurrentIndex(len(self.ip_presets)-1)
 
     def on_camera_change(self):
-        self.ip_section.setVisible(self.camera_combo.currentData() == "ip")
+        val = self.camera_combo.currentData()
+        self.ip_section.setVisible(val == "ip")
+        if hasattr(self, 'sony_section'):
+            self.sony_section.setVisible(val == "sony")
 
     def apply_quick_settings(self):
         """Save settings without leaving the page"""
@@ -636,10 +665,16 @@ class GeneralSettingsPage(QWidget):
         except: pass
         
         cam_data = self.camera_combo.currentData()
-        if isinstance(cam_data, str) and cam_data.isdigit():
-            s["camera_index"] = int(cam_data)
+        if cam_data == "sony":
+            s["camera_type"] = "sony"
+            idx_data = self.sony_usb_index.currentData()
+            s["camera_index"] = int(idx_data) if idx_data is not None else 0
+        elif cam_data == "ip":
+            s["camera_type"] = "ip"
+            s["camera_index"] = "ip"
         else:
-            s["camera_index"] = cam_data
+            s["camera_type"] = "usb"
+            s["camera_index"] = int(cam_data) if isinstance(cam_data, (int, str)) and str(cam_data).isdigit() else cam_data
             
         s["sensor_port"] = self.s_port.text(); s["plc_port"] = self.p_port.text()
         s["plc_trigger_reg"] = int(self.p_tri.text() or 12)
@@ -718,12 +753,19 @@ class GeneralSettingsPage(QWidget):
         else: self.start_preview(); self.btn_preview.setText("Stop Test Feed")
 
     def start_preview(self):
-        source = self.camera_combo.currentData()
-        is_ip = (source == "ip")
-        if is_ip:
+        source_type = self.camera_combo.currentData()
+        is_ip = (source_type == "ip")
+        if source_type == "sony":
+            source = self.sony_usb_index.currentData()
+            if source is None: source = 0
+            is_ip = False
+        elif is_ip:
             pid = self.ip_preset_combo.currentData()
             source = next((x for x in self.ip_presets if x["id"] == pid), None)
             if not source: return
+        else:
+            source = source_type
+            is_ip = False
             
         settings = JsonUtility.load_from_json(SETTINGS_FILE) or {}
         crop = settings.get("camera_crop", {})
@@ -802,6 +844,8 @@ class GeneralSettingsPage(QWidget):
              if cap.isOpened():
                  if self.camera_combo.findData(i) == -1:
                      self.camera_combo.insertItem(0, f"USB Camera {i}", i)
+                 if hasattr(self, 'sony_usb_index') and self.sony_usb_index.findData(i) == -1:
+                     self.sony_usb_index.addItem(f"Port USB {i}", i)
                  cap.release()
 
     def go_to_dataset(self):

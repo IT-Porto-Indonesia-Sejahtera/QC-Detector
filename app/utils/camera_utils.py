@@ -75,6 +75,10 @@ def open_video_capture(source, buffer_size=1, timeout_ms=3000, force_width=0, fo
             cap = cv2.VideoCapture(final_source, cv2.CAP_DSHOW)
             if not cap.isOpened():
                 cap = cv2.VideoCapture(final_source)
+        elif platform.system() == "Darwin":
+            cap = cv2.VideoCapture(final_source, cv2.CAP_AVFOUNDATION)
+            if not cap.isOpened():
+                cap = cv2.VideoCapture(final_source)
         else:
             cap = cv2.VideoCapture(final_source)
     else:
