@@ -261,12 +261,10 @@ class SonyCaptureThread(QThread):
                     self.frame_ready.emit(capturing_frame)
                     
                     # Execute the capture
+                    # After capture, the captured image stays on screen
+                    # (emitted via frame_ready inside _do_still_capture)
+                    # It will remain visible until the next trigger fires
                     self._do_still_capture()
-                    
-                    # After capture, show standby again (with updated count)
-                    standby = self._create_standby_frame()
-                    self.last_frame = standby
-                    self.frame_ready.emit(standby)
                 
                 # Sleep to avoid busy-waiting (check for triggers every 100ms)
                 self.msleep(100)
