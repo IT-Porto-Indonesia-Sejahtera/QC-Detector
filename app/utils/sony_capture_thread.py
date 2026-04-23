@@ -232,10 +232,32 @@ class SonyCaptureThread(QThread):
         print("[Sony] Full-res still capture requested.")
 
     def _do_still_capture(self):
-        """Execute a gphoto2 capture-image-and-download command."""
-        print("[Sony] Capturing full-resolution still image...")
+        """
+        Execute a gphoto2 capture-image-and-download command.
         
-        # Create a temporary directory for the downloaded image
+        IMPORTANT: gphoto2 and OpenCV both need exclusive access to the USB device.
+        We must temporarily release the video capture before gphoto2 can communicate
+        with the camera, then re-open it for the live preview afterward.
+        """
+        print("[Sony] Capturing full-resolution still image...")
+        print("[Sony] Releasing USB video stream for gphoto2 access...")
+        
+        # 1. Release the OpenCV video capture to free the USB device
+        if self.cap:
+            self.cap.release()
+            self.cap = None
+        
+        # Small delay to let the OS fully release the USB device
+        time.sleep(0.5)
+        
+        # 2. Kill any Linux background processes that might lock the camera
+        try:
+            subprocess.run(["killall", "gvfs-gphoto2-volume-monitor"],
+                           capture_output=True, timeout=3)
+        except Exception:
+            pass
+        
+        # 3. Execute the gphoto2 capture
         capture_dir = os.path.join("output", "sony_captures")
         os.makedirs(capture_dir, exist_ok=True)
         
@@ -244,9 +266,6 @@ class SonyCaptureThread(QThread):
         filepath = os.path.join(capture_dir, filename)
         
         try:
-            # Use gphoto2 to trigger the camera and download the image
-            # --force-overwrite: Overwrite if file exists
-            # --filename: Save to specific path
             result = subprocess.run(
                 [
                     "gphoto2",
@@ -256,20 +275,15 @@ class SonyCaptureThread(QThread):
                 ],
                 capture_output=True,
                 text=True,
-                timeout=15  # 15-second timeout for capture + download
+                timeout=15
             )
             
             if result.returncode == 0 and os.path.exists(filepath):
-                # Read the downloaded image
                 img = cv2.imread(filepath)
                 if img is not None:
                     h, w = img.shape[:2]
                     print(f"[Sony] Full-res capture successful: {w}x{h} ({filepath})")
-                    
-                    # Apply the same processing pipeline
                     processed = self._process_frame(img)
-                    
-                    # Emit the full-resolution image
                     self.still_captured.emit(processed)
                 else:
                     print(f"[Sony] Failed to read captured image: {filepath}")
@@ -281,6 +295,26 @@ class SonyCaptureThread(QThread):
             print("[Sony] gphoto2 capture timed out (15s). Is the camera connected?")
         except Exception as e:
             print(f"[Sony] Capture error: {e}")
+        
+        # 4. Re-open the video capture for the live preview
+        print("[Sony] Re-opening USB video stream for live preview...")
+        time.sleep(0.5)  # Brief delay before re-opening
+        try:
+            self.cap = open_video_capture(
+                self.usb_index,
+                force_width=self.force_width,
+                force_height=self.force_height
+            )
+            if self.cap and self.cap.isOpened():
+                try:
+                    self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+                except Exception:
+                    pass
+                print("[Sony] Live preview re-opened successfully.")
+            else:
+                print("[Sony] WARNING: Could not re-open live preview after capture.")
+        except Exception as e:
+            print(f"[Sony] Error re-opening video stream: {e}")
 
     # ------------------------------------------------------------------
     # Parameter Updates (same interface as VideoCaptureThread)
