@@ -1,44 +1,50 @@
 """
-Sony A7 Mark III Capture Thread
+Sony A7 Mark III Capture Thread (Capture-Only Mode)
 
-Provides two modes of operation for the Sony camera:
-1. Live Preview: Uses the standard USB video stream (via IEW/gphoto2 loopback)
-   for the continuous live view — same as a normal USB camera.
-2. Still Capture (Triggered): When a PLC/sensor trigger fires, uses gphoto2
-   to command the camera to take a full-resolution still photo (electronic
-   shutter) and downloads it for QC analysis.
+Instead of a live video feed, this thread shows a standby indicator and
+waits for a PLC/sensor trigger. When triggered, it uses gphoto2 to command
+the camera to take a full-resolution still photo (electronic shutter),
+downloads the image, and displays it on screen for QC analysis.
 
 This thread is ONLY used when camera_type == "sony". IP and USB cameras
 are completely unaffected and continue to use VideoCaptureThread.
+
+No IEW, v4l2loopback, or ffmpeg required — just gphoto2 + USB-C.
 """
 
 import cv2
 import os
 import subprocess
-import tempfile
 import time
 import numpy as np
 from PySide6.QtCore import QThread, Signal
-from app.utils.camera_utils import open_video_capture
 
 
 class SonyCaptureThread(QThread):
-    """Background thread that provides live preview AND on-demand full-res capture."""
+    """
+    Background thread for Sony camera in capture-only mode.
     
-    # Emitted every frame for the live preview (low-res video stream)
+    - No live video feed (avoids USB conflict entirely).
+    - Shows a standby indicator until a trigger fires.
+    - On trigger: captures full-res still via gphoto2 and emits the image.
+    """
+    
+    # Emitted with a "standby" placeholder frame for the preview area
     frame_ready = Signal(object)
     # Emitted when a full-res still image has been captured and downloaded
     still_captured = Signal(object)  # numpy array (full-res image)
-    # Connection errors
+    # Connection status
     connection_failed = Signal(str)
     connection_lost = Signal()
+    # Status message for the UI
+    status_update = Signal(str)
 
     def __init__(self, usb_index=0, crop_params=None, distortion_params=None,
                  aspect_ratio_correction=1.0, force_width=0, force_height=0):
         super().__init__()
-        self.usb_index = usb_index
+        self.usb_index = usb_index  # Not used for video, kept for compatibility
         self.running = True
-        self.cap = None
+        self.cap = None  # No video capture in this mode
         self.last_frame = None
         self.raw_frame = None
         
@@ -53,6 +59,9 @@ class SonyCaptureThread(QThread):
         # Still capture state
         self._capture_requested = False
         self._capture_lock = __import__('threading').Lock()
+        
+        # Track capture count
+        self._capture_count = 0
         
         # Distortion matrices (pre-calculated)
         self.camera_matrix = None
@@ -74,9 +83,22 @@ class SonyCaptureThread(QThread):
                 return True
         except (FileNotFoundError, subprocess.TimeoutExpired):
             pass
-        print("[Sony] gphoto2 not found. Full-res still capture will NOT be available.")
-        print("[Sony] Install with: brew install gphoto2 (Mac) or sudo apt install gphoto2 (Linux)")
+        print("[Sony] gphoto2 not found. Install with: brew install gphoto2 (Mac) or sudo apt install gphoto2 (Linux)")
         return False
+
+    def _check_camera_connected(self):
+        """Check if a Sony camera is detected via gphoto2."""
+        if not self._gphoto2_available:
+            return False
+        try:
+            result = subprocess.run(
+                ["gphoto2", "--auto-detect"],
+                capture_output=True, text=True, timeout=5
+            )
+            output = result.stdout.lower()
+            return "sony" in output or "usb" in output
+        except Exception:
+            return False
 
     def _prepare_distortion_matrices(self):
         """Parse distortion params into numpy arrays (same as VideoCaptureThread)."""
@@ -166,57 +188,92 @@ class SonyCaptureThread(QThread):
         return frame
 
     # ------------------------------------------------------------------
-    # Main Thread Loop (Live Preview via USB video stream)
+    # Standby Frame Generator
+    # ------------------------------------------------------------------
+    def _create_standby_frame(self, message="SONY A7 III — SIAP", sub_message="Menunggu trigger...", color=(40, 40, 40)):
+        """Create a dark standby frame with status text."""
+        w, h = 1024, 680
+        frame = np.full((h, w, 3), color, dtype=np.uint8)
+        
+        # Main text
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        text_size = cv2.getTextSize(message, font, 1.2, 2)[0]
+        tx = (w - text_size[0]) // 2
+        ty = (h // 2) - 20
+        cv2.putText(frame, message, (tx, ty), font, 1.2, (0, 200, 100), 2, cv2.LINE_AA)
+        
+        # Sub text
+        sub_size = cv2.getTextSize(sub_message, font, 0.7, 1)[0]
+        sx = (w - sub_size[0]) // 2
+        sy = ty + 50
+        cv2.putText(frame, sub_message, (sx, sy), font, 0.7, (150, 150, 150), 1, cv2.LINE_AA)
+        
+        # Capture count
+        count_text = f"Foto: {self._capture_count}"
+        cv2.putText(frame, count_text, (w - 200, h - 30), font, 0.6, (100, 100, 100), 1, cv2.LINE_AA)
+        
+        return frame
+
+    # ------------------------------------------------------------------
+    # Main Thread Loop (Standby + Capture on Demand)
     # ------------------------------------------------------------------
     def run(self):
         try:
-            self.cap = open_video_capture(
-                self.usb_index,
-                force_width=self.force_width,
-                force_height=self.force_height
-            )
-            if not self.cap or not self.cap.isOpened():
-                self.connection_failed.emit("Failed to open Sony camera video stream")
+            if not self._gphoto2_available:
+                self.connection_failed.emit(
+                    "gphoto2 tidak ditemukan. Install dengan:\n"
+                    "Mac: brew install gphoto2\n"
+                    "Linux: sudo apt install gphoto2"
+                )
                 return
-
+            
+            # Kill any Linux background processes that lock the camera
             try:
-                self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+                subprocess.run(["killall", "gvfs-gphoto2-volume-monitor"],
+                               capture_output=True, timeout=3)
             except Exception:
                 pass
-
+            
+            # Check if camera is connected
+            if self._check_camera_connected():
+                print("[Sony] Camera detected via gphoto2. Standing by for triggers.")
+            else:
+                print("[Sony] WARNING: Camera not detected. Make sure USB is connected and set to PC Remote.")
+            
+            # Emit initial standby frame
+            standby = self._create_standby_frame()
+            self.last_frame = standby
+            self.frame_ready.emit(standby)
+            
             while self.running:
                 # Check if a still capture was requested
                 with self._capture_lock:
                     do_capture = self._capture_requested
                     self._capture_requested = False
 
-                if do_capture and self._gphoto2_available:
+                if do_capture:
+                    # Show "capturing" indicator
+                    capturing_frame = self._create_standby_frame(
+                        "📸 MENGAMBIL FOTO...", 
+                        "Harap tunggu (full resolution)",
+                        color=(30, 30, 60)
+                    )
+                    self.frame_ready.emit(capturing_frame)
+                    
+                    # Execute the capture
                     self._do_still_capture()
-
-                # Continue reading live preview frames
-                ret, frame = self.cap.read()
-                if not self.running:
-                    break
-
-                if ret:
-                    if self.last_frame is None:
-                        h, w = frame.shape[:2]
-                        print(f"[Sony] Live Preview Resolution: {w}x{h}")
-
-                    processed = self._process_frame(frame)
-                    self.last_frame = processed
-                    self.frame_ready.emit(processed)
-                else:
-                    self.connection_lost.emit()
-                    break
-
-                self.msleep(1)
+                    
+                    # After capture, show standby again (with updated count)
+                    standby = self._create_standby_frame()
+                    self.last_frame = standby
+                    self.frame_ready.emit(standby)
+                
+                # Sleep to avoid busy-waiting (check for triggers every 100ms)
+                self.msleep(100)
+                
         except Exception as e:
             print(f"[Sony] Error: {e}")
             self.connection_failed.emit(str(e))
-        finally:
-            if self.cap:
-                self.cap.release()
 
     # ------------------------------------------------------------------
     # Still Capture (Full Resolution via gphoto2)
@@ -225,7 +282,6 @@ class SonyCaptureThread(QThread):
         """
         Request a full-resolution still image capture.
         Called from the main thread when PLC/sensor triggers.
-        The actual capture happens in the background thread to avoid blocking UI.
         """
         with self._capture_lock:
             self._capture_requested = True
@@ -234,30 +290,10 @@ class SonyCaptureThread(QThread):
     def _do_still_capture(self):
         """
         Execute a gphoto2 capture-image-and-download command.
-        
-        IMPORTANT: gphoto2 and OpenCV both need exclusive access to the USB device.
-        We must temporarily release the video capture before gphoto2 can communicate
-        with the camera, then re-open it for the live preview afterward.
+        No USB conflict because there is no live video stream to fight with.
         """
         print("[Sony] Capturing full-resolution still image...")
-        print("[Sony] Releasing USB video stream for gphoto2 access...")
         
-        # 1. Release the OpenCV video capture to free the USB device
-        if self.cap:
-            self.cap.release()
-            self.cap = None
-        
-        # Small delay to let the OS fully release the USB device
-        time.sleep(0.5)
-        
-        # 2. Kill any Linux background processes that might lock the camera
-        try:
-            subprocess.run(["killall", "gvfs-gphoto2-volume-monitor"],
-                           capture_output=True, timeout=3)
-        except Exception:
-            pass
-        
-        # 3. Execute the gphoto2 capture
         capture_dir = os.path.join("output", "sony_captures")
         os.makedirs(capture_dir, exist_ok=True)
         
@@ -282,8 +318,17 @@ class SonyCaptureThread(QThread):
                 img = cv2.imread(filepath)
                 if img is not None:
                     h, w = img.shape[:2]
-                    print(f"[Sony] Full-res capture successful: {w}x{h} ({filepath})")
+                    self._capture_count += 1
+                    print(f"[Sony] Full-res capture #{self._capture_count}: {w}x{h} ({filepath})")
+                    
+                    # Apply the processing pipeline
                     processed = self._process_frame(img)
+                    
+                    # Update the preview with the captured image
+                    self.last_frame = processed
+                    self.frame_ready.emit(processed)
+                    
+                    # Also emit still_captured for the QC measurement pipeline
                     self.still_captured.emit(processed)
                 else:
                     print(f"[Sony] Failed to read captured image: {filepath}")
@@ -291,30 +336,18 @@ class SonyCaptureThread(QThread):
                 error_msg = result.stderr.strip() if result.stderr else "Unknown error"
                 print(f"[Sony] gphoto2 capture failed: {error_msg}")
                 
+                # Show error on the standby frame
+                err_frame = self._create_standby_frame(
+                    "GAGAL MENGAMBIL FOTO",
+                    error_msg[:60],
+                    color=(60, 20, 20)
+                )
+                self.frame_ready.emit(err_frame)
+                
         except subprocess.TimeoutExpired:
             print("[Sony] gphoto2 capture timed out (15s). Is the camera connected?")
         except Exception as e:
             print(f"[Sony] Capture error: {e}")
-        
-        # 4. Re-open the video capture for the live preview
-        print("[Sony] Re-opening USB video stream for live preview...")
-        time.sleep(0.5)  # Brief delay before re-opening
-        try:
-            self.cap = open_video_capture(
-                self.usb_index,
-                force_width=self.force_width,
-                force_height=self.force_height
-            )
-            if self.cap and self.cap.isOpened():
-                try:
-                    self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-                except Exception:
-                    pass
-                print("[Sony] Live preview re-opened successfully.")
-            else:
-                print("[Sony] WARNING: Could not re-open live preview after capture.")
-        except Exception as e:
-            print(f"[Sony] Error re-opening video stream: {e}")
 
     # ------------------------------------------------------------------
     # Parameter Updates (same interface as VideoCaptureThread)
